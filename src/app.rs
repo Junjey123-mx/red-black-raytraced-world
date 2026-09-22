@@ -1,20 +1,26 @@
 use raylib::prelude::*;
 
+use crate::camera::camera::Camera;
+use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
+use crate::core::cube::Cube;
+use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
+use crate::renderer::raytracer::cast_ray;
 
-const CHECKER_CELL_SIZE: usize = 32;
+/// Casts one primary ray per pixel against `cube` and writes the resulting
+/// diagnostic color (or `background` on a miss) into the framebuffer. This
+/// is the first fully CPU-computed 3D image in the project.
+fn render(framebuffer: &mut Framebuffer, camera: &Camera, cube: &Cube, background: CpuColor) {
+    let width = framebuffer.width();
+    let height = framebuffer.height();
 
-/// Fills the framebuffer with a deterministic checkerboard computed on the CPU.
-fn fill_checkerboard(framebuffer: &mut Framebuffer) {
-    let bright = CpuColor::new(0.9, 0.4, 0.1, 1.0);
-    let dark = CpuColor::new(0.1, 0.1, 0.15, 1.0);
-
-    for y in 0..framebuffer.height() {
-        for x in 0..framebuffer.width() {
-            let is_bright = ((x / CHECKER_CELL_SIZE) + (y / CHECKER_CELL_SIZE)) % 2 == 0;
-            framebuffer.set_pixel(x, y, if is_bright { bright } else { dark });
+    for y in 0..height {
+        for x in 0..width {
+            let ray = primary_ray(camera, x, y, width, height);
+            let color = cast_ray(cube, &ray, background);
+            framebuffer.set_pixel(x, y, color);
         }
     }
 }
@@ -50,7 +56,19 @@ pub fn run() {
         config::WINDOW_WIDTH as usize,
         config::WINDOW_HEIGHT as usize,
     );
-    fill_checkerboard(&mut framebuffer);
+
+    let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
+    let camera = Camera::new(
+        Vec3::new(2.5, 2.0, 4.0),
+        Vec3::zero(),
+        Vec3::new(0.0, 1.0, 0.0),
+        60.0,
+        aspect_ratio,
+    );
+    let cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+    let background = CpuColor::new(0.05, 0.05, 0.08, 1.0);
+
+    render(&mut framebuffer, &camera, &cube, background);
 
     let image = framebuffer_to_image(&framebuffer);
     let texture = rl
