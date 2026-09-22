@@ -29,7 +29,7 @@ mod renderer {
 use core::color::Color;
 use core::material::Material;
 use core::math::Vec3;
-use renderer::shading::{ambient, diffuse_directional};
+use renderer::shading::{ambient, diffuse_directional, specular_directional};
 use scene::light::DirectionalLight;
 
 const EPS: f32 = 1e-5;
@@ -182,4 +182,83 @@ fn diffuse_result_is_finite_across_angles() {
         assert!(color.g.is_finite());
         assert!(color.b.is_finite());
     }
+}
+
+#[test]
+fn viewer_aligned_with_reflection_produces_strong_highlight() {
+    let material = Material::glossy(Color::white());
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let view_direction = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = specular_directional(&material, normal, view_direction, &light);
+    assert!(color.r > 0.5);
+}
+
+#[test]
+fn viewer_away_from_reflection_reduces_highlight() {
+    let material = Material::glossy(Color::white());
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+
+    let aligned_view = Vec3::new(0.0, 1.0, 0.0);
+    let angled_view = Vec3::new(0.9, 0.1, 0.0).normalize();
+
+    let aligned = specular_directional(&material, normal, aligned_view, &light);
+    let angled = specular_directional(&material, normal, angled_view, &light);
+
+    assert!(aligned.r > angled.r);
+}
+
+#[test]
+fn zero_specular_material_produces_no_highlight() {
+    let material = Material::matte(Color::white());
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let view_direction = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = specular_directional(&material, normal, view_direction, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn higher_shininess_concentrates_the_highlight() {
+    let low_shininess = Material::new(Color::white(), 1.0, 4.0);
+    let high_shininess = Material::new(Color::white(), 1.0, 256.0);
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let off_axis_view = Vec3::new(0.5, 0.866, 0.0).normalize();
+
+    let low = specular_directional(&low_shininess, normal, off_axis_view, &light);
+    let high = specular_directional(&high_shininess, normal, off_axis_view, &light);
+
+    assert!(high.r < low.r);
+}
+
+#[test]
+fn back_facing_surface_produces_no_specular_even_when_view_aligns_with_light() {
+    let material = Material::glossy(Color::white());
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, -1.0, 0.0);
+    let view_direction = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = specular_directional(&material, normal, view_direction, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn specular_result_is_finite() {
+    let material = Material::glossy(Color::new(0.9, 0.9, 1.0, 1.0));
+    let light = DirectionalLight::new(Vec3::new(1.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let view_direction = Vec3::new(0.3, 0.9, 0.1).normalize();
+
+    let color = specular_directional(&material, normal, view_direction, &light);
+    assert!(color.r.is_finite());
+    assert!(color.g.is_finite());
+    assert!(color.b.is_finite());
 }

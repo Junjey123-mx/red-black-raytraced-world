@@ -26,3 +26,39 @@ pub fn diffuse_directional(material: &Material, normal: Vec3, light: &Directiona
     let n_dot_l = normal.dot(light.direction).max(0.0);
     (material.albedo * light.color * (light.intensity * n_dot_l)).clamp()
 }
+
+/// Reflects `to_light` (the direction from the surface toward the light)
+/// around `normal`, producing the direction along which specular energy is
+/// concentrated: `R = 2 * dot(N, L) * N - L`. This is a local helper for
+/// the Phong specular term only; it is not the recursive reflection-ray
+/// system reserved for a later category.
+fn reflect_toward_light(normal: Vec3, to_light: Vec3) -> Vec3 {
+    normal * (2.0 * normal.dot(to_light)) - to_light
+}
+
+/// Phong specular contribution from a directional light: concentrates
+/// brightness around the mirror-reflection direction of `light.direction`,
+/// scaled by `material.specular`, sharpened by `material.shininess`, and
+/// modulated by the light's color and intensity. Zero on back-facing
+/// surfaces (`dot(normal, light.direction) <= 0`) regardless of view angle.
+pub fn specular_directional(
+    material: &Material,
+    normal: Vec3,
+    view_direction: Vec3,
+    light: &DirectionalLight,
+) -> Color {
+    if material.specular <= 0.0 {
+        return Color::black();
+    }
+
+    let n_dot_l = normal.dot(light.direction);
+    if n_dot_l <= 0.0 {
+        return Color::black();
+    }
+
+    let reflected = reflect_toward_light(normal, light.direction);
+    let r_dot_v = reflected.dot(view_direction).max(0.0);
+    let factor = r_dot_v.powf(material.shininess) * material.specular * light.intensity;
+
+    (light.color * factor).clamp()
+}
