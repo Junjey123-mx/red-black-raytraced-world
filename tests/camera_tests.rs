@@ -7,17 +7,23 @@ mod core {
 
         pub use vec3::Vec3;
     }
+
+    #[path = "../src/core/ray.rs"]
+    pub mod ray;
 }
 
 #[path = "."]
 mod camera {
     #[path = "../src/camera/camera.rs"]
     pub mod camera;
+    #[path = "../src/camera/projection.rs"]
+    pub mod projection;
 
     pub use camera::Camera;
+    pub use projection::primary_ray;
 }
 
-use camera::Camera;
+use camera::{Camera, primary_ray};
 use core::math::Vec3;
 
 const EPS: f32 = 1e-5;
@@ -184,4 +190,85 @@ fn degenerate_up_parallel_to_forward_stays_finite_and_orthonormal() {
     assert!(approx_eq(basis.forward.dot(basis.right), 0.0));
     assert!(approx_eq(basis.forward.dot(basis.up), 0.0));
     assert!(approx_eq(basis.right.dot(basis.up), 0.0));
+}
+
+fn straight_camera() -> Camera {
+    Camera::new(
+        Vec3::zero(),
+        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        90.0,
+        1.0,
+    )
+}
+
+#[test]
+fn center_pixel_ray_points_approximately_forward() {
+    let camera = straight_camera();
+    let ray = primary_ray(&camera, 50, 50, 101, 101);
+
+    assert!(approx_eq(ray.direction.x, 0.0));
+    assert!(approx_eq(ray.direction.y, 0.0));
+    assert!(approx_eq(ray.direction.z, -1.0));
+}
+
+#[test]
+fn left_and_right_pixels_diverge_in_opposite_directions() {
+    let camera = straight_camera();
+    let left = primary_ray(&camera, 0, 50, 101, 101);
+    let right = primary_ray(&camera, 100, 50, 101, 101);
+
+    assert!(left.direction.x < 0.0);
+    assert!(right.direction.x > 0.0);
+}
+
+#[test]
+fn aspect_ratio_widens_horizontal_spread() {
+    let mut camera = straight_camera();
+    camera.aspect_ratio = 1.0;
+    let narrow = primary_ray(&camera, 100, 50, 101, 101);
+
+    camera.aspect_ratio = 3.0;
+    let wide = primary_ray(&camera, 100, 50, 101, 101);
+
+    assert!(wide.direction.x > narrow.direction.x);
+}
+
+#[test]
+fn wider_fov_increases_ray_dispersion() {
+    let mut camera = straight_camera();
+    camera.fov = 30.0;
+    let narrow = primary_ray(&camera, 100, 50, 101, 101);
+
+    camera.fov = 120.0;
+    let wide = primary_ray(&camera, 100, 50, 101, 101);
+
+    assert!(wide.direction.x.abs() > narrow.direction.x.abs());
+}
+
+#[test]
+fn all_primary_ray_directions_are_finite_and_unit_length() {
+    let camera = straight_camera();
+    let width = 8;
+    let height = 6;
+
+    for y in 0..height {
+        for x in 0..width {
+            let ray = primary_ray(&camera, x, y, width, height);
+            assert!(ray.direction.x.is_finite());
+            assert!(ray.direction.y.is_finite());
+            assert!(ray.direction.z.is_finite());
+            assert!(approx_eq(ray.direction.length(), 1.0));
+        }
+    }
+}
+
+#[test]
+fn primary_ray_originates_at_camera_position() {
+    let camera = straight_camera();
+    let ray = primary_ray(&camera, 20, 30, 101, 101);
+
+    assert!(approx_eq(ray.origin.x, camera.position.x));
+    assert!(approx_eq(ray.origin.y, camera.position.y));
+    assert!(approx_eq(ray.origin.z, camera.position.z));
 }

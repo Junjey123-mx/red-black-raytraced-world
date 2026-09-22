@@ -3,5 +3,7 @@
 #![allow(unused_imports)]
 
 pub mod camera;
+pub mod projection;
 
 pub use camera::Camera;
+pub use projection::primary_ray;
