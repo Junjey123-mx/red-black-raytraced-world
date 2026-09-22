@@ -1,0 +1,100 @@
+#[path = "."]
+mod core {
+    #[path = "."]
+    pub mod math {
+        #[path = "../src/core/math/vec3.rs"]
+        pub mod vec3;
+
+        pub use vec3::Vec3;
+    }
+
+    #[path = "../src/core/aabb.rs"]
+    pub mod aabb;
+}
+
+use core::aabb::Aabb;
+use core::math::Vec3;
+
+const EPS: f32 = 1e-5;
+
+fn approx_eq(a: f32, b: f32) -> bool {
+    (a - b).abs() <= EPS
+}
+
+#[test]
+fn canonical_bounds_are_preserved() {
+    let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+
+    assert!(approx_eq(aabb.min.x, -1.0));
+    assert!(approx_eq(aabb.min.y, -1.0));
+    assert!(approx_eq(aabb.min.z, -1.0));
+    assert!(approx_eq(aabb.max.x, 1.0));
+    assert!(approx_eq(aabb.max.y, 1.0));
+    assert!(approx_eq(aabb.max.z, 1.0));
+}
+
+#[test]
+fn negative_bounds_are_valid() {
+    let aabb = Aabb::new(Vec3::new(-5.0, -6.0, -7.0), Vec3::new(-2.0, -1.0, -3.0));
+
+    assert!(approx_eq(aabb.min.x, -5.0));
+    assert!(approx_eq(aabb.min.y, -6.0));
+    assert!(approx_eq(aabb.min.z, -7.0));
+    assert!(approx_eq(aabb.max.x, -2.0));
+    assert!(approx_eq(aabb.max.y, -1.0));
+    assert!(approx_eq(aabb.max.z, -3.0));
+}
+
+#[test]
+fn constructor_normalizes_inverted_extremes() {
+    let aabb = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(-1.0, -1.0, -1.0));
+
+    assert!(aabb.min.x <= aabb.max.x);
+    assert!(aabb.min.y <= aabb.max.y);
+    assert!(aabb.min.z <= aabb.max.z);
+
+    assert!(approx_eq(aabb.min.x, -1.0));
+    assert!(approx_eq(aabb.max.x, 1.0));
+}
+
+#[test]
+fn constructor_normalizes_mixed_component_order() {
+    let aabb = Aabb::new(Vec3::new(-2.0, 5.0, 0.0), Vec3::new(3.0, -1.0, -4.0));
+
+    assert!(approx_eq(aabb.min.x, -2.0));
+    assert!(approx_eq(aabb.max.x, 3.0));
+    assert!(approx_eq(aabb.min.y, -1.0));
+    assert!(approx_eq(aabb.max.y, 5.0));
+    assert!(approx_eq(aabb.min.z, -4.0));
+    assert!(approx_eq(aabb.max.z, 0.0));
+}
+
+#[test]
+fn center_and_half_extent_are_correct() {
+    let aabb = Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 2.0, 6.0));
+
+    let center = aabb.center();
+    assert!(approx_eq(center.x, 2.0));
+    assert!(approx_eq(center.y, 1.0));
+    assert!(approx_eq(center.z, 3.0));
+
+    let half_extent = aabb.half_extent();
+    assert!(approx_eq(half_extent.x, 2.0));
+    assert!(approx_eq(half_extent.y, 1.0));
+    assert!(approx_eq(half_extent.z, 3.0));
+}
+
+#[test]
+fn bounds_stay_finite() {
+    let aabb = Aabb::new(
+        Vec3::new(-100.0, 50.0, -25.0),
+        Vec3::new(100.0, -50.0, 25.0),
+    );
+
+    assert!(aabb.min.x.is_finite());
+    assert!(aabb.min.y.is_finite());
+    assert!(aabb.min.z.is_finite());
+    assert!(aabb.max.x.is_finite());
+    assert!(aabb.max.y.is_finite());
+    assert!(aabb.max.z.is_finite());
+}
