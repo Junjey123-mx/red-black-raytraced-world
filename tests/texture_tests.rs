@@ -81,3 +81,68 @@ fn dimension_overflow_is_rejected() {
     let result = CpuTexture::new(usize::MAX, 2, vec![]);
     assert!(matches!(result, Err(TextureError::DimensionOverflow)));
 }
+
+fn checkerboard_2x2() -> CpuTexture {
+    let red = c(1.0, 0.0, 0.0);
+    let green = c(0.0, 1.0, 0.0);
+    let blue = c(0.0, 0.0, 1.0);
+    let white = c(1.0, 1.0, 1.0);
+    CpuTexture::new(2, 2, vec![red, green, blue, white]).unwrap()
+}
+
+#[test]
+fn texel_0_0_is_top_left() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(0, 0), Some(c(1.0, 0.0, 0.0)));
+}
+
+#[test]
+fn texel_width_minus_one_0_is_top_right() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(1, 0), Some(c(0.0, 1.0, 0.0)));
+}
+
+#[test]
+fn texel_0_height_minus_one_is_bottom_left() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(0, 1), Some(c(0.0, 0.0, 1.0)));
+}
+
+#[test]
+fn texel_bottom_right_corner() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(1, 1), Some(c(1.0, 1.0, 1.0)));
+}
+
+#[test]
+fn texel_x_equal_width_is_out_of_bounds() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(2, 0), None);
+}
+
+#[test]
+fn texel_y_equal_height_is_out_of_bounds() {
+    let texture = checkerboard_2x2();
+    assert_eq!(texture.texel(0, 2), None);
+}
+
+#[test]
+fn rectangular_texture_preserves_row_major_order() {
+    let pixels: Vec<Color> = (0..(3 * 2)).map(|i| c(i as f32, 0.0, 0.0)).collect();
+    let texture = CpuTexture::new(3, 2, pixels).unwrap();
+
+    assert_eq!(texture.texel(0, 0), Some(c(0.0, 0.0, 0.0)));
+    assert_eq!(texture.texel(1, 0), Some(c(1.0, 0.0, 0.0)));
+    assert_eq!(texture.texel(2, 0), Some(c(2.0, 0.0, 0.0)));
+    assert_eq!(texture.texel(0, 1), Some(c(3.0, 0.0, 0.0)));
+    assert_eq!(texture.texel(1, 1), Some(c(4.0, 0.0, 0.0)));
+    assert_eq!(texture.texel(2, 1), Some(c(5.0, 0.0, 0.0)));
+}
+
+#[test]
+fn repeated_reads_are_deterministic() {
+    let texture = checkerboard_2x2();
+    let first = texture.texel(1, 1);
+    let second = texture.texel(1, 1);
+    assert_eq!(first, second);
+}

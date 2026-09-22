@@ -59,4 +59,19 @@ impl CpuTexture {
     pub fn pixels(&self) -> &[Color] {
         &self.pixels
     }
+
+    /// Row-major index of texel `(x, y)`, centralizing the single formula
+    /// used by every bounded texel lookup.
+    fn index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+
+    /// Returns the texel at discrete image coordinates `(x, y)`, or `None`
+    /// when either coordinate is out of bounds. `y = 0` is the top row.
+    pub fn texel(&self, x: usize, y: usize) -> Option<Color> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        Some(self.pixels[self.index(x, y)])
+    }
 }
