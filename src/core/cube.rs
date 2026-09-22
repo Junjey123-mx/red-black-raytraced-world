@@ -4,7 +4,7 @@
 
 use crate::core::aabb::Aabb;
 use crate::core::hit::{Face, HitRecord};
-use crate::core::math::Vec3;
+use crate::core::math::{Vec2, Vec3};
 use crate::core::ray::Ray;
 
 /// Axis-aligned Cube, geometrically an `Aabb` with cube-specific hit
@@ -49,7 +49,8 @@ impl Cube {
 
         let point = ray.at(t);
         let face = self.face_for_point(point);
-        Some(HitRecord::new(t, point, face))
+        // Bridging value: real per-face UV mapping lands in the next commit.
+        Some(HitRecord::new(t, point, face, Vec2::zero()))
     }
 
     /// Classifies which face `point` (assumed to lie on the cube boundary)

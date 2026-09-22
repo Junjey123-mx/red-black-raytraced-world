@@ -2,7 +2,7 @@
 // raytracer work that will produce and consume hit records.
 #![allow(dead_code)]
 
-use crate::core::math::Vec3;
+use crate::core::math::{Vec2, Vec3};
 
 /// One of the six axis-aligned cube faces, each with a canonical outward
 /// normal. Deciding which face applies at an edge or corner (where more
@@ -33,24 +33,27 @@ impl Face {
 }
 
 /// Geometric result of a ray intersection: distance along the ray, world
-/// point, outward unit normal, and the face it belongs to.
+/// point, outward unit normal, the face it belongs to, and the texture-space
+/// UV coordinate at that point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HitRecord {
     pub distance: f32,
     pub point: Vec3,
     pub normal: Vec3,
     pub face: Face,
+    pub uv: Vec2,
 }
 
 impl HitRecord {
     /// The normal is derived from `face` so it is always unitary and
     /// consistent with the reported face.
-    pub fn new(distance: f32, point: Vec3, face: Face) -> Self {
+    pub fn new(distance: f32, point: Vec3, face: Face, uv: Vec2) -> Self {
         Self {
             distance,
             point,
             normal: face.normal(),
             face,
+            uv,
         }
     }
 }

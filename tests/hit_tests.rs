@@ -2,9 +2,12 @@
 mod core {
     #[path = "."]
     pub mod math {
+        #[path = "../src/core/math/vec2.rs"]
+        pub mod vec2;
         #[path = "../src/core/math/vec3.rs"]
         pub mod vec3;
 
+        pub use vec2::Vec2;
         pub use vec3::Vec3;
     }
 
@@ -13,7 +16,7 @@ mod core {
 }
 
 use core::hit::{Face, HitRecord};
-use core::math::Vec3;
+use core::math::{Vec2, Vec3};
 
 const EPS: f32 = 1e-5;
 
@@ -44,7 +47,7 @@ fn each_face_has_its_canonical_unit_normal() {
 #[test]
 fn hit_record_preserves_distance_and_point() {
     let point = Vec3::new(1.0, 2.0, 3.0);
-    let hit = HitRecord::new(4.5, point, Face::PositiveY);
+    let hit = HitRecord::new(4.5, point, Face::PositiveY, Vec2::zero());
 
     assert!(approx_eq(hit.distance, 4.5));
     assert!(approx_eq(hit.point.x, point.x));
@@ -54,18 +57,51 @@ fn hit_record_preserves_distance_and_point() {
 
 #[test]
 fn hit_record_face_is_preserved() {
-    let hit = HitRecord::new(1.0, Vec3::zero(), Face::NegativeZ);
+    let hit = HitRecord::new(1.0, Vec3::zero(), Face::NegativeZ, Vec2::zero());
     assert_eq!(hit.face, Face::NegativeZ);
 }
 
 #[test]
 fn hit_record_normal_is_unit_and_matches_face() {
-    let hit = HitRecord::new(2.0, Vec3::new(1.0, 0.0, 0.0), Face::PositiveX);
+    let hit = HitRecord::new(2.0, Vec3::new(1.0, 0.0, 0.0), Face::PositiveX, Vec2::zero());
 
     assert!(approx_eq(hit.normal.length(), 1.0));
     assert!(approx_eq(hit.normal.x, 1.0));
     assert!(approx_eq(hit.normal.y, 0.0));
     assert!(approx_eq(hit.normal.z, 0.0));
+}
+
+#[test]
+fn hit_record_preserves_exact_uv() {
+    let uv = Vec2::new(0.25, 0.75);
+    let hit = HitRecord::new(1.0, Vec3::zero(), Face::PositiveZ, uv);
+
+    assert!(approx_eq(hit.uv.x, 0.25));
+    assert!(approx_eq(hit.uv.y, 0.75));
+}
+
+#[test]
+fn hit_record_uv_can_represent_zero() {
+    let hit = HitRecord::new(1.0, Vec3::zero(), Face::PositiveZ, Vec2::new(0.0, 0.0));
+
+    assert!(approx_eq(hit.uv.x, 0.0));
+    assert!(approx_eq(hit.uv.y, 0.0));
+}
+
+#[test]
+fn hit_record_uv_can_represent_one() {
+    let hit = HitRecord::new(1.0, Vec3::zero(), Face::PositiveZ, Vec2::new(1.0, 1.0));
+
+    assert!(approx_eq(hit.uv.x, 1.0));
+    assert!(approx_eq(hit.uv.y, 1.0));
+}
+
+#[test]
+fn hit_record_uv_can_represent_intermediate_values() {
+    let hit = HitRecord::new(1.0, Vec3::zero(), Face::PositiveZ, Vec2::new(0.42, 0.13));
+
+    assert!(approx_eq(hit.uv.x, 0.42));
+    assert!(approx_eq(hit.uv.y, 0.13));
 }
 
 #[test]
