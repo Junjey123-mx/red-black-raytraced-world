@@ -49,8 +49,8 @@ impl Cube {
 
         let point = ray.at(t);
         let face = self.face_for_point(point);
-        // Bridging value: real per-face UV mapping lands in the next commit.
-        Some(HitRecord::new(t, point, face, Vec2::zero()))
+        let uv = self.uv_for_face(point, face);
+        Some(HitRecord::new(t, point, face, uv))
     }
 
     /// Classifies which face `point` (assumed to lie on the cube boundary)
@@ -75,5 +75,39 @@ impl Cube {
             }
         }
         best.1
+    }
+
+    /// Normalizes a single world-space coordinate against `[min, max]` into
+    /// `[0, 1]`, absorbing small floating-point overshoot at the boundary.
+    /// A degenerate (near-zero) extent falls back to the midpoint rather
+    /// than dividing by (near-)zero.
+    fn local_coordinate(value: f32, min: f32, max: f32) -> f32 {
+        let extent = max - min;
+        if extent.abs() <= f32::EPSILON {
+            0.5
+        } else {
+            ((value - min) / extent).clamp(0.0, 1.0)
+        }
+    }
+
+    /// Maps a boundary `point` on the given `face` to the canonical
+    /// normalized UV coordinate frozen for this project: `u = 0` is the left
+    /// edge of the texture, `v = 0` is the top edge, matching a row-major
+    /// image stored top-to-bottom. Each face is parameterized independently
+    /// from the cube's local `(lx, ly, lz)` coordinates so a translated cube
+    /// produces identical UVs to an equivalent cube at the origin.
+    fn uv_for_face(&self, point: Vec3, face: Face) -> Vec2 {
+        let lx = Self::local_coordinate(point.x, self.aabb.min.x, self.aabb.max.x);
+        let ly = Self::local_coordinate(point.y, self.aabb.min.y, self.aabb.max.y);
+        let lz = Self::local_coordinate(point.z, self.aabb.min.z, self.aabb.max.z);
+
+        match face {
+            Face::PositiveZ => Vec2::new(lx, 1.0 - ly),
+            Face::NegativeZ => Vec2::new(1.0 - lx, 1.0 - ly),
+            Face::PositiveX => Vec2::new(1.0 - lz, 1.0 - ly),
+            Face::NegativeX => Vec2::new(lz, 1.0 - ly),
+            Face::PositiveY => Vec2::new(lx, lz),
+            Face::NegativeY => Vec2::new(lx, 1.0 - lz),
+        }
     }
 }
