@@ -16,6 +16,8 @@ mod core {
     pub mod cube;
     #[path = "../src/core/hit.rs"]
     pub mod hit;
+    #[path = "../src/core/material.rs"]
+    pub mod material;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
 }
@@ -28,18 +30,24 @@ mod scene {
 
 #[path = "."]
 mod renderer {
+    #[path = "../src/renderer/raytracer.rs"]
+    pub mod raytracer;
+    #[path = "../src/renderer/shading.rs"]
+    pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
 }
 
 use core::color::Color;
 use core::cube::Cube;
+use core::material::Material;
 use core::math::Vec3;
+use renderer::raytracer::cast_ray_lit;
 use renderer::shadows::{
-    DIRECTIONAL_SHADOW_RANGE, SHADOW_EPSILON, shadow_ray_to_directional_light,
+    DIRECTIONAL_SHADOW_RANGE, SHADOW_EPSILON, is_occluded, shadow_ray_to_directional_light,
     shadow_ray_to_point_light,
 };
-use scene::light::{DirectionalLight, PointLight};
+use scene::light::{DirectionalLight, Light, PointLight};
 
 const EPS: f32 = 1e-5;
 
@@ -169,4 +177,142 @@ fn shadow_ray_construction_never_produces_nan() {
     assert!(!point_ray.origin.x.is_nan());
     assert!(!point_ray.direction.x.is_nan());
     assert!(!point_distance.is_nan());
+}
+
+fn main_cube() -> Cube {
+    Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0))
+}
+
+/// Placed along the shadow-ray path from the main cube's top face toward a
+/// point light above and to the side, but nowhere near a straight-down
+/// primary ray.
+fn side_occluder_cube() -> Cube {
+    Cube::new(Vec3::new(1.5, 1.3, -1.0), Vec3::new(3.5, 2.7, 1.0))
+}
+
+#[test]
+fn is_occluded_true_when_blocker_lies_between_hit_and_point_light() {
+    let hit_point = Vec3::zero();
+    let normal = Vec3::new(0.0, 0.0, 1.0);
+    let light = PointLight::new(Vec3::new(0.0, 0.0, 3.0), Color::white(), 1.0);
+    let occluder = Cube::new(Vec3::new(-1.0, -1.0, 1.0), Vec3::new(1.0, 1.0, 2.0));
+
+    let (shadow_ray, distance) = shadow_ray_to_point_light(hit_point, normal, &light);
+    assert!(is_occluded(
+        std::iter::once(&occluder),
+        &shadow_ray,
+        distance
+    ));
+}
+
+#[test]
+fn is_occluded_false_when_blocker_lies_behind_point_light() {
+    let hit_point = Vec3::zero();
+    let normal = Vec3::new(0.0, 0.0, 1.0);
+    let light = PointLight::new(Vec3::new(0.0, 0.0, 3.0), Color::white(), 1.0);
+    let occluder = Cube::new(Vec3::new(-1.0, -1.0, 5.0), Vec3::new(1.0, 1.0, 6.0));
+
+    let (shadow_ray, distance) = shadow_ray_to_point_light(hit_point, normal, &light);
+    assert!(!is_occluded(
+        std::iter::once(&occluder),
+        &shadow_ray,
+        distance
+    ));
+}
+
+#[test]
+fn is_occluded_false_when_no_blocker_exists() {
+    let hit_point = Vec3::zero();
+    let normal = Vec3::new(0.0, 0.0, 1.0);
+    let light = PointLight::new(Vec3::new(0.0, 0.0, 3.0), Color::white(), 1.0);
+
+    let (shadow_ray, distance) = shadow_ray_to_point_light(hit_point, normal, &light);
+    let no_objects: [Cube; 0] = [];
+    assert!(!is_occluded(no_objects.iter(), &shadow_ray, distance));
+}
+
+#[test]
+fn is_occluded_true_for_directional_blocker() {
+    let hit_point = Vec3::zero();
+    let normal = Vec3::new(0.0, 0.0, 1.0);
+    let light = DirectionalLight::new(Vec3::new(0.0, 0.0, 1.0), Color::white(), 1.0);
+    let occluder = Cube::new(Vec3::new(-1.0, -1.0, 4.0), Vec3::new(1.0, 1.0, 6.0));
+
+    let shadow_ray = shadow_ray_to_directional_light(hit_point, normal, &light);
+    assert!(is_occluded(
+        std::iter::once(&occluder),
+        &shadow_ray,
+        DIRECTIONAL_SHADOW_RANGE
+    ));
+}
+
+#[test]
+fn cast_ray_lit_returns_background_on_miss() {
+    let objects = [(main_cube(), Material::matte(Color::white()))];
+    let lights = [Light::Directional(DirectionalLight::new(
+        Vec3::new(0.0, 1.0, 0.0),
+        Color::white(),
+        1.0,
+    ))];
+    let ray = core::ray::Ray::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 0.0, -1.0));
+    let background = Color::new(0.2, 0.3, 0.4, 1.0);
+
+    let color = cast_ray_lit(
+        &objects,
+        &ray,
+        Vec3::new(10.0, 10.0, 10.0),
+        &lights,
+        0.1,
+        background,
+    );
+
+    assert!(approx_eq(color.r, background.r));
+    assert!(approx_eq(color.g, background.g));
+    assert!(approx_eq(color.b, background.b));
+}
+
+#[test]
+fn cast_ray_lit_ambient_persists_while_diffuse_and_specular_vanish_when_blocked() {
+    let material = Material::glossy(Color::white());
+    let camera_position = Vec3::new(0.0, 5.0, 0.0);
+    let ray = core::ray::Ray::new(camera_position, Vec3::new(0.0, -1.0, 0.0));
+    let lights = [Light::Point(PointLight::new(
+        Vec3::new(5.0, 3.0, 0.0),
+        Color::white(),
+        1.0,
+    ))];
+    let ambient_factor = 0.1;
+    let background = Color::black();
+
+    let unblocked_objects = [(main_cube(), Material::glossy(Color::white()))];
+    let unblocked = cast_ray_lit(
+        &unblocked_objects,
+        &ray,
+        camera_position,
+        &lights,
+        ambient_factor,
+        background,
+    );
+
+    let blocked_objects = [
+        (main_cube(), Material::glossy(Color::white())),
+        (side_occluder_cube(), Material::matte(Color::black())),
+    ];
+    let blocked = cast_ray_lit(
+        &blocked_objects,
+        &ray,
+        camera_position,
+        &lights,
+        ambient_factor,
+        background,
+    );
+
+    let ambient_only = renderer::shading::ambient(&material, ambient_factor);
+
+    // Unblocked: diffuse/specular add real brightness above ambient alone.
+    assert!(unblocked.r > ambient_only.r + 0.01);
+    // Blocked: only the ambient term remains.
+    assert!(approx_eq(blocked.r, ambient_only.r));
+    assert!(approx_eq(blocked.g, ambient_only.g));
+    assert!(approx_eq(blocked.b, ambient_only.b));
 }

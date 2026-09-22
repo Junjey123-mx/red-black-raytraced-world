@@ -16,6 +16,8 @@ mod core {
     pub mod cube;
     #[path = "../src/core/hit.rs"]
     pub mod hit;
+    #[path = "../src/core/material.rs"]
+    pub mod material;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
 }
@@ -32,11 +34,21 @@ mod camera {
 }
 
 #[path = "."]
+mod scene {
+    #[path = "../src/scene/light.rs"]
+    pub mod light;
+}
+
+#[path = "."]
 mod renderer {
     #[path = "../src/renderer/framebuffer.rs"]
     pub mod framebuffer;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
+    #[path = "../src/renderer/shading.rs"]
+    pub mod shading;
+    #[path = "../src/renderer/shadows.rs"]
+    pub mod shadows;
 }
 
 use camera::{Camera, primary_ray};
