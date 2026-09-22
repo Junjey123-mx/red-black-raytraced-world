@@ -29,8 +29,10 @@ mod renderer {
 use core::color::Color;
 use core::material::Material;
 use core::math::Vec3;
-use renderer::shading::{ambient, diffuse_directional, specular_directional};
-use scene::light::DirectionalLight;
+use renderer::shading::{
+    ambient, diffuse_directional, diffuse_point, specular_directional, specular_point,
+};
+use scene::light::{DirectionalLight, PointLight};
 
 const EPS: f32 = 1e-5;
 
@@ -261,4 +263,88 @@ fn specular_result_is_finite() {
     assert!(color.r.is_finite());
     assert!(color.g.is_finite());
     assert!(color.b.is_finite());
+}
+
+#[test]
+fn point_light_in_front_of_surface_produces_diffuse() {
+    let material = Material::matte(Color::white());
+    let light = PointLight::new(Vec3::new(0.0, 5.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::zero();
+
+    let color = diffuse_point(&material, normal, hit_point, &light);
+    assert!(color.r > 0.0);
+}
+
+#[test]
+fn point_light_behind_surface_produces_zero_diffuse() {
+    let material = Material::matte(Color::white());
+    let light = PointLight::new(Vec3::new(0.0, -5.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::zero();
+
+    let color = diffuse_point(&material, normal, hit_point, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn point_light_lateral_to_surface_produces_partial_diffuse() {
+    let material = Material::matte(Color::white());
+    let light = PointLight::new(Vec3::new(5.0, 5.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::zero();
+
+    let color = diffuse_point(&material, normal, hit_point, &light);
+    assert!(color.r > 0.0);
+    assert!(color.r < 1.0);
+}
+
+#[test]
+fn point_light_specular_is_visible_when_view_aligns_with_reflection() {
+    let material = Material::glossy(Color::white());
+    let light = PointLight::new(Vec3::new(0.0, 5.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::zero();
+    let view_direction = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = specular_point(&material, normal, hit_point, view_direction, &light);
+    assert!(color.r > 0.5);
+}
+
+#[test]
+fn point_light_coincident_with_hit_point_is_handled_safely() {
+    let material = Material::glossy(Color::white());
+    let light = PointLight::new(Vec3::zero(), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::zero();
+    let view_direction = Vec3::new(0.0, 1.0, 0.0);
+
+    let diffuse = diffuse_point(&material, normal, hit_point, &light);
+    let specular = specular_point(&material, normal, hit_point, view_direction, &light);
+
+    assert!(diffuse.r.is_finite());
+    assert!(specular.r.is_finite());
+    assert!(!diffuse.r.is_nan());
+    assert!(!specular.r.is_nan());
+}
+
+#[test]
+fn point_light_diffuse_and_specular_results_are_finite() {
+    let material = Material::glossy(Color::new(0.7, 0.4, 0.2, 1.0));
+    let light = PointLight::new(Vec3::new(3.0, 2.0, -1.0), Color::white(), 1.5);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+    let hit_point = Vec3::new(0.1, 0.0, 0.2);
+    let view_direction = Vec3::new(0.2, 0.9, 0.1).normalize();
+
+    let diffuse = diffuse_point(&material, normal, hit_point, &light);
+    let specular = specular_point(&material, normal, hit_point, view_direction, &light);
+
+    assert!(diffuse.r.is_finite());
+    assert!(diffuse.g.is_finite());
+    assert!(diffuse.b.is_finite());
+    assert!(specular.r.is_finite());
+    assert!(specular.g.is_finite());
+    assert!(specular.b.is_finite());
 }
