@@ -1,9 +1,23 @@
 #[path = "."]
 mod core {
+    #[path = "."]
+    pub mod math {
+        #[path = "../src/core/math/vec3.rs"]
+        pub mod vec3;
+
+        pub use vec3::Vec3;
+    }
+
     #[path = "../src/core/color.rs"]
     pub mod color;
     #[path = "../src/core/material.rs"]
     pub mod material;
+}
+
+#[path = "."]
+mod scene {
+    #[path = "../src/scene/light.rs"]
+    pub mod light;
 }
 
 #[path = "."]
@@ -14,7 +28,9 @@ mod renderer {
 
 use core::color::Color;
 use core::material::Material;
-use renderer::shading::ambient;
+use core::math::Vec3;
+use renderer::shading::{ambient, diffuse_directional};
+use scene::light::DirectionalLight;
 
 const EPS: f32 = 1e-5;
 
@@ -82,4 +98,88 @@ fn ambient_result_is_finite() {
     assert!(color.r.is_finite());
     assert!(color.g.is_finite());
     assert!(color.b.is_finite());
+}
+
+#[test]
+fn normal_facing_light_produces_maximum_diffuse() {
+    let material = Material::matte(Color::new(1.0, 1.0, 1.0, 1.0));
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = diffuse_directional(&material, normal, &light);
+    assert!(approx_eq(color.r, 1.0));
+    assert!(approx_eq(color.g, 1.0));
+    assert!(approx_eq(color.b, 1.0));
+}
+
+#[test]
+fn normal_perpendicular_to_light_produces_zero_diffuse() {
+    let material = Material::matte(Color::new(1.0, 1.0, 1.0, 1.0));
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(1.0, 0.0, 0.0);
+
+    let color = diffuse_directional(&material, normal, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn normal_facing_away_from_light_produces_zero_diffuse() {
+    let material = Material::matte(Color::new(1.0, 1.0, 1.0, 1.0));
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 1.0);
+    let normal = Vec3::new(0.0, -1.0, 0.0);
+
+    let color = diffuse_directional(&material, normal, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn zero_intensity_produces_zero_diffuse() {
+    let material = Material::matte(Color::white());
+    let light = DirectionalLight::new(Vec3::new(0.0, 1.0, 0.0), Color::white(), 0.0);
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = diffuse_directional(&material, normal, &light);
+    assert!(approx_eq(color.r, 0.0));
+    assert!(approx_eq(color.g, 0.0));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn diffuse_combines_albedo_and_light_color() {
+    let material = Material::matte(Color::new(1.0, 0.5, 0.0, 1.0));
+    let light = DirectionalLight::new(
+        Vec3::new(0.0, 1.0, 0.0),
+        Color::new(0.5, 0.5, 0.5, 1.0),
+        1.0,
+    );
+    let normal = Vec3::new(0.0, 1.0, 0.0);
+
+    let color = diffuse_directional(&material, normal, &light);
+    assert!(approx_eq(color.r, 0.5));
+    assert!(approx_eq(color.g, 0.25));
+    assert!(approx_eq(color.b, 0.0));
+}
+
+#[test]
+fn diffuse_result_is_finite_across_angles() {
+    let material = Material::matte(Color::new(0.7, 0.3, 0.6, 1.0));
+    let light = DirectionalLight::new(Vec3::new(1.0, 1.0, 1.0), Color::white(), 1.5);
+
+    let normals = [
+        Vec3::new(1.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(0.0, 0.0, 1.0),
+        Vec3::new(-1.0, -1.0, -1.0),
+    ];
+
+    for normal in normals {
+        let color = diffuse_directional(&material, normal, &light);
+        assert!(color.r.is_finite());
+        assert!(color.g.is_finite());
+        assert!(color.b.is_finite());
+    }
 }
