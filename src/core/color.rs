@@ -1,3 +1,7 @@
+// Foundation-stage primitive: parts of its API (e.g. `white`, `clamp`) land
+// ahead of the lighting/shading work that will consume them.
+#![allow(dead_code)]
+
 use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

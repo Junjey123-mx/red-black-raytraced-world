@@ -1,3 +1,7 @@
+// Foundation-stage primitive: lands ahead of the VoxelWorld cell-key usage
+// that will consume it.
+#![allow(dead_code)]
+
 use std::ops::{Add, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

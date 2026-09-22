@@ -1,3 +1,7 @@
+// Foundation-stage primitive: lands ahead of the Camera/DDA work that will
+// construct and traverse rays.
+#![allow(dead_code)]
+
 use crate::core::math::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

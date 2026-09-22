@@ -1,3 +1,7 @@
+// Foundation-stage primitive: `cross` in particular lands ahead of the
+// intersection/normal work that will consume it.
+#![allow(dead_code)]
+
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

@@ -1,3 +1,7 @@
+// `pixels` and `clear` land ahead of the raytracer loop that will drive
+// per-frame recomputation of the buffer.
+#![allow(dead_code)]
+
 use crate::core::color::Color;
 
 pub struct Framebuffer {

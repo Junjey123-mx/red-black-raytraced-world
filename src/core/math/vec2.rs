@@ -1,3 +1,7 @@
+// Foundation-stage primitive: most of its API lands ahead of the Camera/UV
+// work that will consume it, so allow it to sit unused until then.
+#![allow(dead_code)]
+
 use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
