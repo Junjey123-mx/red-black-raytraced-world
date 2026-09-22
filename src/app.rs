@@ -5,21 +5,38 @@ use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
 use crate::core::cube::Cube;
+use crate::core::material::Material;
 use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
-use crate::renderer::raytracer::cast_ray;
+use crate::renderer::raytracer::cast_ray_lit;
+use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
+use crate::scene::light::{DirectionalLight, Light, PointLight};
 
-/// Casts one primary ray per pixel against `cube` and writes the resulting
-/// diagnostic color (or `background` on a miss) into the framebuffer. This
-/// is the first fully CPU-computed 3D image in the project.
-fn render(framebuffer: &mut Framebuffer, camera: &Camera, cube: &Cube, background: CpuColor) {
+/// Casts one primary ray per pixel against the diagnostic lighting scene
+/// (`objects` + `lights`) and writes the fully shaded color (ambient +
+/// visible diffuse/specular per light, or `background` on a miss) into the
+/// framebuffer. This is the Category 3 basic-lighting checkpoint image.
+fn render(
+    framebuffer: &mut Framebuffer,
+    camera: &Camera,
+    objects: &[(Cube, Material)],
+    lights: &[Light],
+    background: CpuColor,
+) {
     let width = framebuffer.width();
     let height = framebuffer.height();
 
     for y in 0..height {
         for x in 0..width {
             let ray = primary_ray(camera, x, y, width, height);
-            let color = cast_ray(cube, &ray, background);
+            let color = cast_ray_lit(
+                objects,
+                &ray,
+                camera.position,
+                lights,
+                DEFAULT_AMBIENT_FACTOR,
+                background,
+            );
             framebuffer.set_pixel(x, y, color);
         }
     }
@@ -59,16 +76,45 @@ pub fn run() {
 
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
     let camera = Camera::new(
-        Vec3::new(2.5, 2.0, 4.0),
-        Vec3::zero(),
+        Vec3::new(6.0, 4.0, 8.0),
+        Vec3::new(0.0, -0.3, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
     );
-    let cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+
+    // Main diagnostic cube: warm-colored, with a broad enough specular
+    // highlight (moderate shininess) to stay visible at framebuffer
+    // resolution, so both diffuse gradient and specular are distinguishable.
+    let main_cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+    let main_material = Material::new(CpuColor::new(0.9, 0.5, 0.2, 1.0), 3.0, 2.0);
+
+    // Flat receptor floor built from a squashed Cube, wide enough to catch
+    // the main cube's projected hard shadow.
+    let floor_cube = Cube::new(Vec3::new(-5.0, -2.0, -5.0), Vec3::new(5.0, -1.5, 5.0));
+    let floor_material = Material::matte(CpuColor::new(0.6, 0.6, 0.65, 1.0));
+
+    let objects = [(main_cube, main_material), (floor_cube, floor_material)];
+
+    // A soft overhead directional fill plus a stronger side point light: the
+    // point light drives the visible diffuse gradient, specular highlight,
+    // and the shadow cast onto the floor.
+    let lights = [
+        Light::Directional(DirectionalLight::new(
+            Vec3::new(0.0, 1.0, 0.0),
+            CpuColor::white(),
+            0.4,
+        )),
+        Light::Point(PointLight::new(
+            Vec3::new(-4.0, 6.0, 5.0),
+            CpuColor::white(),
+            1.5,
+        )),
+    ];
+
     let background = CpuColor::new(0.05, 0.05, 0.08, 1.0);
 
-    render(&mut framebuffer, &camera, &cube, background);
+    render(&mut framebuffer, &camera, &objects, &lights, background);
 
     let image = framebuffer_to_image(&framebuffer);
     let texture = rl
