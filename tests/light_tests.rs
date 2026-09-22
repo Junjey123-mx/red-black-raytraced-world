@@ -20,7 +20,7 @@ mod scene {
 
 use core::color::Color;
 use core::math::Vec3;
-use scene::light::{DirectionalLight, Light};
+use scene::light::{DirectionalLight, Light, PointLight};
 
 const EPS: f32 = 1e-5;
 
@@ -79,9 +79,68 @@ fn light_enum_wraps_directional_variant() {
         1.0,
     ));
 
-    match light {
-        Light::Directional(directional) => {
-            assert!(approx_eq(directional.direction.length(), 1.0));
-        }
+    if let Light::Directional(directional) = light {
+        assert!(approx_eq(directional.direction.length(), 1.0));
+    } else {
+        panic!("expected Light::Directional");
+    }
+}
+
+#[test]
+fn point_light_preserves_position() {
+    let position = Vec3::new(2.0, 3.0, -1.0);
+    let light = PointLight::new(position, Color::white(), 1.0);
+
+    assert!(approx_eq(light.position.x, position.x));
+    assert!(approx_eq(light.position.y, position.y));
+    assert!(approx_eq(light.position.z, position.z));
+}
+
+#[test]
+fn point_light_preserves_color_and_intensity() {
+    let color = Color::new(0.9, 0.7, 0.5, 1.0);
+    let light = PointLight::new(Vec3::zero(), color, 3.0);
+
+    assert!(approx_eq(light.color.r, color.r));
+    assert!(approx_eq(light.color.g, color.g));
+    assert!(approx_eq(light.color.b, color.b));
+    assert!(approx_eq(light.intensity, 3.0));
+}
+
+#[test]
+fn point_light_negative_intensity_is_clamped_to_zero() {
+    let light = PointLight::new(Vec3::zero(), Color::white(), -2.0);
+    assert!(light.intensity >= 0.0);
+    assert!(approx_eq(light.intensity, 0.0));
+}
+
+#[test]
+fn hit_to_point_light_vector_is_finite_and_has_valid_distance() {
+    let light = PointLight::new(Vec3::new(4.0, 3.0, 0.0), Color::white(), 1.0);
+    let hit_point = Vec3::zero();
+
+    let to_light = light.position - hit_point;
+    assert!(to_light.x.is_finite());
+    assert!(to_light.y.is_finite());
+    assert!(to_light.z.is_finite());
+
+    let distance = to_light.length();
+    assert!(distance.is_finite());
+    assert!(distance >= 0.0);
+    assert!(approx_eq(distance, 5.0));
+}
+
+#[test]
+fn light_enum_wraps_point_variant() {
+    let light = Light::Point(PointLight::new(
+        Vec3::new(1.0, 1.0, 1.0),
+        Color::white(),
+        2.0,
+    ));
+
+    if let Light::Point(point) = light {
+        assert!(approx_eq(point.intensity, 2.0));
+    } else {
+        panic!("expected Light::Point");
     }
 }

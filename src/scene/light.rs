@@ -33,8 +33,35 @@ impl DirectionalLight {
     }
 }
 
-/// A scene light source. Only the directional variant exists so far; the
-/// point-light variant is added in a later commit.
+/// Point light: a positional source that radiates in every direction from
+/// a single world-space point (e.g. a lamp). Unlike `DirectionalLight`, its
+/// direction toward a surface depends on that surface's position, so no
+/// fixed direction is stored here — shading code derives
+/// `normalize(light.position - hit.point)` per hit.
+///
+/// This Gate intentionally does not specify a distance-attenuation model;
+/// `color` and `intensity` are the only response scalars, consistent with
+/// the local lighting contract established for directional lights.
+pub struct PointLight {
+    pub position: Vec3,
+    pub color: Color,
+    pub intensity: f32,
+}
+
+impl PointLight {
+    /// `intensity` is clamped to non-negative.
+    pub fn new(position: Vec3, color: Color, intensity: f32) -> Self {
+        Self {
+            position,
+            color,
+            intensity: intensity.max(0.0),
+        }
+    }
+}
+
+/// A scene light source: either a distant directional source or a
+/// positional point source.
 pub enum Light {
     Directional(DirectionalLight),
+    Point(PointLight),
 }
