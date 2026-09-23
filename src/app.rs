@@ -14,37 +14,29 @@ use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
 use crate::scene::texture_manager::TextureManager;
 
-const DIAGNOSTIC_FACE_TEXTURES_DIR: &str = "assets/textures/diagnostic/faces";
+const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
 
-/// Loads the six diagnostic face PNGs once and returns the manager plus a
-/// `FaceTextures` mapping ready to attach to the diagnostic cube's
-/// material. Called exactly once during scene setup, never per pixel/frame.
-fn load_diagnostic_face_textures() -> (TextureManager, FaceTextures) {
+/// Loads the three Grass Block PNGs once — `top` and `bottom` are unique,
+/// while `side` is loaded a single time and its `TextureId` is reused for
+/// all four lateral faces, demonstrating that `FaceTextures` can share ids
+/// — and returns the manager plus a `FaceTextures` mapping ready to attach
+/// to the diagnostic cube's material. Called exactly once during scene
+/// setup, never per pixel/frame.
+fn load_grass_face_textures() -> (TextureManager, FaceTextures) {
     let mut manager = TextureManager::new();
-    let path = |name: &str| format!("{DIAGNOSTIC_FACE_TEXTURES_DIR}/{name}.png");
+    let path = |name: &str| format!("{GRASS_TEXTURES_DIR}/{name}.png");
 
-    let positive_x = manager
-        .load(path("positive_x"))
-        .expect("missing diagnostic texture: positive_x.png");
-    let negative_x = manager
-        .load(path("negative_x"))
-        .expect("missing diagnostic texture: negative_x.png");
-    let positive_y = manager
-        .load(path("positive_y"))
-        .expect("missing diagnostic texture: positive_y.png");
-    let negative_y = manager
-        .load(path("negative_y"))
-        .expect("missing diagnostic texture: negative_y.png");
-    let positive_z = manager
-        .load(path("positive_z"))
-        .expect("missing diagnostic texture: positive_z.png");
-    let negative_z = manager
-        .load(path("negative_z"))
-        .expect("missing diagnostic texture: negative_z.png");
+    let top = manager
+        .load(path("top"))
+        .expect("missing grass texture: top.png");
+    let side = manager
+        .load(path("side"))
+        .expect("missing grass texture: side.png");
+    let bottom = manager
+        .load(path("bottom"))
+        .expect("missing grass texture: bottom.png");
 
-    let face_textures = FaceTextures::new(
-        positive_x, negative_x, positive_y, negative_y, positive_z, negative_z,
-    );
+    let face_textures = FaceTextures::new(side, side, top, bottom, side, side);
 
     (manager, face_textures)
 }
@@ -122,16 +114,17 @@ pub fn run() {
         aspect_ratio,
     );
 
-    // Diagnostic face textures are loaded once here, before any per-pixel
-    // work starts; the pixel loop only ever calls `TextureManager::get`
-    // through an immutable reference, so no texture can be loaded mid-render.
-    let (texture_manager, face_textures) = load_diagnostic_face_textures();
+    // Grass Block textures are loaded once here, before any per-pixel work
+    // starts; the pixel loop only ever calls `TextureManager::get` through
+    // an immutable reference, so no texture can be loaded mid-render.
+    let (texture_manager, face_textures) = load_grass_face_textures();
 
-    // Main diagnostic cube: warm-colored fallback albedo, now overridden per
-    // face by the loaded diagnostic textures; specular/shininess stay
-    // independent of texturing so the highlight remains visible.
+    // Main diagnostic cube now represents a Grass Block: albedo is a
+    // fallback only (every face has a texture assigned, so it is never
+    // actually sampled), and specular/shininess follow the project's Grass
+    // material spec — mostly matte, with a light, subtle highlight.
     let main_cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
-    let main_material = Material::new(CpuColor::new(0.9, 0.5, 0.2, 1.0), 3.0, 2.0)
+    let main_material = Material::new(CpuColor::new(0.45, 0.55, 0.25, 1.0), 0.04, 8.0)
         .with_face_textures(face_textures);
 
     // Flat receptor floor built from a squashed Cube, wide enough to catch
