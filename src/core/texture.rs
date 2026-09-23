@@ -13,6 +13,23 @@ pub enum TextureError {
     DimensionOverflow,
 }
 
+/// Opaque handle to a `CpuTexture` owned by a `TextureManager`. Only the
+/// crate itself (concretely, `TextureManager`) can mint one via `new`; the
+/// public API only exposes equality/hashing, so a `TextureId` can never be
+/// confused with an arbitrary caller-supplied index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextureId(usize);
+
+impl TextureId {
+    pub(crate) fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub(crate) fn index(self) -> usize {
+        self.0
+    }
+}
+
 /// Project-owned, fully CPU representation of an already-decoded image: a
 /// row-major grid of `Color` texels with the logical origin at the top-left
 /// corner. This type knows nothing about files, paths, Raylib images,
