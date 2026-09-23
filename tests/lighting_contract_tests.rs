@@ -17,12 +17,16 @@ mod core {
     pub mod color;
     #[path = "../src/core/cube.rs"]
     pub mod cube;
+    #[path = "../src/core/face_textures.rs"]
+    pub mod face_textures;
     #[path = "../src/core/hit.rs"]
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
+    #[path = "../src/core/texture.rs"]
+    pub mod texture;
 }
 
 #[path = "."]
@@ -40,6 +44,8 @@ mod camera {
 mod scene {
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/texture_manager.rs"]
+    pub mod texture_manager;
 }
 
 #[path = "."]
@@ -52,6 +58,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/texture_sampling.rs"]
+    pub mod texture_sampling;
 }
 
 use camera::{Camera, primary_ray};
@@ -62,6 +70,7 @@ use core::math::Vec3;
 use renderer::framebuffer::Framebuffer;
 use renderer::raytracer::cast_ray_lit;
 use scene::light::{DirectionalLight, Light, PointLight};
+use scene::texture_manager::TextureManager;
 
 const EPS: f32 = 1e-4;
 
@@ -71,6 +80,13 @@ fn approx_eq(a: f32, b: f32) -> bool {
 
 fn main_cube() -> Cube {
     Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0))
+}
+
+/// None of the materials in this file set `face_textures`, so this manager
+/// is never actually queried by `cast_ray_lit`; it exists only to satisfy
+/// the parameter added for texture support.
+fn no_textures() -> TextureManager {
+    TextureManager::new()
 }
 
 // ---------------------------------------------------------------------
@@ -96,6 +112,7 @@ fn ambient_is_visible_with_no_lights_at_all() {
         &no_lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     let expected = renderer::shading::ambient(&ambient_probe_material(), ambient_factor);
@@ -130,6 +147,7 @@ fn directional_diffuse_is_correct_through_full_pipeline() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     // Front face normal (0,0,1) faces the light head-on: N.L = 1.
@@ -172,6 +190,7 @@ fn specular_is_correct_through_full_pipeline() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
     let glossy_color = cast_ray_lit(
         &[(main_cube(), glossy)],
@@ -180,6 +199,7 @@ fn specular_is_correct_through_full_pipeline() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
     assert!(approx_eq(matte_color.r, 1.0));
     assert!(approx_eq(glossy_color.r, 1.0)); // clamped, but specular is real (checked above)
@@ -198,7 +218,15 @@ fn point_light_shading_is_correct_through_full_pipeline() {
     let camera_position = Vec3::new(0.0, 0.0, 5.0);
     let ray = core::ray::Ray::new(camera_position, Vec3::new(0.0, 0.0, -1.0));
 
-    let color = cast_ray_lit(&objects, &ray, camera_position, &lights, 0.0, background);
+    let color = cast_ray_lit(
+        &objects,
+        &ray,
+        camera_position,
+        &lights,
+        0.0,
+        background,
+        &no_textures(),
+    );
 
     // Light sits directly in front of the hit face: N.L = 1.
     assert!(approx_eq(color.r, 1.0));
@@ -235,6 +263,7 @@ fn hard_shadow_removes_diffuse_and_specular_but_keeps_ambient() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     // Sits along the shadow ray's angled path (x grows as z grows) but off
@@ -250,6 +279,7 @@ fn hard_shadow_removes_diffuse_and_specular_but_keeps_ambient() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     let ambient_only = renderer::shading::ambient(&hard_shadow_probe_material(), ambient_factor);
@@ -286,6 +316,7 @@ fn blocker_behind_point_light_does_not_shadow() {
         &lights,
         0.0,
         background,
+        &no_textures(),
     );
 
     assert!(approx_eq(color.r, 1.0));
@@ -314,6 +345,7 @@ fn epsilon_offset_prevents_self_shadow_acne_in_full_pipeline() {
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     let ambient_only = renderer::shading::ambient(&hard_shadow_probe_material(), ambient_factor);
@@ -366,6 +398,7 @@ fn known_center_pixel_hits_geometry_and_periphery_pixel_hits_background() {
         &lights,
         0.1,
         background,
+        &no_textures(),
     );
     assert!(!approx_eq(center_color.r, background.r) || !approx_eq(center_color.b, background.b));
 
@@ -377,6 +410,7 @@ fn known_center_pixel_hits_geometry_and_periphery_pixel_hits_background() {
         &lights,
         0.1,
         background,
+        &no_textures(),
     );
     assert!(approx_eq(corner_color.r, background.r));
     assert!(approx_eq(corner_color.g, background.g));
@@ -415,11 +449,20 @@ fn full_frame_render_produces_only_finite_colors() {
     let width = 40;
     let height = 30;
     let mut framebuffer = Framebuffer::new(width, height);
+    let texture_manager = no_textures();
 
     for y in 0..height {
         for x in 0..width {
             let ray = primary_ray(&camera, x, y, width, height);
-            let color = cast_ray_lit(&objects, &ray, camera.position, &lights, 0.1, background);
+            let color = cast_ray_lit(
+                &objects,
+                &ray,
+                camera.position,
+                &lights,
+                0.1,
+                background,
+                &texture_manager,
+            );
             framebuffer.set_pixel(x, y, color);
         }
     }

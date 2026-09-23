@@ -4,12 +4,15 @@
 
 use crate::core::color::Color;
 use crate::core::cube::Cube;
+use crate::core::hit::Face;
 use crate::core::material::Material;
-use crate::core::math::Vec3;
+use crate::core::math::{Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::renderer::shading;
 use crate::renderer::shadows;
+use crate::renderer::texture_sampling::sample_nearest;
 use crate::scene::light::Light;
+use crate::scene::texture_manager::TextureManager;
 
 /// Resolves a primary ray against a single diagnostic cube. This is
 /// deliberately unlit: a hit produces a diagnostic color derived purely
@@ -33,6 +36,31 @@ fn normal_to_diagnostic_color(normal: Vec3) -> Color {
     )
 }
 
+/// Resolves the ambient/diffuse albedo for a hit: a material without
+/// `face_textures` keeps using its uniform `albedo` unchanged; a material
+/// with `face_textures` looks up the `TextureId` for `face`, resolves it
+/// through `texture_manager` (already-loaded, no disk access here), and
+/// samples it at `uv` with the project's nearest-neighbor sampler.
+/// `texture_manager` is a shared reference, so this can never load a file:
+/// `TextureManager::load` requires `&mut self`.
+fn resolve_albedo(
+    material: &Material,
+    face: Face,
+    uv: Vec2,
+    texture_manager: &TextureManager,
+) -> Color {
+    match &material.face_textures {
+        Some(face_textures) => {
+            let texture_id = face_textures.texture_for_face(face);
+            let texture = texture_manager
+                .get(texture_id)
+                .expect("FaceTextures must only reference ids already loaded in TextureManager");
+            sample_nearest(texture, uv)
+        }
+        None => material.albedo,
+    }
+}
+
 /// Resolves a primary ray against the nearest of a small explicit
 /// collection of diagnostic `(Cube, Material)` objects, then evaluates full
 /// local lighting: ambient always applies; each light's diffuse and
@@ -40,6 +68,10 @@ fn normal_to_diagnostic_color(normal: Vec3) -> Color {
 /// toward that light finds no blocking geometry among `objects`. A miss
 /// returns `background`. This is the minimal nearest-hit search needed for
 /// this Gate's diagnostic scene — not a VoxelWorld, DDA, or scene graph.
+///
+/// `texture_manager` supplies already-loaded `CpuTexture`s for any object
+/// whose material carries `face_textures`; shadow occlusion stays purely
+/// geometric and never consults it.
 pub fn cast_ray_lit(
     objects: &[(Cube, Material)],
     ray: &Ray,
@@ -47,26 +79,39 @@ pub fn cast_ray_lit(
     lights: &[Light],
     ambient_factor: f32,
     background: Color,
+    texture_manager: &TextureManager,
 ) -> Color {
-    let mut nearest: Option<(f32, Vec3, Vec3, &Material)> = None;
+    let mut nearest: Option<(f32, Vec3, Vec3, &Material, Face, Vec2)> = None;
 
     for (cube, material) in objects {
         if let Some(hit) = cube.intersect(ray, 0.0, f32::INFINITY) {
             let is_closer = nearest.as_ref().is_none_or(|(t, ..)| hit.distance < *t);
             if is_closer {
-                nearest = Some((hit.distance, hit.point, hit.normal, material));
+                nearest = Some((
+                    hit.distance,
+                    hit.point,
+                    hit.normal,
+                    material,
+                    hit.face,
+                    hit.uv,
+                ));
             }
         }
     }
 
-    let Some((_, point, normal, material)) = nearest else {
+    let Some((_, point, normal, material, face, uv)) = nearest else {
         return background;
     };
+
+    let albedo = resolve_albedo(material, face, uv, texture_manager);
+    // Ambient/diffuse read albedo through this per-hit override; specular
+    // never depends on albedo, so it is unaffected by texturing either way.
+    let shading_material = Material::new(albedo, material.specular, material.shininess);
 
     let view_direction = (camera_position - point).normalize();
     let cubes: Vec<&Cube> = objects.iter().map(|(cube, _)| cube).collect();
 
-    let mut color = shading::ambient(material, ambient_factor);
+    let mut color = shading::ambient(&shading_material, ambient_factor);
 
     for light in lights {
         match light {
@@ -79,10 +124,11 @@ pub fn cast_ray_lit(
                     shadows::DIRECTIONAL_SHADOW_RANGE,
                 );
                 if !blocked {
-                    color = color + shading::diffuse_directional(material, normal, directional);
+                    color = color
+                        + shading::diffuse_directional(&shading_material, normal, directional);
                     color = color
                         + shading::specular_directional(
-                            material,
+                            &shading_material,
                             normal,
                             view_direction,
                             directional,
@@ -94,10 +140,11 @@ pub fn cast_ray_lit(
                     shadows::shadow_ray_to_point_light(point, normal, point_light);
                 let blocked = shadows::is_occluded(cubes.iter().copied(), &shadow_ray, distance);
                 if !blocked {
-                    color = color + shading::diffuse_point(material, normal, point, point_light);
+                    color = color
+                        + shading::diffuse_point(&shading_material, normal, point, point_light);
                     color = color
                         + shading::specular_point(
-                            material,
+                            &shading_material,
                             normal,
                             point,
                             view_direction,

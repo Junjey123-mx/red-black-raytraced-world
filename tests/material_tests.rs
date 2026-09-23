@@ -1,9 +1,26 @@
 #[path = "."]
 mod core {
+    #[path = "."]
+    pub mod math {
+        #[path = "../src/core/math/vec2.rs"]
+        pub mod vec2;
+        #[path = "../src/core/math/vec3.rs"]
+        pub mod vec3;
+
+        pub use vec2::Vec2;
+        pub use vec3::Vec3;
+    }
+
     #[path = "../src/core/color.rs"]
     pub mod color;
+    #[path = "../src/core/face_textures.rs"]
+    pub mod face_textures;
+    #[path = "../src/core/hit.rs"]
+    pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
+    #[path = "../src/core/texture.rs"]
+    pub mod texture;
 }
 
 use core::color::Color;

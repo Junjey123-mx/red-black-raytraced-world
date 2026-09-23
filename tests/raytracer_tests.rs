@@ -17,18 +17,24 @@ mod core {
     pub mod color;
     #[path = "../src/core/cube.rs"]
     pub mod cube;
+    #[path = "../src/core/face_textures.rs"]
+    pub mod face_textures;
     #[path = "../src/core/hit.rs"]
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
+    #[path = "../src/core/texture.rs"]
+    pub mod texture;
 }
 
 #[path = "."]
 mod scene {
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/texture_manager.rs"]
+    pub mod texture_manager;
 }
 
 #[path = "."]
@@ -39,6 +45,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/texture_sampling.rs"]
+    pub mod texture_sampling;
 }
 
 use core::color::Color;

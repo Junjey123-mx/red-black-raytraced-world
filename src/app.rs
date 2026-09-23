@@ -5,12 +5,49 @@ use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
 use crate::core::cube::Cube;
+use crate::core::face_textures::FaceTextures;
 use crate::core::material::Material;
 use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
+use crate::scene::texture_manager::TextureManager;
+
+const DIAGNOSTIC_FACE_TEXTURES_DIR: &str = "assets/textures/diagnostic/faces";
+
+/// Loads the six diagnostic face PNGs once and returns the manager plus a
+/// `FaceTextures` mapping ready to attach to the diagnostic cube's
+/// material. Called exactly once during scene setup, never per pixel/frame.
+fn load_diagnostic_face_textures() -> (TextureManager, FaceTextures) {
+    let mut manager = TextureManager::new();
+    let path = |name: &str| format!("{DIAGNOSTIC_FACE_TEXTURES_DIR}/{name}.png");
+
+    let positive_x = manager
+        .load(path("positive_x"))
+        .expect("missing diagnostic texture: positive_x.png");
+    let negative_x = manager
+        .load(path("negative_x"))
+        .expect("missing diagnostic texture: negative_x.png");
+    let positive_y = manager
+        .load(path("positive_y"))
+        .expect("missing diagnostic texture: positive_y.png");
+    let negative_y = manager
+        .load(path("negative_y"))
+        .expect("missing diagnostic texture: negative_y.png");
+    let positive_z = manager
+        .load(path("positive_z"))
+        .expect("missing diagnostic texture: positive_z.png");
+    let negative_z = manager
+        .load(path("negative_z"))
+        .expect("missing diagnostic texture: negative_z.png");
+
+    let face_textures = FaceTextures::new(
+        positive_x, negative_x, positive_y, negative_y, positive_z, negative_z,
+    );
+
+    (manager, face_textures)
+}
 
 /// Casts one primary ray per pixel against the diagnostic lighting scene
 /// (`objects` + `lights`) and writes the fully shaded color (ambient +
@@ -22,6 +59,7 @@ fn render(
     objects: &[(Cube, Material)],
     lights: &[Light],
     background: CpuColor,
+    texture_manager: &TextureManager,
 ) {
     let width = framebuffer.width();
     let height = framebuffer.height();
@@ -36,6 +74,7 @@ fn render(
                 lights,
                 DEFAULT_AMBIENT_FACTOR,
                 background,
+                texture_manager,
             );
             framebuffer.set_pixel(x, y, color);
         }
@@ -83,11 +122,17 @@ pub fn run() {
         aspect_ratio,
     );
 
-    // Main diagnostic cube: warm-colored, with a broad enough specular
-    // highlight (moderate shininess) to stay visible at framebuffer
-    // resolution, so both diffuse gradient and specular are distinguishable.
+    // Diagnostic face textures are loaded once here, before any per-pixel
+    // work starts; the pixel loop only ever calls `TextureManager::get`
+    // through an immutable reference, so no texture can be loaded mid-render.
+    let (texture_manager, face_textures) = load_diagnostic_face_textures();
+
+    // Main diagnostic cube: warm-colored fallback albedo, now overridden per
+    // face by the loaded diagnostic textures; specular/shininess stay
+    // independent of texturing so the highlight remains visible.
     let main_cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
-    let main_material = Material::new(CpuColor::new(0.9, 0.5, 0.2, 1.0), 3.0, 2.0);
+    let main_material = Material::new(CpuColor::new(0.9, 0.5, 0.2, 1.0), 3.0, 2.0)
+        .with_face_textures(face_textures);
 
     // Flat receptor floor built from a squashed Cube, wide enough to catch
     // the main cube's projected hard shadow.
@@ -114,7 +159,14 @@ pub fn run() {
 
     let background = CpuColor::new(0.05, 0.05, 0.08, 1.0);
 
-    render(&mut framebuffer, &camera, &objects, &lights, background);
+    render(
+        &mut framebuffer,
+        &camera,
+        &objects,
+        &lights,
+        background,
+        &texture_manager,
+    );
 
     let image = framebuffer_to_image(&framebuffer);
     let texture = rl

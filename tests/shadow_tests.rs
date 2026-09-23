@@ -17,18 +17,24 @@ mod core {
     pub mod color;
     #[path = "../src/core/cube.rs"]
     pub mod cube;
+    #[path = "../src/core/face_textures.rs"]
+    pub mod face_textures;
     #[path = "../src/core/hit.rs"]
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
+    #[path = "../src/core/texture.rs"]
+    pub mod texture;
 }
 
 #[path = "."]
 mod scene {
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/texture_manager.rs"]
+    pub mod texture_manager;
 }
 
 #[path = "."]
@@ -39,6 +45,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/texture_sampling.rs"]
+    pub mod texture_sampling;
 }
 
 use core::color::Color;
@@ -51,6 +59,7 @@ use renderer::shadows::{
     shadow_ray_to_point_light,
 };
 use scene::light::{DirectionalLight, Light, PointLight};
+use scene::texture_manager::TextureManager;
 
 const EPS: f32 = 1e-5;
 
@@ -186,6 +195,13 @@ fn main_cube() -> Cube {
     Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0))
 }
 
+/// None of the materials in this file set `face_textures`, so this manager
+/// is never actually queried by `cast_ray_lit`; it exists only to satisfy
+/// the parameter added for texture support.
+fn no_textures() -> TextureManager {
+    TextureManager::new()
+}
+
 /// Placed along the shadow-ray path from the main cube's top face toward a
 /// point light above and to the side, but nowhere near a straight-down
 /// primary ray.
@@ -267,6 +283,7 @@ fn cast_ray_lit_returns_background_on_miss() {
         &lights,
         0.1,
         background,
+        &no_textures(),
     );
 
     assert!(approx_eq(color.r, background.r));
@@ -295,6 +312,7 @@ fn cast_ray_lit_ambient_persists_while_diffuse_and_specular_vanish_when_blocked(
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     let blocked_objects = [
@@ -308,6 +326,7 @@ fn cast_ray_lit_ambient_persists_while_diffuse_and_specular_vanish_when_blocked(
         &lights,
         ambient_factor,
         background,
+        &no_textures(),
     );
 
     let ambient_only = renderer::shading::ambient(&material, ambient_factor);
