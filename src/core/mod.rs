@@ -1,6 +1,7 @@
 pub mod aabb;
 pub mod color;
 pub mod cube;
+pub mod face_textures;
 pub mod hit;
 pub mod material;
 pub mod math;
