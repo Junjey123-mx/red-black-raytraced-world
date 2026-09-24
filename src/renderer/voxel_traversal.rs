@@ -67,6 +67,25 @@ fn first_boundary_distance(origin: f32, direction: f32, cell: i32, step: i32) ->
     if distance > 0.0 { distance } else { 0.0 }
 }
 
+/// Relative tolerance used to decide that two axes reach their next voxel
+/// boundary "at the same time". Boundary distances are accumulated with
+/// repeated `f32` additions, so a mathematically exact tie (for example a
+/// ray along `(1, 2, 0)` crossing `x` and `y` boundaries together) can
+/// differ by a few ulps; without a tolerance it would be split into two
+/// steps and invent a cell the ray only touches along an edge or corner.
+/// The tolerance is `TIE_EPSILON * max(t, 1.0)`.
+pub const TIE_EPSILON: f32 = 1e-6;
+
+/// One DDA advance: the cell the walk left, the cell it entered, and the
+/// ray parameter at which the new cell is entered. `t_enter` never
+/// decreases from one advance to the next.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DdaStep {
+    pub previous_cell: IVec3,
+    pub cell: IVec3,
+    pub t_enter: f32,
+}
+
 /// Mathematical state of a 3D DDA voxel traversal. It only describes where
 /// the walk currently is and how it will advance; it knows nothing about a
 /// world, blocks, materials, or textures.
@@ -125,5 +144,52 @@ impl DdaState {
         );
 
         Self::new(cell, step, t_max, t_delta)
+    }
+
+    /// Advances to the next voxel cell in increasing ray distance.
+    ///
+    /// **Tie policy:** every active axis whose `t_max` equals the minimum
+    /// (within `TIE_EPSILON`) is advanced in the *same* step. A ray that
+    /// reaches an x boundary and a y boundary together therefore moves
+    /// diagonally to the cell it actually enters, instead of first visiting
+    /// a side cell that it only touches at an edge (or corner, for a triple
+    /// tie). The outcome never depends on the order of the axes.
+    ///
+    /// An axis with `step == 0` is never advanced. Returns `None` (and
+    /// leaves the state untouched) when no axis is active, i.e. the ray has
+    /// a zero direction and can never leave its cell.
+    pub fn advance(&mut self) -> Option<DdaStep> {
+        let steps = [self.step.x, self.step.y, self.step.z];
+        let t_max = [self.t_max.x, self.t_max.y, self.t_max.z];
+
+        let t_enter = (0..3)
+            .filter(|&axis| steps[axis] != 0)
+            .map(|axis| t_max[axis])
+            .fold(f32::INFINITY, f32::min);
+        if !t_enter.is_finite() {
+            return None;
+        }
+
+        let threshold = t_enter + TIE_EPSILON * t_enter.max(1.0);
+        let previous_cell = self.cell;
+        let mut cell = [self.cell.x, self.cell.y, self.cell.z];
+        let mut next_t_max = t_max;
+        let t_delta = [self.t_delta.x, self.t_delta.y, self.t_delta.z];
+
+        for axis in 0..3 {
+            if steps[axis] != 0 && t_max[axis] <= threshold {
+                cell[axis] += steps[axis];
+                next_t_max[axis] += t_delta[axis];
+            }
+        }
+
+        self.cell = IVec3::new(cell[0], cell[1], cell[2]);
+        self.t_max = Vec3::new(next_t_max[0], next_t_max[1], next_t_max[2]);
+
+        Some(DdaStep {
+            previous_cell,
+            cell: self.cell,
+            t_enter,
+        })
     }
 }
