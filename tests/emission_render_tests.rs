@@ -76,6 +76,8 @@ mod scene {
 mod renderer {
     #[path = "../src/renderer/emission.rs"]
     pub mod emission;
+    #[path = "../src/renderer/normal_mapping.rs"]
+    pub mod normal_mapping;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
     #[path = "../src/renderer/shading.rs"]

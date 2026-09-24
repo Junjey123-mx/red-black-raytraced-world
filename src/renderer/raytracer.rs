@@ -11,6 +11,7 @@ use crate::core::ray::Ray;
 use crate::core::reflection::reflect;
 use crate::core::refraction::refract;
 use crate::renderer::emission::sample_emissive;
+use crate::renderer::normal_mapping::sample_shading_normal;
 use crate::renderer::shading;
 use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
@@ -251,6 +252,14 @@ fn shade_surface(
     // never depends on albedo, so it is unaffected by texturing either way.
     let shading_material = Material::new(albedo, material.specular, material.shininess);
 
+    // The normal-map-perturbed normal drives diffuse and specular; the
+    // geometric `normal` keeps driving shadow-ray offsets and the "is this
+    // light on the visible side" test below, so relief can never leak light
+    // through the back of a surface. Without a normal texture the two are
+    // identical.
+    let shading_normal =
+        sample_shading_normal(material, surface.face, surface.uv, normal, texture_manager);
+
     let view_direction = (view_origin - point).normalize();
     let ambient = shading::ambient(&shading_material, ambient_factor);
     // `full` keeps the original accumulation order; `body`/`specular` track
@@ -262,28 +271,34 @@ fn shade_surface(
     for light in lights {
         let (visible, diffuse_term, specular_term) = match light {
             Light::Directional(directional) => {
+                if normal.dot(directional.direction) <= 0.0 {
+                    continue;
+                }
                 let shadow_ray =
                     shadows::shadow_ray_to_directional_light(point, normal, directional);
                 (
                     visibility(&shadow_ray, directional_range),
-                    shading::diffuse_directional(&shading_material, normal, directional),
+                    shading::diffuse_directional(&shading_material, shading_normal, directional),
                     shading::specular_directional(
                         &shading_material,
-                        normal,
+                        shading_normal,
                         view_direction,
                         directional,
                     ),
                 )
             }
             Light::Point(point_light) => {
+                if normal.dot(point_light.position - point) <= 0.0 {
+                    continue;
+                }
                 let (shadow_ray, distance) =
                     shadows::shadow_ray_to_point_light(point, normal, point_light);
                 (
                     visibility(&shadow_ray, distance),
-                    shading::diffuse_point(&shading_material, normal, point, point_light),
+                    shading::diffuse_point(&shading_material, shading_normal, point, point_light),
                     shading::specular_point(
                         &shading_material,
-                        normal,
+                        shading_normal,
                         point,
                         view_direction,
                         point_light,

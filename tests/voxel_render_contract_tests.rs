@@ -81,6 +81,8 @@ mod renderer {
     pub mod emission;
     #[path = "../src/renderer/framebuffer.rs"]
     pub mod framebuffer;
+    #[path = "../src/renderer/normal_mapping.rs"]
+    pub mod normal_mapping;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
     #[path = "../src/renderer/shading.rs"]

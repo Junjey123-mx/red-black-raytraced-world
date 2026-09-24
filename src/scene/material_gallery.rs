@@ -63,6 +63,10 @@ pub fn portal_core_material_id() -> MaterialId {
     MaterialId::new(20)
 }
 
+pub fn deepslate_bricks_material_id() -> MaterialId {
+    MaterialId::new(21)
+}
+
 /// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in
 /// `GALLERY_Z_MIN..GALLERY_DEPTH`.
 pub const GALLERY_WIDTH: i32 = 12;
@@ -81,6 +85,7 @@ const BACK_Z: i32 = 0;
 pub const LEAVES_X: i32 = 1;
 pub const LAMP_X: i32 = 4;
 pub const PORTAL_X: i32 = 8;
+pub const BRICKS_X: i32 = 11;
 pub const MATTE_X: i32 = 1;
 pub const MIRROR_X: i32 = 4;
 pub const GLASS_X: i32 = 7;
@@ -96,7 +101,7 @@ pub const WATER_X: i32 = 10;
 /// Back row (`z = 0`):
 ///
 /// ```text
-/// Leaves x=1 (red cube behind)   Redstone Lamp x=4   Portal core x=7
+/// Leaves x=1 (red cube behind)   Redstone Lamp x=4   Portal core x=8   Bricks x=11
 /// ```
 ///
 /// A red and a blue cube stand behind the glass and the water so the
@@ -158,6 +163,13 @@ pub fn advanced_materials_world() -> VoxelWorld {
         backdrop_blue_material_id(),
     );
 
+    place(
+        BRICKS_X,
+        BACK_Z,
+        BlockType::DeepslateBricks,
+        deepslate_bricks_material_id(),
+    );
+
     // The portal membrane is a thin plane: broad faces toward the camera.
     world.insert(
         IVec3::new(PORTAL_X, 1, BACK_Z),
@@ -180,6 +192,8 @@ pub struct GalleryTextures {
     pub redstone_lamp_emissive: TextureId,
     pub portal_core: FaceTextures,
     pub portal_core_emissive: TextureId,
+    pub deepslate_bricks: FaceTextures,
+    pub deepslate_bricks_normal: TextureId,
 }
 
 impl GalleryTextures {
@@ -196,6 +210,8 @@ impl GalleryTextures {
         let leaves = manager.load(format!("{overworld_dir}/leaves.png"))?;
         let lamp_albedo = manager.load(format!("{overworld_dir}/redstone_lamp/albedo.png"))?;
         let lamp_emissive = manager.load(format!("{overworld_dir}/redstone_lamp/emissive.png"))?;
+        let bricks_albedo = manager.load(format!("{overworld_dir}/deepslate_bricks/albedo.png"))?;
+        let bricks_normal = manager.load(format!("{overworld_dir}/deepslate_bricks/normal.png"))?;
         let portal_albedo = manager.load(format!("{portal_dir}/core_albedo.png"))?;
         let portal_emissive = manager.load(format!("{portal_dir}/core_emissive.png"))?;
 
@@ -207,6 +223,8 @@ impl GalleryTextures {
             redstone_lamp_emissive: lamp_emissive,
             portal_core: FaceTextures::uniform(portal_albedo),
             portal_core_emissive: portal_emissive,
+            deepslate_bricks: FaceTextures::uniform(bricks_albedo),
+            deepslate_bricks_normal: bricks_normal,
         })
     }
 }
@@ -224,6 +242,9 @@ impl GalleryTextures {
 /// - Portal core: dark-crimson/wine albedo with a separate emissive mask on the
 ///   brighter swirls only, mild transparency (0.25, inside the documented
 ///   0.20-0.35) and no refraction (IOR 1); strongly emissive (2.5).
+/// - Deepslate Bricks: real brick albedo plus a tangent-space normal map, so
+///   the joints and brick faces read as relief under the point light without
+///   changing the cube's silhouette.
 /// - Everything else is a plain matte control.
 pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary {
     let mut library = MaterialLibrary::new();
@@ -260,6 +281,13 @@ pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary
             .with_emission_strength(2.5)
             .with_transparency(0.25)
             .with_reflectivity(0.03),
+    );
+    library.insert(
+        deepslate_bricks_material_id(),
+        Material::new(Color::new(0.25, 0.25, 0.25, 1.0), 0.08, 14.0)
+            .with_face_textures(textures.deepslate_bricks)
+            .with_normal_texture(textures.deepslate_bricks_normal)
+            .with_reflectivity(0.02),
     );
     library.insert(
         glass_material_id(),
