@@ -106,8 +106,8 @@ use scene::block_type::BlockType;
 use scene::light::{DirectionalLight, Light, PointLight};
 use scene::orientation::Orientation;
 use scene::scene::{
-    diagnostic_partial_materials, diagnostic_partial_voxel_world, stone_material_id,
-    wood_material_id,
+    PartialSceneTextures, diagnostic_partial_materials, diagnostic_partial_voxel_world,
+    stone_material_id, wood_material_id,
 };
 use scene::texture_manager::TextureManager;
 use scene::voxel_world::VoxelWorld;
@@ -149,27 +149,24 @@ fn world_of(cells: &[(IVec3, BlockInstance)]) -> VoxelWorld {
 /// The same camera parameters `app.rs` uses for the mixed scene.
 fn app_camera() -> Camera {
     Camera::new(
-        Vec3::new(3.4, 3.4, 7.0),
-        Vec3::new(3.0, 1.3, 1.9),
+        Vec3::new(7.4, 4.3, 9.6),
+        Vec3::new(4.2, 1.4, 2.6),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         800.0 / 600.0,
     )
 }
 
-fn grass_face_textures() -> (TextureManager, FaceTextures) {
-    let dir = format!(
-        "{}/assets/textures/overworld/grass",
-        env!("CARGO_MANIFEST_DIR")
-    );
+fn scene_textures() -> (TextureManager, PartialSceneTextures) {
+    let root = env!("CARGO_MANIFEST_DIR");
     let mut manager = TextureManager::new();
-    let top = manager.load(format!("{dir}/top.png")).unwrap();
-    let side = manager.load(format!("{dir}/side.png")).unwrap();
-    let bottom = manager.load(format!("{dir}/bottom.png")).unwrap();
-    (
-        manager,
-        FaceTextures::new(side, side, top, bottom, side, side),
+    let textures = PartialSceneTextures::load(
+        &mut manager,
+        &format!("{root}/assets/textures/overworld/grass"),
+        &format!("{root}/assets/textures/diagnostic/partial"),
     )
+    .unwrap();
+    (manager, textures)
 }
 
 /// Independent oracle: intersect the ray with the resolved local geometry of
@@ -177,9 +174,9 @@ fn grass_face_textures() -> (TextureManager, FaceTextures) {
 /// never does this.
 fn brute_force_nearest(world: &VoxelWorld, ray: &Ray) -> Option<VoxelHit> {
     let mut best: Option<VoxelHit> = None;
-    for x in -2..9 {
-        for y in -2..5 {
-            for z in -2..7 {
+    for x in -2..12 {
+        for y in -2..6 {
+            for z in -2..9 {
                 let position = cell(x, y, z);
                 let Some(block) = world.get(position) else {
                     continue;
@@ -514,9 +511,9 @@ fn shadow_rays_pass_through_fence_gaps_and_stop_at_the_post() {
 fn the_diagnostic_scene_is_a_voxel_world_with_every_shape() {
     let world = diagnostic_partial_voxel_world();
     let present = |target: BlockType| {
-        (0..8).any(|x| {
-            (0..3).any(|y| {
-                (0..5).any(|z| {
+        (0..10).any(|x| {
+            (0..4).any(|y| {
+                (0..7).any(|z| {
                     world
                         .get(cell(x, y, z))
                         .is_some_and(|b| b.block_type() == target)
@@ -576,7 +573,7 @@ fn mixed_scene_lights() -> [Light; 2] {
             0.4,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(-1.5, 6.5, 6.5),
+            Vec3::new(-2.0, 7.0, 9.0),
             Color::white(),
             1.5,
         )),
@@ -586,8 +583,8 @@ fn mixed_scene_lights() -> [Light; 2] {
 #[test]
 fn the_mixed_scene_renders_lit_without_missing_materials() {
     let world = diagnostic_partial_voxel_world();
-    let (textures, face_textures) = grass_face_textures();
-    let materials: HashMap<MaterialId, Material> = diagnostic_partial_materials(face_textures);
+    let (textures, scene_textures) = scene_textures();
+    let materials: HashMap<MaterialId, Material> = diagnostic_partial_materials(&scene_textures);
     let lights = mixed_scene_lights();
     let camera = app_camera();
     let background = Color::new(0.05, 0.05, 0.08, 1.0);
@@ -628,8 +625,8 @@ fn the_mixed_scene_renders_lit_without_missing_materials() {
 
 #[test]
 fn a_fence_post_casts_a_hard_shadow_on_the_ground() {
-    let (textures, face_textures) = grass_face_textures();
-    let materials = diagnostic_partial_materials(face_textures);
+    let (textures, scene_textures) = scene_textures();
+    let materials = diagnostic_partial_materials(&scene_textures);
     let mut world = VoxelWorld::new();
     for x in 0..5 {
         for z in 0..5 {
@@ -699,4 +696,101 @@ fn traversal_never_falls_back_to_a_full_cube_for_partial_blocks() {
         block_geometry(BlockType::Fence, Orientation::South),
         BlockGeometry::Composite(_)
     ));
+}
+
+// ---------------------------------------------------------------------
+// 15. Gallery composition: one control cube, spaced specimens, textured door.
+// ---------------------------------------------------------------------
+
+fn gallery_blocks(world: &VoxelWorld) -> Vec<(IVec3, BlockInstance)> {
+    let mut found = Vec::new();
+    for x in 0..12 {
+        for y in 1..6 {
+            for z in 0..9 {
+                if let Some(block) = world.get(cell(x, y, z)) {
+                    found.push((cell(x, y, z), *block));
+                }
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn the_gallery_has_a_single_control_cube_and_one_specimen_per_shape() {
+    let blocks = gallery_blocks(&diagnostic_partial_voxel_world());
+    let count = |target: BlockType| {
+        blocks
+            .iter()
+            .filter(|(_, b)| b.block_type() == target)
+            .count()
+    };
+
+    assert_eq!(count(BlockType::Stone), 1, "exactly one control cube");
+    assert_eq!(count(BlockType::WoodStairs), 1);
+    assert_eq!(count(BlockType::Fence), 1);
+    assert_eq!(count(BlockType::PortalCoreDarkCrimson), 1);
+    assert_eq!(count(BlockType::AmethystCluster), 1);
+    assert_eq!(count(BlockType::WoodDoor), 2, "a door is two cells tall");
+    assert_eq!(blocks.len(), 7, "no extra support cubes above the ground");
+}
+
+#[test]
+fn gallery_specimens_do_not_touch_each_other() {
+    // Distinct specimens (the two door halves excepted) keep at least one
+    // empty cell between them so none hides or merges with another.
+    let blocks = gallery_blocks(&diagnostic_partial_voxel_world());
+    for (i, (a, ba)) in blocks.iter().enumerate() {
+        for (b, bb) in blocks.iter().skip(i + 1) {
+            let both_door =
+                ba.block_type() == BlockType::WoodDoor && bb.block_type() == BlockType::WoodDoor;
+            if both_door {
+                continue;
+            }
+            let gap = (a.x - b.x).abs().max((a.z - b.z).abs());
+            assert!(gap >= 2, "{a:?} and {b:?} are too close");
+        }
+    }
+}
+
+#[test]
+fn the_door_is_two_thin_cells_and_the_portal_is_a_thin_plane() {
+    let world = diagnostic_partial_voxel_world();
+    let door_cells: Vec<_> = gallery_blocks(&world)
+        .into_iter()
+        .filter(|(_, b)| b.block_type() == BlockType::WoodDoor)
+        .collect();
+    assert_eq!(door_cells.len(), 2);
+    assert_eq!(door_cells[0].0.x, door_cells[1].0.x);
+    assert_eq!(door_cells[0].0.z, door_cells[1].0.z);
+    assert_ne!(
+        door_cells[0].1.material_id(),
+        door_cells[1].1.material_id(),
+        "top and bottom halves carry different pictures"
+    );
+
+    for block_type in [BlockType::WoodDoor, BlockType::PortalCoreDarkCrimson] {
+        let part = block_geometry(block_type, Orientation::South).parts()[0];
+        assert!(part.size().z <= 0.25, "{block_type:?} must stay thin");
+    }
+}
+
+#[test]
+fn thin_shapes_use_a_plain_edge_texture_and_a_picture_on_the_broad_faces() {
+    let (_, textures) = scene_textures();
+
+    for faces in [
+        textures.door_bottom,
+        textures.door_top,
+        textures.portal_core,
+    ] {
+        assert_eq!(
+            faces.texture_for_face(Face::PositiveZ),
+            faces.texture_for_face(Face::NegativeZ)
+        );
+        assert_ne!(
+            faces.texture_for_face(Face::PositiveZ),
+            faces.texture_for_face(Face::PositiveX)
+        );
+    }
 }

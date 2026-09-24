@@ -6,47 +6,37 @@ use crate::camera::camera::Camera;
 use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
-use crate::core::face_textures::FaceTextures;
 use crate::core::material::{Material, MaterialId};
 use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
-use crate::scene::scene::{diagnostic_partial_materials, diagnostic_partial_voxel_world};
+use crate::scene::scene::{
+    PartialSceneTextures, diagnostic_partial_materials, diagnostic_partial_voxel_world,
+};
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 
 const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
+const PARTIAL_TEXTURES_DIR: &str = "assets/textures/diagnostic/partial";
 
 /// Scene range for primary rays and directional shadow rays. The diagnostic
 /// terrain spans only a few cells, so a modest finite range keeps every
 /// DDA traversal short while still covering the whole scene from the camera.
 const SCENE_MAX_DISTANCE: f32 = 24.0;
 
-/// Loads the three Grass Block PNGs once — `top` and `bottom` are unique,
-/// while `side` is loaded a single time and its `TextureId` is reused for
-/// all four lateral faces, demonstrating that `FaceTextures` can share ids
-/// — and returns the manager plus a `FaceTextures` mapping ready to attach
-/// to the grass material. Called exactly once during scene setup, never per
+/// Loads every gallery PNG once (grass, stone, planks, door, portal core)
+/// through a single `TextureManager` and returns it with the per-face
+/// texture mappings. Called exactly once during scene setup, never per
 /// pixel/frame.
-fn load_grass_face_textures() -> (TextureManager, FaceTextures) {
+fn load_scene_textures() -> (TextureManager, PartialSceneTextures) {
     let mut manager = TextureManager::new();
-    let path = |name: &str| format!("{GRASS_TEXTURES_DIR}/{name}.png");
+    let textures =
+        PartialSceneTextures::load(&mut manager, GRASS_TEXTURES_DIR, PARTIAL_TEXTURES_DIR)
+            .expect("missing gallery texture");
 
-    let top = manager
-        .load(path("top"))
-        .expect("missing grass texture: top.png");
-    let side = manager
-        .load(path("side"))
-        .expect("missing grass texture: side.png");
-    let bottom = manager
-        .load(path("bottom"))
-        .expect("missing grass texture: bottom.png");
-
-    let face_textures = FaceTextures::new(side, side, top, bottom, side, side);
-
-    (manager, face_textures)
+    (manager, textures)
 }
 
 /// Casts one primary ray per pixel into the sparse `VoxelWorld` (3D DDA +
@@ -118,8 +108,8 @@ pub fn run() {
 
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
     let camera = Camera::new(
-        Vec3::new(3.4, 3.4, 7.0),
-        Vec3::new(3.0, 1.3, 1.9),
+        Vec3::new(7.4, 4.3, 9.6),
+        Vec3::new(4.2, 1.4, 2.6),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
@@ -128,14 +118,14 @@ pub fn run() {
     // Grass Block textures are loaded once here, before any per-pixel work
     // starts; the pixel loop only ever calls `TextureManager::get` through
     // an immutable reference, so no texture can be loaded mid-render.
-    let (texture_manager, face_textures) = load_grass_face_textures();
+    let (texture_manager, scene_textures) = load_scene_textures();
 
     // The visible scene is the mixed partial-geometry diagnostic VoxelWorld
     // (stairs, fence, door, portal core, amethyst cluster); blocks reference
     // their material by `MaterialId`, resolved through this minimal
     // diagnostic map.
     let world = diagnostic_partial_voxel_world();
-    let materials = diagnostic_partial_materials(face_textures);
+    let materials = diagnostic_partial_materials(&scene_textures);
 
     // A soft overhead directional fill plus a stronger side point light: the
     // point light drives the visible diffuse gradient, specular highlight,
@@ -147,7 +137,7 @@ pub fn run() {
             0.4,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(-1.5, 6.5, 6.5),
+            Vec3::new(-2.0, 7.0, 9.0),
             CpuColor::white(),
             1.5,
         )),
