@@ -5,5 +5,6 @@ pub mod face_textures;
 pub mod hit;
 pub mod material;
 pub mod math;
+pub mod prism;
 pub mod ray;
 pub mod texture;
