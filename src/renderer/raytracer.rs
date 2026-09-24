@@ -2,10 +2,12 @@
 // loop that will call `cast_ray`/`cast_ray_lit` once per pixel.
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
 use crate::core::color::Color;
 use crate::core::cube::Cube;
 use crate::core::hit::{Face, HitRecord};
-use crate::core::material::Material;
+use crate::core::material::{Material, MaterialId};
 use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::renderer::shading;
@@ -123,6 +125,87 @@ fn resolve_albedo(
     }
 }
 
+/// The surface data lighting needs, independent of how the hit was found
+/// (explicit cube list or voxel DDA).
+struct SurfaceHit<'a> {
+    point: Vec3,
+    normal: Vec3,
+    face: Face,
+    uv: Vec2,
+    material: &'a Material,
+}
+
+/// Shared local lighting: ambient always applies; each light adds its
+/// diffuse and specular contribution only when `occluded` reports that the
+/// epsilon-offset shadow ray toward it is unobstructed. `occluded(ray,
+/// max_distance)` is injected so both the legacy cube list and the voxel
+/// world answer occlusion through the same shading code.
+/// `directional_range` bounds a directional light's shadow ray.
+fn shade_surface(
+    surface: &SurfaceHit,
+    camera_position: Vec3,
+    lights: &[Light],
+    ambient_factor: f32,
+    texture_manager: &TextureManager,
+    directional_range: f32,
+    occluded: impl Fn(&Ray, f32) -> bool,
+) -> Color {
+    let SurfaceHit {
+        point,
+        normal,
+        material,
+        ..
+    } = *surface;
+
+    let albedo = resolve_albedo(material, surface.face, surface.uv, texture_manager);
+    // Ambient/diffuse read albedo through this per-hit override; specular
+    // never depends on albedo, so it is unaffected by texturing either way.
+    let shading_material = Material::new(albedo, material.specular, material.shininess);
+
+    let view_direction = (camera_position - point).normalize();
+    let mut color = shading::ambient(&shading_material, ambient_factor);
+
+    for light in lights {
+        match light {
+            Light::Directional(directional) => {
+                let shadow_ray =
+                    shadows::shadow_ray_to_directional_light(point, normal, directional);
+                let blocked = occluded(&shadow_ray, directional_range);
+                if !blocked {
+                    color = color
+                        + shading::diffuse_directional(&shading_material, normal, directional);
+                    color = color
+                        + shading::specular_directional(
+                            &shading_material,
+                            normal,
+                            view_direction,
+                            directional,
+                        );
+                }
+            }
+            Light::Point(point_light) => {
+                let (shadow_ray, distance) =
+                    shadows::shadow_ray_to_point_light(point, normal, point_light);
+                let blocked = occluded(&shadow_ray, distance);
+                if !blocked {
+                    color = color
+                        + shading::diffuse_point(&shading_material, normal, point, point_light);
+                    color = color
+                        + shading::specular_point(
+                            &shading_material,
+                            normal,
+                            point,
+                            view_direction,
+                            point_light,
+                        );
+                }
+            }
+        }
+    }
+
+    color.clamp()
+}
+
 /// Resolves a primary ray against the nearest of a small explicit
 /// collection of diagnostic `(Cube, Material)` objects, then evaluates full
 /// local lighting: ambient always applies; each light's diffuse and
@@ -165,57 +248,90 @@ pub fn cast_ray_lit(
         return background;
     };
 
-    let albedo = resolve_albedo(material, face, uv, texture_manager);
-    // Ambient/diffuse read albedo through this per-hit override; specular
-    // never depends on albedo, so it is unaffected by texturing either way.
-    let shading_material = Material::new(albedo, material.specular, material.shininess);
-
-    let view_direction = (camera_position - point).normalize();
     let cubes: Vec<&Cube> = objects.iter().map(|(cube, _)| cube).collect();
+    let surface = SurfaceHit {
+        point,
+        normal,
+        face,
+        uv,
+        material,
+    };
 
-    let mut color = shading::ambient(&shading_material, ambient_factor);
+    shade_surface(
+        &surface,
+        camera_position,
+        lights,
+        ambient_factor,
+        texture_manager,
+        shadows::DIRECTIONAL_SHADOW_RANGE,
+        |shadow_ray, max_distance| {
+            shadows::is_occluded(cubes.iter().copied(), shadow_ray, max_distance)
+        },
+    )
+}
 
-    for light in lights {
-        match light {
-            Light::Directional(directional) => {
-                let shadow_ray =
-                    shadows::shadow_ray_to_directional_light(point, normal, directional);
-                let blocked = shadows::is_occluded(
-                    cubes.iter().copied(),
-                    &shadow_ray,
-                    shadows::DIRECTIONAL_SHADOW_RANGE,
-                );
-                if !blocked {
-                    color = color
-                        + shading::diffuse_directional(&shading_material, normal, directional);
-                    color = color
-                        + shading::specular_directional(
-                            &shading_material,
-                            normal,
-                            view_direction,
-                            directional,
-                        );
-                }
-            }
-            Light::Point(point_light) => {
-                let (shadow_ray, distance) =
-                    shadows::shadow_ray_to_point_light(point, normal, point_light);
-                let blocked = shadows::is_occluded(cubes.iter().copied(), &shadow_ray, distance);
-                if !blocked {
-                    color = color
-                        + shading::diffuse_point(&shading_material, normal, point, point_light);
-                    color = color
-                        + shading::specular_point(
-                            &shading_material,
-                            normal,
-                            point,
-                            view_direction,
-                            point_light,
-                        );
-                }
-            }
-        }
-    }
+/// Voxel occlusion query for shadow rays: `true` when any real voxel hit
+/// lies along `ray` within `max_distance`. It reuses `nearest_voxel_hit`, so
+/// shadows go through exactly the same DDA + `Cube::intersect` path as
+/// primary rays (no second traversal algorithm). Blocks are opaque.
+pub fn is_voxel_occluded(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> bool {
+    nearest_voxel_hit(world, ray, max_distance).is_some()
+}
 
-    color.clamp()
+/// Loud, deterministic color for a voxel whose `MaterialId` has no entry in
+/// the supplied material map (a scene-construction bug, never silent).
+pub const MISSING_MATERIAL_COLOR: Color = Color {
+    r: 1.0,
+    g: 0.0,
+    b: 1.0,
+    a: 1.0,
+};
+
+/// Full voxel render path for one primary ray: `VoxelWorld` + 3D DDA finds
+/// the first real voxel hit, its `MaterialId` is resolved through
+/// `materials`, the albedo comes from the same `FaceTextures` /
+/// `sample_nearest(hit.uv)` route as before, and ambient + diffuse +
+/// specular are evaluated by the shared `shade_surface`. Shadow rays query
+/// the *same* `world` through `is_voxel_occluded`.
+///
+/// `max_distance` bounds both the primary traversal and directional shadow
+/// rays (it is the scene range, not a per-object value); a miss returns
+/// `background`.
+#[allow(clippy::too_many_arguments)]
+pub fn cast_ray_voxel_lit(
+    world: &VoxelWorld,
+    materials: &HashMap<MaterialId, Material>,
+    ray: &Ray,
+    camera_position: Vec3,
+    lights: &[Light],
+    ambient_factor: f32,
+    background: Color,
+    texture_manager: &TextureManager,
+    max_distance: f32,
+) -> Color {
+    let Some(voxel) = nearest_voxel_hit(world, ray, max_distance) else {
+        return background;
+    };
+
+    let Some(material) = materials.get(&voxel.block.material_id()) else {
+        return MISSING_MATERIAL_COLOR;
+    };
+
+    let surface = SurfaceHit {
+        point: voxel.hit.point,
+        normal: voxel.hit.normal,
+        face: voxel.hit.face,
+        uv: voxel.hit.uv,
+        material,
+    };
+
+    shade_surface(
+        &surface,
+        camera_position,
+        lights,
+        ambient_factor,
+        texture_manager,
+        shadows::DIRECTIONAL_SHADOW_RANGE.min(max_distance),
+        |shadow_ray, shadow_distance| is_voxel_occluded(world, shadow_ray, shadow_distance),
+    )
 }

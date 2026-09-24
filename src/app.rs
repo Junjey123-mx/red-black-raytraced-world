@@ -1,27 +1,35 @@
+use std::collections::HashMap;
+
 use raylib::prelude::*;
 
 use crate::camera::camera::Camera;
 use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
-use crate::core::cube::Cube;
 use crate::core::face_textures::FaceTextures;
-use crate::core::material::Material;
+use crate::core::material::{Material, MaterialId};
 use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
-use crate::renderer::raytracer::cast_ray_lit;
+use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
+use crate::scene::scene::{diagnostic_materials, diagnostic_voxel_world};
 use crate::scene::texture_manager::TextureManager;
+use crate::scene::voxel_world::VoxelWorld;
 
 const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
+
+/// Scene range for primary rays and directional shadow rays. The diagnostic
+/// terrain spans only a few cells, so a modest finite range keeps every
+/// DDA traversal short while still covering the whole scene from the camera.
+const SCENE_MAX_DISTANCE: f32 = 24.0;
 
 /// Loads the three Grass Block PNGs once — `top` and `bottom` are unique,
 /// while `side` is loaded a single time and its `TextureId` is reused for
 /// all four lateral faces, demonstrating that `FaceTextures` can share ids
 /// — and returns the manager plus a `FaceTextures` mapping ready to attach
-/// to the diagnostic cube's material. Called exactly once during scene
-/// setup, never per pixel/frame.
+/// to the grass material. Called exactly once during scene setup, never per
+/// pixel/frame.
 fn load_grass_face_textures() -> (TextureManager, FaceTextures) {
     let mut manager = TextureManager::new();
     let path = |name: &str| format!("{GRASS_TEXTURES_DIR}/{name}.png");
@@ -41,14 +49,15 @@ fn load_grass_face_textures() -> (TextureManager, FaceTextures) {
     (manager, face_textures)
 }
 
-/// Casts one primary ray per pixel against the diagnostic lighting scene
-/// (`objects` + `lights`) and writes the fully shaded color (ambient +
-/// visible diffuse/specular per light, or `background` on a miss) into the
-/// framebuffer. This is the Category 3 basic-lighting checkpoint image.
+/// Casts one primary ray per pixel into the sparse `VoxelWorld` (3D DDA +
+/// local cube intersection) and writes the fully shaded color (ambient +
+/// visible diffuse/specular per light, hard shadows queried against the same
+/// world, or `background` on a miss) into the framebuffer.
 fn render(
     framebuffer: &mut Framebuffer,
     camera: &Camera,
-    objects: &[(Cube, Material)],
+    world: &VoxelWorld,
+    materials: &HashMap<MaterialId, Material>,
     lights: &[Light],
     background: CpuColor,
     texture_manager: &TextureManager,
@@ -59,14 +68,16 @@ fn render(
     for y in 0..height {
         for x in 0..width {
             let ray = primary_ray(camera, x, y, width, height);
-            let color = cast_ray_lit(
-                objects,
+            let color = cast_ray_voxel_lit(
+                world,
+                materials,
                 &ray,
                 camera.position,
                 lights,
                 DEFAULT_AMBIENT_FACTOR,
                 background,
                 texture_manager,
+                SCENE_MAX_DISTANCE,
             );
             framebuffer.set_pixel(x, y, color);
         }
@@ -107,8 +118,8 @@ pub fn run() {
 
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
     let camera = Camera::new(
-        Vec3::new(6.0, 4.0, 8.0),
-        Vec3::new(0.0, -0.3, 0.0),
+        Vec3::new(6.0, 5.0, 7.5),
+        Vec3::new(1.8, 1.0, 1.8),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
@@ -119,24 +130,14 @@ pub fn run() {
     // an immutable reference, so no texture can be loaded mid-render.
     let (texture_manager, face_textures) = load_grass_face_textures();
 
-    // Main diagnostic cube now represents a Grass Block: albedo is a
-    // fallback only (every face has a texture assigned, so it is never
-    // actually sampled), and specular/shininess follow the project's Grass
-    // material spec — mostly matte, with a light, subtle highlight.
-    let main_cube = Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
-    let main_material = Material::new(CpuColor::new(0.45, 0.55, 0.25, 1.0), 0.04, 8.0)
-        .with_face_textures(face_textures);
-
-    // Flat receptor floor built from a squashed Cube, wide enough to catch
-    // the main cube's projected hard shadow.
-    let floor_cube = Cube::new(Vec3::new(-5.0, -2.0, -5.0), Vec3::new(5.0, -1.5, 5.0));
-    let floor_material = Material::matte(CpuColor::new(0.6, 0.6, 0.65, 1.0));
-
-    let objects = [(main_cube, main_material), (floor_cube, floor_material)];
+    // The visible scene is a small sparse VoxelWorld; blocks reference their
+    // material by `MaterialId`, resolved through this minimal diagnostic map.
+    let world = diagnostic_voxel_world();
+    let materials = diagnostic_materials(face_textures);
 
     // A soft overhead directional fill plus a stronger side point light: the
     // point light drives the visible diffuse gradient, specular highlight,
-    // and the shadow cast onto the floor.
+    // and the hard shadows the taller columns cast onto lower ones.
     let lights = [
         Light::Directional(DirectionalLight::new(
             Vec3::new(0.0, 1.0, 0.0),
@@ -144,7 +145,7 @@ pub fn run() {
             0.4,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(-4.0, 6.0, 5.0),
+            Vec3::new(-3.0, 7.0, 6.0),
             CpuColor::white(),
             1.5,
         )),
@@ -155,7 +156,8 @@ pub fn run() {
     render(
         &mut framebuffer,
         &camera,
-        &objects,
+        &world,
+        &materials,
         &lights,
         background,
         &texture_manager,
