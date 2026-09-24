@@ -10,6 +10,7 @@ use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::core::math::{IVec3, Vec3};
+use crate::core::texture::TextureId;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
@@ -52,6 +53,10 @@ pub fn backdrop_blue_material_id() -> MaterialId {
 
 pub fn leaves_material_id() -> MaterialId {
     MaterialId::new(18)
+}
+
+pub fn redstone_lamp_material_id() -> MaterialId {
+    MaterialId::new(19)
 }
 
 /// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in `0..GALLERY_DEPTH`.
@@ -143,6 +148,8 @@ pub struct GalleryTextures {
     pub glass: FaceTextures,
     pub water: FaceTextures,
     pub leaves: FaceTextures,
+    pub redstone_lamp: FaceTextures,
+    pub redstone_lamp_emissive: TextureId,
 }
 
 impl GalleryTextures {
@@ -155,11 +162,15 @@ impl GalleryTextures {
         let glass = manager.load(format!("{overworld_dir}/glass.png"))?;
         let water = manager.load(format!("{overworld_dir}/water.png"))?;
         let leaves = manager.load(format!("{overworld_dir}/leaves.png"))?;
+        let lamp_albedo = manager.load(format!("{overworld_dir}/redstone_lamp/albedo.png"))?;
+        let lamp_emissive = manager.load(format!("{overworld_dir}/redstone_lamp/emissive.png"))?;
 
         Ok(Self {
             glass: FaceTextures::uniform(glass),
             water: FaceTextures::uniform(water),
             leaves: FaceTextures::uniform(leaves),
+            redstone_lamp: FaceTextures::uniform(lamp_albedo),
+            redstone_lamp_emissive: lamp_emissive,
         })
     }
 }
@@ -171,6 +182,9 @@ impl GalleryTextures {
 /// - Mirror: a diagnostic polished control (not a catalog block) with a
 ///   deliberately strong `reflectivity` so the bounce reads at a glance.
 /// - Leaves: alpha cutout foliage — opaque or air per texel, never refractive.
+/// - Redstone Lamp (lit): albedo plus a separate emissive mask, so only the
+///   amber panels are self-luminous (`emission_strength` 1.8, the low end of
+///   the documented 1.8-3.0 range); the dark-brown frame does not emit.
 /// - Everything else is a plain matte control.
 pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary {
     let mut library = MaterialLibrary::new();
@@ -191,6 +205,13 @@ pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary
         Material::new(Color::new(0.30, 0.45, 0.20, 1.0), 0.03, 4.0)
             .with_face_textures(textures.leaves)
             .with_alpha_mode(AlphaMode::Cutout),
+    );
+    library.insert(
+        redstone_lamp_material_id(),
+        Material::new(Color::new(0.45, 0.35, 0.25, 1.0), 0.10, 20.0)
+            .with_face_textures(textures.redstone_lamp)
+            .with_emissive_texture(textures.redstone_lamp_emissive)
+            .with_emission_strength(1.8),
     );
     library.insert(
         glass_material_id(),

@@ -1,3 +1,4 @@
+pub mod emission;
 pub mod framebuffer;
 pub mod raytracer;
 pub mod shading;
