@@ -1,5 +1,6 @@
 pub mod block;
 pub mod block_geometry;
+pub mod block_shape_factory;
 pub mod block_type;
 pub mod geometry_orientation;
 pub mod light;
