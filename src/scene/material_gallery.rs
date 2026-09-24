@@ -67,20 +67,28 @@ pub fn deepslate_bricks_material_id() -> MaterialId {
     MaterialId::new(21)
 }
 
+pub fn reflection_target_material_id() -> MaterialId {
+    MaterialId::new(22)
+}
+
 /// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in
 /// `GALLERY_Z_MIN..GALLERY_DEPTH`.
 pub const GALLERY_WIDTH: i32 = 12;
-pub const GALLERY_Z_MIN: i32 = -1;
-pub const GALLERY_DEPTH: i32 = 7;
+pub const GALLERY_Z_MIN: i32 = -3;
+pub const GALLERY_DEPTH: i32 = 9;
 
 /// Front row (closest to the camera) of specimens, at `y = 1`.
-const FRONT_Z: i32 = 5;
+pub const FRONT_Z: i32 = 5;
 /// Backdrop cubes sit just behind the transmissive specimens.
-const BACKDROP_Z: i32 = 3;
+pub const BACKDROP_Z: i32 = 3;
 
-/// Back row of specimens (`z = 0`), with a red cube right behind the leaves
-/// so the holes of the cut-out texture visibly show what lies beyond.
-const BACK_Z: i32 = 0;
+/// Back row of specimens (`z = -1`), with a red cube right behind the leaves
+/// so the holes of the cut-out texture visibly show what lies beyond. It sits
+/// far enough behind the backdrop cubes that none of them hides a specimen.
+pub const BACK_Z: i32 = -1;
+/// A bright floor patch (`x` in `MIRROR_X-1..=MIRROR_X+1`, `z` in `6..=8`)
+/// lies in front of the mirror so its reflection is legible.
+pub const REFLECTION_PATCH_Z: std::ops::RangeInclusive<i32> = 6..=8;
 
 pub const LEAVES_X: i32 = 1;
 pub const LAMP_X: i32 = 4;
@@ -98,20 +106,25 @@ pub const WATER_X: i32 = 10;
 /// Matte control x=1   Mirror x=4   Glass x=7   Water x=10
 /// ```
 ///
-/// Back row (`z = 0`):
+/// Back row (`z = -1`):
 ///
 /// ```text
 /// Leaves x=1 (red cube behind)   Redstone Lamp x=4   Portal core x=8   Bricks x=11
 /// ```
 ///
-/// A red and a blue cube stand behind the glass and the water so the
-/// refracted view of them is unmistakable.
+/// A yellow floor patch lies in front of the mirror so its reflection is
+/// unmistakable, and a red and a blue cube stand behind the glass and the
+/// water so the refracted view of them is unmistakable.
 pub fn advanced_materials_world() -> VoxelWorld {
     let mut world = VoxelWorld::new();
 
     for z in GALLERY_Z_MIN..GALLERY_DEPTH {
         for x in 0..GALLERY_WIDTH {
-            let id = if (x + z) % 2 == 0 {
+            let on_patch =
+                (MIRROR_X - 1..=MIRROR_X + 1).contains(&x) && REFLECTION_PATCH_Z.contains(&z);
+            let id = if on_patch {
+                reflection_target_material_id()
+            } else if (x + z) % 2 == 0 {
                 checker_light_material_id()
             } else {
                 checker_dark_material_id()
@@ -255,6 +268,7 @@ pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary
     library.insert(matte_material_id(), matte(0.55, 0.55, 0.58));
     library.insert(backdrop_red_material_id(), matte(0.85, 0.12, 0.10));
     library.insert(backdrop_blue_material_id(), matte(0.10, 0.25, 0.85));
+    library.insert(reflection_target_material_id(), matte(0.80, 0.62, 0.10));
 
     library.insert(
         mirror_material_id(),
@@ -322,7 +336,7 @@ pub fn gallery_background() -> Color {
 pub fn gallery_camera(aspect_ratio: f32) -> Camera {
     Camera::new(
         Vec3::new(6.0, 5.6, 14.0),
-        Vec3::new(6.0, 0.6, 2.2),
+        Vec3::new(6.0, 0.6, 1.8),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
@@ -347,12 +361,12 @@ pub fn gallery_lights() -> Vec<Light> {
             1.0,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(LAMP_X as f32 + 0.5, 2.6, 1.2),
+            Vec3::new(LAMP_X as f32 + 0.5, 2.6, BACK_Z as f32 + 1.2),
             Color::new(1.0, 0.68, 0.32, 1.0),
             0.3,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(PORTAL_X as f32 + 0.5, 1.5, 1.4),
+            Vec3::new(PORTAL_X as f32 + 0.5, 1.5, BACK_Z as f32 + 1.4),
             Color::new(0.75, 0.10, 0.30, 1.0),
             0.4,
         )),
