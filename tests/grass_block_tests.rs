@@ -30,6 +30,8 @@ mod core {
     pub mod prism;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
+    #[path = "../src/core/reflection.rs"]
+    pub mod reflection;
     #[path = "../src/core/texture.rs"]
     pub mod texture;
 }

@@ -8,6 +8,7 @@ use crate::core::hit::{Face, HitRecord};
 use crate::core::material::Material;
 use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
+use crate::core::reflection::reflect;
 use crate::renderer::shading;
 use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
@@ -150,10 +151,12 @@ struct SurfaceHit<'a> {
 /// epsilon-offset shadow ray toward it is unobstructed. `occluded(ray,
 /// max_distance)` is injected so both the legacy cube list and the voxel
 /// world answer occlusion through the same shading code.
-/// `directional_range` bounds a directional light's shadow ray.
+/// `directional_range` bounds a directional light's shadow ray. `view_origin`
+/// is where the viewing ray came from (the camera for primary rays, the
+/// previous bounce point for secondary rays), used for the specular term.
 fn shade_surface(
     surface: &SurfaceHit,
-    camera_position: Vec3,
+    view_origin: Vec3,
     lights: &[Light],
     ambient_factor: f32,
     texture_manager: &TextureManager,
@@ -172,7 +175,7 @@ fn shade_surface(
     // never depends on albedo, so it is unaffected by texturing either way.
     let shading_material = Material::new(albedo, material.specular, material.shininess);
 
-    let view_direction = (camera_position - point).normalize();
+    let view_direction = (view_origin - point).normalize();
     let mut color = shading::ambient(&shading_material, ambient_factor);
 
     for light in lights {
@@ -298,12 +301,114 @@ pub const MISSING_MATERIAL_COLOR: Color = Color {
     a: 1.0,
 };
 
+/// Maximum number of secondary-ray bounces. The primary ray is depth `0`;
+/// a ray traced at `depth >= MAX_RAY_DEPTH` contributes only local shading,
+/// so recursion always terminates (primary -> secondary -> tertiary -> stop).
+pub const MAX_RAY_DEPTH: u32 = 3;
+
+/// Offset applied along the surface normal to a secondary ray's origin so it
+/// cannot immediately re-intersect the surface it leaves. It is the same
+/// centralized constant the shadow rays use.
+pub const SECONDARY_RAY_EPSILON: f32 = shadows::SHADOW_EPSILON;
+
+/// Everything a voxel ray needs to be traced, bundled so recursion stays a
+/// two-argument affair (`trace_ray(scene, ray, depth)`).
+pub struct VoxelScene<'a> {
+    pub world: &'a VoxelWorld,
+    pub materials: &'a MaterialLibrary,
+    pub camera_position: Vec3,
+    pub lights: &'a [Light],
+    pub ambient_factor: f32,
+    pub background: Color,
+    pub texture_manager: &'a TextureManager,
+    pub max_distance: f32,
+}
+
+/// The geometric normal flipped, if needed, to face the side the ray comes
+/// from (rays that start inside a shape report the exit face's outward
+/// normal, which points along the ray).
+fn facing_normal(ray: &Ray, normal: Vec3) -> Vec3 {
+    if ray.direction.dot(normal) > 0.0 {
+        -normal
+    } else {
+        normal
+    }
+}
+
+/// Linear blend `a * (1 - t) + b * t`, clamped to the color range.
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    (a * (1.0 - t) + b * t).clamp()
+}
+
+/// Traces `ray` through the scene at recursion `depth`.
+///
+/// The nearest real voxel hit is shaded locally (ambient + diffuse + specular
+/// with hard shadows). When the hit material has `reflectivity > 0` and
+/// `depth < MAX_RAY_DEPTH`, a mirror ray is spawned from the hit point offset
+/// by `SECONDARY_RAY_EPSILON` along the surface normal, traced recursively
+/// through the same DDA path, and blended:
+///
+/// `final = local * (1 - reflectivity) + reflected * reflectivity`
+///
+/// A material with `reflectivity == 0` (or a ray at the depth limit) returns
+/// its local color untouched. A miss returns `background`; a voxel whose
+/// `MaterialId` is unknown returns `MISSING_MATERIAL_COLOR`.
+pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
+    let Some(voxel) = nearest_voxel_hit(scene.world, ray, scene.max_distance) else {
+        return scene.background;
+    };
+
+    let Some(material) = scene.materials.get(voxel.block.material_id()) else {
+        return MISSING_MATERIAL_COLOR;
+    };
+
+    let surface = SurfaceHit {
+        point: voxel.hit.point,
+        normal: voxel.hit.normal,
+        face: voxel.hit.face,
+        uv: voxel.hit.uv,
+        material,
+    };
+
+    // Primary rays keep the camera-based view vector; secondary rays view
+    // the surface from where they were spawned.
+    let view_origin = if depth == 0 {
+        scene.camera_position
+    } else {
+        ray.origin
+    };
+
+    let local = shade_surface(
+        &surface,
+        view_origin,
+        scene.lights,
+        scene.ambient_factor,
+        scene.texture_manager,
+        shadows::DIRECTIONAL_SHADOW_RANGE.min(scene.max_distance),
+        |shadow_ray, shadow_distance| is_voxel_occluded(scene.world, shadow_ray, shadow_distance),
+    );
+
+    if material.reflectivity <= 0.0 || depth >= MAX_RAY_DEPTH {
+        return local;
+    }
+
+    let normal = facing_normal(ray, voxel.hit.normal);
+    let reflected_ray = Ray::new(
+        voxel.hit.point + normal * SECONDARY_RAY_EPSILON,
+        reflect(ray.direction, normal),
+    );
+    let reflected = trace_ray(scene, &reflected_ray, depth + 1);
+
+    mix(local, reflected, material.reflectivity)
+}
+
 /// Full voxel render path for one primary ray: `VoxelWorld` + 3D DDA finds
 /// the first real voxel hit, its `MaterialId` is resolved through the
 /// `MaterialLibrary`, the albedo comes from the same `FaceTextures` /
 /// `sample_nearest(hit.uv)` route as before, and ambient + diffuse +
 /// specular are evaluated by the shared `shade_surface`. Shadow rays query
-/// the *same* `world` through `is_voxel_occluded`.
+/// the *same* `world` through `is_voxel_occluded`. Reflective materials
+/// additionally bounce through `trace_ray` (see there).
 ///
 /// `max_distance` bounds both the primary traversal and directional shadow
 /// rays (it is the scene range, not a per-object value); a miss returns
@@ -320,29 +425,16 @@ pub fn cast_ray_voxel_lit(
     texture_manager: &TextureManager,
     max_distance: f32,
 ) -> Color {
-    let Some(voxel) = nearest_voxel_hit(world, ray, max_distance) else {
-        return background;
-    };
-
-    let Some(material) = materials.get(voxel.block.material_id()) else {
-        return MISSING_MATERIAL_COLOR;
-    };
-
-    let surface = SurfaceHit {
-        point: voxel.hit.point,
-        normal: voxel.hit.normal,
-        face: voxel.hit.face,
-        uv: voxel.hit.uv,
-        material,
-    };
-
-    shade_surface(
-        &surface,
+    let scene = VoxelScene {
+        world,
+        materials,
         camera_position,
         lights,
         ambient_factor,
+        background,
         texture_manager,
-        shadows::DIRECTIONAL_SHADOW_RANGE.min(max_distance),
-        |shadow_ray, shadow_distance| is_voxel_occluded(world, shadow_ray, shadow_distance),
-    )
+        max_distance,
+    };
+
+    trace_ray(&scene, ray, 0)
 }
