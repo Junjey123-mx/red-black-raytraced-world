@@ -58,3 +58,46 @@ pub fn orient_geometry(geometry: &BlockGeometry, orientation: Orientation) -> Bl
         ),
     }
 }
+
+/// Maps a shape authored *growing Up* from the cell's bottom face onto the
+/// face selected by `orientation`: the shape's base sits on the opposite
+/// face and its tips point along the orientation axis.
+///
+/// ```text
+/// Up    -> identity (base on -Y, tips toward +Y)
+/// Down  -> base on +Y, tips toward -Y
+/// North -> base on +Z, tips toward -Z      East -> base on -X, tips toward +X
+/// South -> base on -Z, tips toward +Z      West -> base on +X, tips toward -X
+/// ```
+///
+/// Each mapping is an exact proper rotation of the unit cube, so bounds stay
+/// in `[0, 1]`.
+fn map_growth_point(point: Vec3, orientation: Orientation) -> Vec3 {
+    let (x, y, z) = (point.x, point.y, point.z);
+    match orientation {
+        Orientation::Up => Vec3::new(x, y, z),
+        Orientation::Down => Vec3::new(x, 1.0 - y, 1.0 - z),
+        Orientation::North => Vec3::new(x, z, 1.0 - y),
+        Orientation::South => Vec3::new(x, 1.0 - z, y),
+        Orientation::East => Vec3::new(y, 1.0 - x, z),
+        Orientation::West => Vec3::new(1.0 - y, x, z),
+    }
+}
+
+/// Orients a shape that grows out of a face (see `map_growth_point`).
+pub fn orient_growth(geometry: &BlockGeometry, orientation: Orientation) -> BlockGeometry {
+    let orient = |prism: &Prism| {
+        Prism::new(
+            map_growth_point(prism.min(), orientation),
+            map_growth_point(prism.max(), orientation),
+        )
+    };
+
+    match geometry {
+        BlockGeometry::FullCube => BlockGeometry::FullCube,
+        BlockGeometry::Prism(prism) => BlockGeometry::Prism(orient(prism)),
+        BlockGeometry::Composite(parts) => {
+            BlockGeometry::Composite(parts.iter().map(orient).collect())
+        }
+    }
+}

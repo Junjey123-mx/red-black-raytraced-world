@@ -6,7 +6,7 @@ use crate::core::math::Vec3;
 use crate::core::prism::Prism;
 use crate::scene::block_geometry::BlockGeometry;
 use crate::scene::block_type::BlockType;
-use crate::scene::geometry_orientation::orient_geometry;
+use crate::scene::geometry_orientation::{orient_geometry, orient_growth};
 use crate::scene::orientation::Orientation;
 
 fn prism(min: [f32; 3], max: [f32; 3]) -> Prism {
@@ -56,6 +56,20 @@ fn portal_core() -> BlockGeometry {
     BlockGeometry::prism(prism([0.0, 0.0, 0.4375], [1.0, 1.0, 0.5625]))
 }
 
+/// A simplified amethyst cluster growing Up from the bottom face: one tall
+/// central crystal surrounded by four shorter, thinner ones at different
+/// heights and offsets. Empty space remains between and around the crystals,
+/// so rays can slip through and different tips are hit at different points.
+fn amethyst_cluster() -> BlockGeometry {
+    composite(vec![
+        prism([0.375, 0.0, 0.375], [0.625, 0.8125, 0.625]),
+        prism([0.125, 0.0, 0.4375], [0.3125, 0.5, 0.6875]),
+        prism([0.6875, 0.0, 0.3125], [0.875, 0.4375, 0.5625]),
+        prism([0.4375, 0.0, 0.6875], [0.6875, 0.375, 0.875]),
+        prism([0.3125, 0.0, 0.125], [0.5625, 0.5625, 0.3125]),
+    ])
+}
+
 /// The shape of `block_type` in its canonical pose (facing South, upright).
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
@@ -63,12 +77,21 @@ pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
         BlockType::Fence => fence(),
         BlockType::WoodDoor => wood_door(),
         BlockType::PortalCoreDarkCrimson => portal_core(),
+        BlockType::AmethystCluster => amethyst_cluster(),
         _ => BlockGeometry::FullCube,
     }
 }
 
 /// The local shape of a block of `block_type` placed with `orientation`,
 /// in unit-cell space `[0, 1]^3`.
+///
+/// Shapes that grow out of a face (the amethyst cluster) use the growth
+/// orientation, where `orientation` is the direction the tips point; all
+/// other shapes are turned about the vertical axis (or flipped for `Down`).
 pub fn block_geometry(block_type: BlockType, orientation: Orientation) -> BlockGeometry {
-    orient_geometry(&canonical_geometry(block_type), orientation)
+    let canonical = canonical_geometry(block_type);
+    match block_type {
+        BlockType::AmethystCluster => orient_growth(&canonical, orientation),
+        _ => orient_geometry(&canonical, orientation),
+    }
 }
