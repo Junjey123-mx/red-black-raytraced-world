@@ -8,6 +8,22 @@ use crate::core::face_textures::FaceTextures;
 const MIN_SHININESS: f32 = 1.0;
 const MAX_SHININESS: f32 = 512.0;
 
+/// Strongly-typed, lightweight reference to a material. Blocks store this
+/// instead of a full `Material`, so material ownership stays centralized
+/// and a bare integer is never passed around as an implicit material key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MaterialId(u32);
+
+impl MaterialId {
+    pub fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub fn value(self) -> u32 {
+        self.0
+    }
+}
+
 /// Minimal CPU surface material for basic local lighting: a uniform albedo
 /// color and the Phong/Blinn-Phong specular parameters. `face_textures`, if
 /// present, overrides `albedo` as the ambient/diffuse albedo source per
