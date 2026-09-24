@@ -41,11 +41,19 @@ fn fence() -> BlockGeometry {
     ])
 }
 
+/// A closed door facing South, upright: one thin full-height, full-width
+/// leaf against the south edge of the cell (3/16 thick). The rest of the
+/// cell is empty. There is no hinge, opening, or open/closed state.
+fn wood_door() -> BlockGeometry {
+    BlockGeometry::prism(prism([0.0, 0.0, 0.8125], [1.0, 1.0, 1.0]))
+}
+
 /// The shape of `block_type` in its canonical pose (facing South, upright).
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
         BlockType::WoodStairs => wood_stairs(),
         BlockType::Fence => fence(),
+        BlockType::WoodDoor => wood_door(),
         _ => BlockGeometry::FullCube,
     }
 }
