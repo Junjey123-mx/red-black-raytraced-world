@@ -32,6 +32,8 @@ mod core {
     pub mod ray;
     #[path = "../src/core/reflection.rs"]
     pub mod reflection;
+    #[path = "../src/core/refraction.rs"]
+    pub mod refraction;
     #[path = "../src/core/texture.rs"]
     pub mod texture;
 }

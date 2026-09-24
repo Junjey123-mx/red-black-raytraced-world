@@ -25,6 +25,19 @@ impl MaterialId {
     }
 }
 
+/// How the alpha channel of a material's albedo texture is interpreted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AlphaMode {
+    /// Texture alpha is ignored; only the material's scalar `transparency`
+    /// applies. The default, so every legacy texture keeps working.
+    #[default]
+    Ignore,
+    /// Texture alpha is per-texel opacity on top of the material's
+    /// `transparency`: a texel with alpha 1 (e.g. a glass frame) is fully
+    /// solid, alpha 0 leaves the material's own `transparency` untouched.
+    Blend,
+}
+
 /// CPU surface material: the central optical contract of the renderer.
 ///
 /// `albedo` is the uniform base color; `face_textures` (the albedo texture
@@ -54,6 +67,7 @@ pub struct Material {
     pub transparency: f32,
     pub refractive_index: f32,
     pub emission_strength: f32,
+    pub alpha_mode: AlphaMode,
 }
 
 /// Vacuum/air index, the neutral default for materials that do not refract.
@@ -82,6 +96,7 @@ impl Material {
             transparency: 0.0,
             refractive_index: DEFAULT_REFRACTIVE_INDEX,
             emission_strength: 0.0,
+            alpha_mode: AlphaMode::Ignore,
         }
     }
 
@@ -142,5 +157,23 @@ impl Material {
     pub fn with_emission_strength(mut self, emission_strength: f32) -> Self {
         self.emission_strength = finite_or(emission_strength, 0.0).max(0.0);
         self
+    }
+
+    /// Selects how the albedo texture's alpha channel is interpreted.
+    pub fn with_alpha_mode(mut self, alpha_mode: AlphaMode) -> Self {
+        self.alpha_mode = alpha_mode;
+        self
+    }
+
+    /// Transparency at a surface point given the albedo texel's alpha.
+    /// `Ignore` returns the material value; `Blend` lets an opaque texel
+    /// (alpha 1) cancel it: `transparency * (1 - alpha)`.
+    pub fn effective_transparency(&self, texel_alpha: f32) -> f32 {
+        match self.alpha_mode {
+            AlphaMode::Ignore => self.transparency,
+            AlphaMode::Blend => {
+                self.transparency * (1.0 - finite_or(texel_alpha, 1.0).clamp(0.0, 1.0))
+            }
+        }
     }
 }

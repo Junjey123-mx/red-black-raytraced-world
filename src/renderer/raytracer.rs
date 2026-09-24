@@ -9,6 +9,7 @@ use crate::core::material::Material;
 use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::core::reflection::reflect;
+use crate::core::refraction::refract;
 use crate::renderer::shading;
 use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
@@ -118,13 +119,17 @@ fn normal_to_diagnostic_color(normal: Vec3) -> Color {
 /// samples it at `uv` with the project's nearest-neighbor sampler.
 /// `texture_manager` is a shared reference, so this can never load a file:
 /// `TextureManager::load` requires `&mut self`.
+///
+/// Returns the albedo with its alpha forced to `1` (so shading can never
+/// leak a non-opaque framebuffer pixel) together with the sampled texel
+/// alpha, which only `AlphaMode::Blend` materials interpret.
 fn resolve_albedo(
     material: &Material,
     face: Face,
     uv: Vec2,
     texture_manager: &TextureManager,
-) -> Color {
-    match &material.face_textures {
+) -> (Color, f32) {
+    let sampled = match &material.face_textures {
         Some(face_textures) => {
             let texture_id = face_textures.texture_for_face(face);
             let texture = texture_manager
@@ -133,7 +138,9 @@ fn resolve_albedo(
             sample_nearest(texture, uv)
         }
         None => material.albedo,
-    }
+    };
+
+    (Color::new(sampled.r, sampled.g, sampled.b, 1.0), sampled.a)
 }
 
 /// The surface data lighting needs, independent of how the hit was found
@@ -144,6 +151,20 @@ struct SurfaceHit<'a> {
     face: Face,
     uv: Vec2,
     material: &'a Material,
+}
+
+/// The local-lighting result split into the pieces transparent materials
+/// need: `full` is the classic ambient + diffuse + specular sum (what an
+/// opaque surface shows); `ambient`, `body` (ambient + diffuse, no
+/// highlight) and `specular` let a transparent surface keep its highlights
+/// at full strength while its body color is blended with what lies behind.
+/// `texel_alpha` is the albedo texel's alpha (see `AlphaMode`).
+struct LocalShading {
+    full: Color,
+    ambient: Color,
+    body: Color,
+    specular: Color,
+    texel_alpha: f32,
 }
 
 /// Shared local lighting: ambient always applies; each light adds its
@@ -162,7 +183,7 @@ fn shade_surface(
     texture_manager: &TextureManager,
     directional_range: f32,
     occluded: impl Fn(&Ray, f32) -> bool,
-) -> Color {
+) -> LocalShading {
     let SurfaceHit {
         point,
         normal,
@@ -170,53 +191,67 @@ fn shade_surface(
         ..
     } = *surface;
 
-    let albedo = resolve_albedo(material, surface.face, surface.uv, texture_manager);
+    let (albedo, texel_alpha) = resolve_albedo(material, surface.face, surface.uv, texture_manager);
     // Ambient/diffuse read albedo through this per-hit override; specular
     // never depends on albedo, so it is unaffected by texturing either way.
     let shading_material = Material::new(albedo, material.specular, material.shininess);
 
     let view_direction = (view_origin - point).normalize();
-    let mut color = shading::ambient(&shading_material, ambient_factor);
+    let ambient = shading::ambient(&shading_material, ambient_factor);
+    // `full` keeps the original accumulation order; `body`/`specular` track
+    // the same terms separately.
+    let mut full = ambient;
+    let mut body = ambient;
+    let mut specular = Color::black();
 
     for light in lights {
-        match light {
+        let (blocked, diffuse_term, specular_term) = match light {
             Light::Directional(directional) => {
                 let shadow_ray =
                     shadows::shadow_ray_to_directional_light(point, normal, directional);
-                let blocked = occluded(&shadow_ray, directional_range);
-                if !blocked {
-                    color = color
-                        + shading::diffuse_directional(&shading_material, normal, directional);
-                    color = color
-                        + shading::specular_directional(
-                            &shading_material,
-                            normal,
-                            view_direction,
-                            directional,
-                        );
-                }
+                (
+                    occluded(&shadow_ray, directional_range),
+                    shading::diffuse_directional(&shading_material, normal, directional),
+                    shading::specular_directional(
+                        &shading_material,
+                        normal,
+                        view_direction,
+                        directional,
+                    ),
+                )
             }
             Light::Point(point_light) => {
                 let (shadow_ray, distance) =
                     shadows::shadow_ray_to_point_light(point, normal, point_light);
-                let blocked = occluded(&shadow_ray, distance);
-                if !blocked {
-                    color = color
-                        + shading::diffuse_point(&shading_material, normal, point, point_light);
-                    color = color
-                        + shading::specular_point(
-                            &shading_material,
-                            normal,
-                            point,
-                            view_direction,
-                            point_light,
-                        );
-                }
+                (
+                    occluded(&shadow_ray, distance),
+                    shading::diffuse_point(&shading_material, normal, point, point_light),
+                    shading::specular_point(
+                        &shading_material,
+                        normal,
+                        point,
+                        view_direction,
+                        point_light,
+                    ),
+                )
             }
+        };
+
+        if !blocked {
+            full = full + diffuse_term;
+            full = full + specular_term;
+            body = body + diffuse_term;
+            specular = specular + specular_term;
         }
     }
 
-    color.clamp()
+    LocalShading {
+        full: full.clamp(),
+        ambient,
+        body: body.clamp(),
+        specular: specular.clamp(),
+        texel_alpha,
+    }
 }
 
 /// Resolves a primary ray against the nearest of a small explicit
@@ -281,6 +316,7 @@ pub fn cast_ray_lit(
             shadows::is_occluded(cubes.iter().copied(), shadow_ray, max_distance)
         },
     )
+    .full
 }
 
 /// Voxel occlusion query for shadow rays: `true` when any real voxel hit
@@ -305,6 +341,10 @@ pub const MISSING_MATERIAL_COLOR: Color = Color {
 /// a ray traced at `depth >= MAX_RAY_DEPTH` contributes only local shading,
 /// so recursion always terminates (primary -> secondary -> tertiary -> stop).
 pub const MAX_RAY_DEPTH: u32 = 3;
+
+/// Refractive index of the surrounding medium (air) that transparent
+/// materials transition to and from.
+pub const AIR_REFRACTIVE_INDEX: f32 = 1.0;
 
 /// Offset applied along the surface normal to a secondary ray's origin so it
 /// cannot immediately re-intersect the surface it leaves. It is the same
@@ -388,18 +428,63 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         |shadow_ray, shadow_distance| is_voxel_occluded(scene.world, shadow_ray, shadow_distance),
     );
 
-    if material.reflectivity <= 0.0 || depth >= MAX_RAY_DEPTH {
-        return local;
+    let transparency = material
+        .effective_transparency(local.texel_alpha)
+        .clamp(0.0, 1.0);
+    let reflectivity = material.reflectivity;
+
+    if depth >= MAX_RAY_DEPTH || (reflectivity <= 0.0 && transparency <= 0.0) {
+        return local.full;
     }
 
+    let point = voxel.hit.point;
     let normal = facing_normal(ray, voxel.hit.normal);
     let reflected_ray = Ray::new(
-        voxel.hit.point + normal * SECONDARY_RAY_EPSILON,
+        point + normal * SECONDARY_RAY_EPSILON,
         reflect(ray.direction, normal),
     );
-    let reflected = trace_ray(scene, &reflected_ray, depth + 1);
+    let mut reflected: Option<Color> = None;
+    let mut surface_color = local.full;
 
-    mix(local, reflected, material.reflectivity)
+    if transparency > 0.0 {
+        // Leaving the medium when the ray travels along the outward normal
+        // (it started inside the shape); otherwise entering it.
+        let exiting = ray.direction.dot(voxel.hit.normal) > 0.0;
+        let (eta_i, eta_t) = if exiting {
+            (material.refractive_index, AIR_REFRACTIVE_INDEX)
+        } else {
+            (AIR_REFRACTIVE_INDEX, material.refractive_index)
+        };
+
+        let transmitted = match refract(ray.direction, normal, eta_i, eta_t) {
+            Some(direction) => {
+                let transmitted_ray = Ray::new(point - normal * SECONDARY_RAY_EPSILON, direction);
+                trace_ray(scene, &transmitted_ray, depth + 1)
+            }
+            // Total internal reflection: the energy stays in the medium.
+            None => *reflected.insert(trace_ray(scene, &reflected_ray, depth + 1)),
+        };
+
+        // The back face of a medium is only seen through it: tint with the
+        // ambient body color and skip lit body/highlights there.
+        let (body, specular) = if exiting {
+            (local.ambient, Color::black())
+        } else {
+            (local.body, local.specular)
+        };
+        surface_color =
+            (body * (1.0 - transparency) + transmitted * transparency + specular).clamp();
+    }
+
+    if reflectivity > 0.0 {
+        let reflected = match reflected {
+            Some(color) => color,
+            None => trace_ray(scene, &reflected_ray, depth + 1),
+        };
+        surface_color = mix(surface_color, reflected, reflectivity);
+    }
+
+    Color::new(surface_color.r, surface_color.g, surface_color.b, 1.0)
 }
 
 /// Full voxel render path for one primary ray: `VoxelWorld` + 3D DDA finds

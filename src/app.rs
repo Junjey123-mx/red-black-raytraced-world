@@ -4,35 +4,27 @@ use crate::camera::camera::Camera;
 use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
-use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
-use crate::scene::light::{DirectionalLight, Light, PointLight};
-use crate::scene::material_library::MaterialLibrary;
-use crate::scene::scene::{
-    PartialSceneTextures, diagnostic_partial_materials, diagnostic_partial_voxel_world,
+use crate::scene::light::Light;
+use crate::scene::material_gallery::{
+    GALLERY_MAX_DISTANCE, GalleryTextures, advanced_materials_library, advanced_materials_world,
+    gallery_background, gallery_camera, gallery_lights,
 };
+use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 
-const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
-const PARTIAL_TEXTURES_DIR: &str = "assets/textures/diagnostic/partial";
+const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
 
-/// Scene range for primary rays and directional shadow rays. The diagnostic
-/// terrain spans only a few cells, so a modest finite range keeps every
-/// DDA traversal short while still covering the whole scene from the camera.
-const SCENE_MAX_DISTANCE: f32 = 24.0;
-
-/// Loads every gallery PNG once (grass, stone, planks, door, portal core)
-/// through a single `TextureManager` and returns it with the per-face
-/// texture mappings. Called exactly once during scene setup, never per
-/// pixel/frame.
-fn load_scene_textures() -> (TextureManager, PartialSceneTextures) {
+/// Loads every gallery PNG once through a single `TextureManager` and
+/// returns it with the per-face texture mappings. Called exactly once during
+/// scene setup, never per pixel/frame.
+fn load_scene_textures() -> (TextureManager, GalleryTextures) {
     let mut manager = TextureManager::new();
-    let textures =
-        PartialSceneTextures::load(&mut manager, GRASS_TEXTURES_DIR, PARTIAL_TEXTURES_DIR)
-            .expect("missing gallery texture");
+    let textures = GalleryTextures::load(&mut manager, OVERWORLD_TEXTURES_DIR)
+        .expect("missing gallery texture");
 
     (manager, textures)
 }
@@ -65,7 +57,7 @@ fn render(
                 DEFAULT_AMBIENT_FACTOR,
                 background,
                 texture_manager,
-                SCENE_MAX_DISTANCE,
+                GALLERY_MAX_DISTANCE,
             );
             framebuffer.set_pixel(x, y, color);
         }
@@ -105,43 +97,21 @@ pub fn run() {
     );
 
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
-    let camera = Camera::new(
-        Vec3::new(7.4, 4.3, 9.6),
-        Vec3::new(4.2, 1.4, 2.6),
-        Vec3::new(0.0, 1.0, 0.0),
-        60.0,
-        aspect_ratio,
-    );
+    let camera = gallery_camera(aspect_ratio);
 
-    // Grass Block textures are loaded once here, before any per-pixel work
+    // Gallery textures are loaded once here, before any per-pixel work
     // starts; the pixel loop only ever calls `TextureManager::get` through
     // an immutable reference, so no texture can be loaded mid-render.
     let (texture_manager, scene_textures) = load_scene_textures();
 
-    // The visible scene is the mixed partial-geometry diagnostic VoxelWorld
-    // (stairs, fence, door, portal core, amethyst cluster); blocks reference
-    // their material by `MaterialId`, resolved through the
-    // scene `MaterialLibrary`.
-    let world = diagnostic_partial_voxel_world();
-    let materials = diagnostic_partial_materials(&scene_textures);
+    // The visible scene is the advanced-materials optical gallery
+    // (`advanced_materials_world`); blocks reference their material by
+    // `MaterialId`, resolved through the scene `MaterialLibrary`.
+    let world = advanced_materials_world();
+    let materials = advanced_materials_library(&scene_textures);
 
-    // A soft overhead directional fill plus a stronger side point light: the
-    // point light drives the visible diffuse gradient, specular highlight,
-    // and the hard shadows the taller columns cast onto lower ones.
-    let lights = [
-        Light::Directional(DirectionalLight::new(
-            Vec3::new(0.0, 1.0, 0.0),
-            CpuColor::white(),
-            0.4,
-        )),
-        Light::Point(PointLight::new(
-            Vec3::new(-2.0, 7.0, 9.0),
-            CpuColor::white(),
-            1.5,
-        )),
-    ];
-
-    let background = CpuColor::new(0.05, 0.05, 0.08, 1.0);
+    let lights = gallery_lights();
+    let background = gallery_background();
 
     render(
         &mut framebuffer,
