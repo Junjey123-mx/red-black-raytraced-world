@@ -4,15 +4,77 @@
 
 use crate::core::color::Color;
 use crate::core::cube::Cube;
-use crate::core::hit::Face;
+use crate::core::hit::{Face, HitRecord};
 use crate::core::material::Material;
-use crate::core::math::{Vec2, Vec3};
+use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::renderer::shading;
 use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
+use crate::renderer::voxel_traversal::DdaState;
+use crate::scene::block::BlockInstance;
 use crate::scene::light::Light;
 use crate::scene::texture_manager::TextureManager;
+use crate::scene::voxel_world::VoxelWorld;
+
+/// Defensive cap on DDA steps for a single voxel raycast. `max_distance`
+/// is the primary termination contract; this only guarantees the loop
+/// ends even when a caller passes an unbounded distance.
+pub const MAX_VOXEL_STEPS: usize = 4096;
+
+/// The first real voxel hit of a ray: the occupied cell, its block record
+/// (type, material reference, orientation), and the geometric
+/// `HitRecord` (distance, point, normal, face, uv) produced by the
+/// existing `Cube::intersect` contract.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VoxelHit {
+    pub cell: IVec3,
+    pub block: BlockInstance,
+    pub hit: HitRecord,
+}
+
+/// The full unit cube of a voxel cell: exactly `[x, x+1) x [y, y+1) x
+/// [z, z+1)`, with no gaps between neighboring cells.
+pub fn cell_cube(cell: IVec3) -> Cube {
+    let min = Vec3::new(cell.x as f32, cell.y as f32, cell.z as f32);
+    Cube::new(min, min + Vec3::new(1.0, 1.0, 1.0))
+}
+
+/// Finds the nearest real voxel hit along `ray` within `max_distance`.
+///
+/// The 3D DDA only nominates candidate cells, in increasing entry
+/// distance. An occupied cell is *not* automatically a hit: its local
+/// geometry (today always a full cube) must actually be struck by the ray
+/// via `Cube::intersect`, otherwise traversal continues. Because cells are
+/// visited in increasing entry distance, the first confirmed hit is the
+/// nearest one. Returns `None` for an empty world, a miss, a
+/// non-positive/NaN `max_distance`, or when `MAX_VOXEL_STEPS` is reached.
+pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Option<VoxelHit> {
+    if world.is_empty() || max_distance.is_nan() || max_distance <= 0.0 {
+        return None;
+    }
+
+    let mut state = DdaState::from_ray(ray);
+
+    for _ in 0..MAX_VOXEL_STEPS {
+        if let Some(block) = world.get(state.cell)
+            && let Some(hit) = cell_cube(state.cell).intersect(ray, 0.0, max_distance)
+        {
+            return Some(VoxelHit {
+                cell: state.cell,
+                block: *block,
+                hit,
+            });
+        }
+
+        let step = state.advance()?;
+        if step.t_enter > max_distance {
+            return None;
+        }
+    }
+
+    None
+}
 
 /// Resolves a primary ray against a single diagnostic cube. This is
 /// deliberately unlit: a hit produces a diagnostic color derived purely

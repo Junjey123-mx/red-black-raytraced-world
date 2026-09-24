@@ -2,11 +2,14 @@
 mod core {
     #[path = "."]
     pub mod math {
+        #[path = "../src/core/math/ivec3.rs"]
+        pub mod ivec3;
         #[path = "../src/core/math/vec2.rs"]
         pub mod vec2;
         #[path = "../src/core/math/vec3.rs"]
         pub mod vec3;
 
+        pub use ivec3::IVec3;
         pub use vec2::Vec2;
         pub use vec3::Vec3;
     }
@@ -42,10 +45,18 @@ mod camera {
 
 #[path = "."]
 mod scene {
+    #[path = "../src/scene/block.rs"]
+    pub mod block;
+    #[path = "../src/scene/block_type.rs"]
+    pub mod block_type;
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/orientation.rs"]
+    pub mod orientation;
     #[path = "../src/scene/texture_manager.rs"]
     pub mod texture_manager;
+    #[path = "../src/scene/voxel_world.rs"]
+    pub mod voxel_world;
 }
 
 #[path = "."]
@@ -60,6 +71,8 @@ mod renderer {
     pub mod shadows;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
+    #[path = "../src/renderer/voxel_traversal.rs"]
+    pub mod voxel_traversal;
 }
 
 use camera::{Camera, primary_ray};
