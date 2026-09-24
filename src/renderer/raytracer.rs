@@ -5,7 +5,7 @@
 use crate::core::color::Color;
 use crate::core::cube::Cube;
 use crate::core::hit::{Face, HitRecord};
-use crate::core::material::Material;
+use crate::core::material::{AlphaMode, Material};
 use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::core::reflection::reflect;
@@ -62,6 +62,30 @@ fn cell_origin(cell: IVec3) -> Vec3 {
 /// Returns `None` for an empty world, a miss, a non-positive/NaN
 /// `max_distance`, or when `MAX_VOXEL_STEPS` is reached.
 pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Option<VoxelHit> {
+    nearest_voxel_hit_where(world, ray, max_distance, |_| true)
+}
+
+/// Upper bound on hits discarded inside a single cell (a cut-out texel can
+/// only ever reject a handful of faces of one small shape).
+const MAX_REJECTED_HITS_PER_CELL: usize = 8;
+
+/// Distance a ray is advanced past a discarded hit before the cell's
+/// geometry is tested again, so the rejected surface is not hit twice.
+const REJECTED_HIT_ADVANCE: f32 = shadows::SHADOW_EPSILON;
+
+/// `nearest_voxel_hit` with an acceptance test: every geometric hit is shown
+/// to `accept`, and a rejected hit (a cut-out, empty texel) is discarded so
+/// the ray carries on — first through the rest of the same cell's geometry,
+/// then through the DDA into the following cells — exactly as if that
+/// surface point were air. `accept` always sees the full `VoxelHit` (cell,
+/// block, geometric `HitRecord` with uv). Distances stay measured from the
+/// original ray origin.
+pub fn nearest_voxel_hit_where(
+    world: &VoxelWorld,
+    ray: &Ray,
+    max_distance: f32,
+    accept: impl Fn(&VoxelHit) -> bool,
+) -> Option<VoxelHit> {
     if world.is_empty() || max_distance.is_nan() || max_distance <= 0.0 {
         return None;
     }
@@ -69,16 +93,31 @@ pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Op
     let mut state = DdaState::from_ray(ray);
 
     for _ in 0..MAX_VOXEL_STEPS {
-        if let Some(block) = world.get(state.cell)
-            && let Some(hit) = block_geometry(block.block_type(), block.orientation())
-                .translated(cell_origin(state.cell))
-                .intersect_local(ray, 0.0, max_distance)
-        {
-            return Some(VoxelHit {
-                cell: state.cell,
-                block: *block,
-                hit,
-            });
+        if let Some(block) = world.get(state.cell) {
+            let geometry = block_geometry(block.block_type(), block.orientation())
+                .translated(cell_origin(state.cell));
+            let mut current = *ray;
+            let mut offset = 0.0;
+
+            for _ in 0..MAX_REJECTED_HITS_PER_CELL {
+                let Some(mut hit) = geometry.intersect_local(&current, 0.0, max_distance - offset)
+                else {
+                    break;
+                };
+                hit.distance += offset;
+
+                let candidate = VoxelHit {
+                    cell: state.cell,
+                    block: *block,
+                    hit,
+                };
+                if accept(&candidate) {
+                    return Some(candidate);
+                }
+
+                offset = hit.distance + REJECTED_HIT_ADVANCE;
+                current = Ray::new(ray.at(offset), ray.direction);
+            }
         }
 
         let step = state.advance()?;
@@ -112,24 +151,20 @@ fn normal_to_diagnostic_color(normal: Vec3) -> Color {
     )
 }
 
-/// Resolves the ambient/diffuse albedo for a hit: a material without
-/// `face_textures` keeps using its uniform `albedo` unchanged; a material
-/// with `face_textures` looks up the `TextureId` for `face`, resolves it
-/// through `texture_manager` (already-loaded, no disk access here), and
-/// samples it at `uv` with the project's nearest-neighbor sampler.
-/// `texture_manager` is a shared reference, so this can never load a file:
-/// `TextureManager::load` requires `&mut self`.
-///
-/// Returns the albedo with its alpha forced to `1` (so shading can never
-/// leak a non-opaque framebuffer pixel) together with the sampled texel
-/// alpha, which only `AlphaMode::Blend` materials interpret.
-fn resolve_albedo(
+/// Samples the material's albedo source at a hit: a material without
+/// `face_textures` yields its uniform `albedo`; a material with
+/// `face_textures` looks up the `TextureId` for `face`, resolves it through
+/// `texture_manager` (already-loaded, no disk access here), and samples it at
+/// `uv` with the project's nearest-neighbor sampler. `texture_manager` is a
+/// shared reference, so this can never load a file: `TextureManager::load`
+/// requires `&mut self`.
+fn sample_albedo(
     material: &Material,
     face: Face,
     uv: Vec2,
     texture_manager: &TextureManager,
-) -> (Color, f32) {
-    let sampled = match &material.face_textures {
+) -> Color {
+    match &material.face_textures {
         Some(face_textures) => {
             let texture_id = face_textures.texture_for_face(face);
             let texture = texture_manager
@@ -138,7 +173,20 @@ fn resolve_albedo(
             sample_nearest(texture, uv)
         }
         None => material.albedo,
-    };
+    }
+}
+
+/// Resolves the ambient/diffuse albedo for a hit, returned with its alpha
+/// forced to `1` (so shading can never leak a non-opaque framebuffer pixel)
+/// together with the sampled texel alpha, which only `AlphaMode::Blend`
+/// (per-texel opacity) and `AlphaMode::Cutout` (empty texels) interpret.
+fn resolve_albedo(
+    material: &Material,
+    face: Face,
+    uv: Vec2,
+    texture_manager: &TextureManager,
+) -> (Color, f32) {
+    let sampled = sample_albedo(material, face, uv, texture_manager);
 
     (Color::new(sampled.r, sampled.g, sampled.b, 1.0), sampled.a)
 }
@@ -168,10 +216,12 @@ struct LocalShading {
 }
 
 /// Shared local lighting: ambient always applies; each light adds its
-/// diffuse and specular contribution only when `occluded` reports that the
-/// epsilon-offset shadow ray toward it is unobstructed. `occluded(ray,
-/// max_distance)` is injected so both the legacy cube list and the voxel
-/// world answer occlusion through the same shading code.
+/// diffuse and specular contribution scaled by `visibility(ray,
+/// max_distance)`, the fraction of that light reaching the surface along the
+/// epsilon-offset shadow ray (`1` unobstructed, `0` fully blocked, in
+/// between through transparent occluders). `visibility` is injected so both
+/// the legacy cube list and the voxel world answer occlusion through the
+/// same shading code.
 /// `directional_range` bounds a directional light's shadow ray. `view_origin`
 /// is where the viewing ray came from (the camera for primary rays, the
 /// previous bounce point for secondary rays), used for the specular term.
@@ -182,7 +232,7 @@ fn shade_surface(
     ambient_factor: f32,
     texture_manager: &TextureManager,
     directional_range: f32,
-    occluded: impl Fn(&Ray, f32) -> bool,
+    visibility: impl Fn(&Ray, f32) -> f32,
 ) -> LocalShading {
     let SurfaceHit {
         point,
@@ -205,12 +255,12 @@ fn shade_surface(
     let mut specular = Color::black();
 
     for light in lights {
-        let (blocked, diffuse_term, specular_term) = match light {
+        let (visible, diffuse_term, specular_term) = match light {
             Light::Directional(directional) => {
                 let shadow_ray =
                     shadows::shadow_ray_to_directional_light(point, normal, directional);
                 (
-                    occluded(&shadow_ray, directional_range),
+                    visibility(&shadow_ray, directional_range),
                     shading::diffuse_directional(&shading_material, normal, directional),
                     shading::specular_directional(
                         &shading_material,
@@ -224,7 +274,7 @@ fn shade_surface(
                 let (shadow_ray, distance) =
                     shadows::shadow_ray_to_point_light(point, normal, point_light);
                 (
-                    occluded(&shadow_ray, distance),
+                    visibility(&shadow_ray, distance),
                     shading::diffuse_point(&shading_material, normal, point, point_light),
                     shading::specular_point(
                         &shading_material,
@@ -237,7 +287,9 @@ fn shade_surface(
             }
         };
 
-        if !blocked {
+        if visible > 0.0 {
+            let diffuse_term = diffuse_term * visible;
+            let specular_term = specular_term * visible;
             full = full + diffuse_term;
             full = full + specular_term;
             body = body + diffuse_term;
@@ -313,7 +365,11 @@ pub fn cast_ray_lit(
         texture_manager,
         shadows::DIRECTIONAL_SHADOW_RANGE,
         |shadow_ray, max_distance| {
-            shadows::is_occluded(cubes.iter().copied(), shadow_ray, max_distance)
+            if shadows::is_occluded(cubes.iter().copied(), shadow_ray, max_distance) {
+                0.0
+            } else {
+                1.0
+            }
         },
     )
     .full
@@ -380,6 +436,83 @@ fn mix(a: Color, b: Color, t: f32) -> Color {
     (a * (1.0 - t) + b * t).clamp()
 }
 
+/// Whether a geometric voxel hit is a real surface point: `false` only for a
+/// hit on an `AlphaMode::Cutout` material at an empty texel (air). Unknown
+/// materials are accepted so the loud missing-material path still triggers.
+fn is_solid_hit(scene: &VoxelScene, voxel: &VoxelHit) -> bool {
+    let Some(material) = scene.materials.get(voxel.block.material_id()) else {
+        return true;
+    };
+    if material.alpha_mode != AlphaMode::Cutout {
+        return true;
+    }
+
+    let texel = sample_albedo(
+        material,
+        voxel.hit.face,
+        voxel.hit.uv,
+        scene.texture_manager,
+    );
+    !material.is_cut_out(texel.a)
+}
+
+/// The nearest *visible* voxel hit: `nearest_voxel_hit` where hits on empty
+/// texels of cut-out materials (leaf holes) are ignored, so the ray carries
+/// on behind them. Primary, secondary and shadow rays all go through here.
+pub fn nearest_visible_hit(scene: &VoxelScene, ray: &Ray, max_distance: f32) -> Option<VoxelHit> {
+    nearest_voxel_hit_where(scene.world, ray, max_distance, |voxel| {
+        is_solid_hit(scene, voxel)
+    })
+}
+
+/// Upper bound on surfaces a single shadow ray is followed through.
+const MAX_SHADOW_HITS: usize = 8;
+
+/// Fraction of a light that reaches the start of `ray` (a shadow ray) within
+/// `max_distance`: `1.0` with nothing in the way, `0.0` when an opaque
+/// surface blocks it. Empty cut-out texels are transparent to the light
+/// (dappled foliage shadows), and a transparent occluder (glass, water)
+/// dims the light by its effective transparency at that texel instead of
+/// casting a hard black shadow. An unknown material blocks fully.
+pub fn light_visibility(scene: &VoxelScene, ray: &Ray, max_distance: f32) -> f32 {
+    let mut visibility = 1.0;
+    let mut current = *ray;
+    let mut remaining = max_distance;
+
+    for _ in 0..MAX_SHADOW_HITS {
+        let Some(voxel) = nearest_visible_hit(scene, &current, remaining) else {
+            break;
+        };
+
+        let transparency = scene
+            .materials
+            .get(voxel.block.material_id())
+            .map_or(0.0, |material| {
+                let texel = sample_albedo(
+                    material,
+                    voxel.hit.face,
+                    voxel.hit.uv,
+                    scene.texture_manager,
+                );
+                material.effective_transparency(texel.a).clamp(0.0, 1.0)
+            });
+
+        visibility *= transparency;
+        if visibility <= 0.0 {
+            return 0.0;
+        }
+
+        let advance = voxel.hit.distance + REJECTED_HIT_ADVANCE;
+        remaining -= advance;
+        if remaining <= 0.0 {
+            break;
+        }
+        current = Ray::new(current.at(advance), current.direction);
+    }
+
+    visibility
+}
+
 /// Traces `ray` through the scene at recursion `depth`.
 ///
 /// The nearest real voxel hit is shaded locally (ambient + diffuse + specular
@@ -394,7 +527,7 @@ fn mix(a: Color, b: Color, t: f32) -> Color {
 /// its local color untouched. A miss returns `background`; a voxel whose
 /// `MaterialId` is unknown returns `MISSING_MATERIAL_COLOR`.
 pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
-    let Some(voxel) = nearest_voxel_hit(scene.world, ray, scene.max_distance) else {
+    let Some(voxel) = nearest_visible_hit(scene, ray, scene.max_distance) else {
         return scene.background;
     };
 
@@ -402,9 +535,17 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         return MISSING_MATERIAL_COLOR;
     };
 
+    // A cut-out surface can be reached from the back, through a hole in the
+    // near face: light it from the side the ray actually sees.
+    let shading_normal = if material.alpha_mode == AlphaMode::Cutout {
+        facing_normal(ray, voxel.hit.normal)
+    } else {
+        voxel.hit.normal
+    };
+
     let surface = SurfaceHit {
         point: voxel.hit.point,
-        normal: voxel.hit.normal,
+        normal: shading_normal,
         face: voxel.hit.face,
         uv: voxel.hit.uv,
         material,
@@ -425,7 +566,7 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         scene.ambient_factor,
         scene.texture_manager,
         shadows::DIRECTIONAL_SHADOW_RANGE.min(scene.max_distance),
-        |shadow_ray, shadow_distance| is_voxel_occluded(scene.world, shadow_ray, shadow_distance),
+        |shadow_ray, shadow_distance| light_visibility(scene, shadow_ray, shadow_distance),
     );
 
     let transparency = material

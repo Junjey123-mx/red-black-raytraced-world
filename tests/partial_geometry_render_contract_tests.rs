@@ -689,7 +689,9 @@ fn traversal_never_falls_back_to_a_full_cube_for_partial_blocks() {
         env!("CARGO_MANIFEST_DIR")
     ))
     .unwrap();
-    let start = source.find("pub fn nearest_voxel_hit").unwrap();
+    // `nearest_voxel_hit` delegates to `nearest_voxel_hit_where`, which owns
+    // the DDA loop and the local block-geometry intersection.
+    let start = source.find("pub fn nearest_voxel_hit_where").unwrap();
     let end = source[start..].find("\n}\n").unwrap() + start;
     let body = &source[start..end];
 

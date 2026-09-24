@@ -36,7 +36,15 @@ pub enum AlphaMode {
     /// `transparency`: a texel with alpha 1 (e.g. a glass frame) is fully
     /// solid, alpha 0 leaves the material's own `transparency` untouched.
     Blend,
+    /// Binary per-texel visibility: a texel with alpha below
+    /// `CUTOUT_ALPHA_THRESHOLD` is *air* and the hit there is discarded
+    /// (primary and shadow rays continue behind it); any other texel is
+    /// fully solid. Never blended, never refracted (foliage, not glass).
+    Cutout,
 }
+
+/// Texels whose alpha is below this value are empty under `AlphaMode::Cutout`.
+pub const CUTOUT_ALPHA_THRESHOLD: f32 = 0.5;
 
 /// CPU surface material: the central optical contract of the renderer.
 ///
@@ -165,12 +173,18 @@ impl Material {
         self
     }
 
+    /// `true` when a hit at a texel with this alpha must be discarded because
+    /// the texel is empty. Only `AlphaMode::Cutout` ever discards.
+    pub fn is_cut_out(&self, texel_alpha: f32) -> bool {
+        self.alpha_mode == AlphaMode::Cutout && finite_or(texel_alpha, 1.0) < CUTOUT_ALPHA_THRESHOLD
+    }
+
     /// Transparency at a surface point given the albedo texel's alpha.
     /// `Ignore` returns the material value; `Blend` lets an opaque texel
     /// (alpha 1) cancel it: `transparency * (1 - alpha)`.
     pub fn effective_transparency(&self, texel_alpha: f32) -> f32 {
         match self.alpha_mode {
-            AlphaMode::Ignore => self.transparency,
+            AlphaMode::Ignore | AlphaMode::Cutout => self.transparency,
             AlphaMode::Blend => {
                 self.transparency * (1.0 - finite_or(texel_alpha, 1.0).clamp(0.0, 1.0))
             }

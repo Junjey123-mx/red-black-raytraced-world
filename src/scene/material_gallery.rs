@@ -50,6 +50,10 @@ pub fn backdrop_blue_material_id() -> MaterialId {
     MaterialId::new(17)
 }
 
+pub fn leaves_material_id() -> MaterialId {
+    MaterialId::new(18)
+}
+
 /// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in `0..GALLERY_DEPTH`.
 pub const GALLERY_WIDTH: i32 = 12;
 pub const GALLERY_DEPTH: i32 = 7;
@@ -59,6 +63,11 @@ const FRONT_Z: i32 = 5;
 /// Backdrop cubes sit just behind the transmissive specimens.
 const BACKDROP_Z: i32 = 3;
 
+/// Back row of specimens (`z = 1`), with a red cube right behind the leaves
+/// so the holes of the cut-out texture visibly show what lies beyond.
+const BACK_Z: i32 = 1;
+
+pub const LEAVES_X: i32 = 1;
 pub const MATTE_X: i32 = 1;
 pub const MIRROR_X: i32 = 4;
 pub const GLASS_X: i32 = 7;
@@ -70,6 +79,9 @@ pub const WATER_X: i32 = 10;
 /// ```text
 /// Matte control x=1   Mirror x=4   Glass x=7   Water x=10
 /// ```
+///
+/// Back row (`z = 1`): a Leaves cube (alpha cutout) at `x=1`, with a red cube
+/// directly behind it.
 ///
 /// A red and a blue cube stand behind the glass and the water so the
 /// refracted view of them is unmistakable.
@@ -102,6 +114,14 @@ pub fn advanced_materials_world() -> VoxelWorld {
     place(GLASS_X, FRONT_Z, BlockType::Glass, glass_material_id());
     place(WATER_X, FRONT_Z, BlockType::Water, water_material_id());
 
+    place(LEAVES_X, BACK_Z, BlockType::Leaves, leaves_material_id());
+    place(
+        LEAVES_X,
+        BACK_Z - 1,
+        BlockType::Stone,
+        backdrop_red_material_id(),
+    );
+
     place(
         GLASS_X,
         BACKDROP_Z,
@@ -122,6 +142,7 @@ pub fn advanced_materials_world() -> VoxelWorld {
 pub struct GalleryTextures {
     pub glass: FaceTextures,
     pub water: FaceTextures,
+    pub leaves: FaceTextures,
 }
 
 impl GalleryTextures {
@@ -133,10 +154,12 @@ impl GalleryTextures {
     ) -> Result<Self, TextureLoadError> {
         let glass = manager.load(format!("{overworld_dir}/glass.png"))?;
         let water = manager.load(format!("{overworld_dir}/water.png"))?;
+        let leaves = manager.load(format!("{overworld_dir}/leaves.png"))?;
 
         Ok(Self {
             glass: FaceTextures::uniform(glass),
             water: FaceTextures::uniform(water),
+            leaves: FaceTextures::uniform(leaves),
         })
     }
 }
@@ -147,6 +170,7 @@ impl GalleryTextures {
 /// - Water: lower transparency, IOR 1.33, strong specular, partial reflection.
 /// - Mirror: a diagnostic polished control (not a catalog block) with a
 ///   deliberately strong `reflectivity` so the bounce reads at a glance.
+/// - Leaves: alpha cutout foliage — opaque or air per texel, never refractive.
 /// - Everything else is a plain matte control.
 pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary {
     let mut library = MaterialLibrary::new();
@@ -161,6 +185,12 @@ pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary
     library.insert(
         mirror_material_id(),
         Material::new(Color::new(0.75, 0.78, 0.80, 1.0), 0.5, 60.0).with_reflectivity(0.65),
+    );
+    library.insert(
+        leaves_material_id(),
+        Material::new(Color::new(0.30, 0.45, 0.20, 1.0), 0.03, 4.0)
+            .with_face_textures(textures.leaves)
+            .with_alpha_mode(AlphaMode::Cutout),
     );
     library.insert(
         glass_material_id(),
