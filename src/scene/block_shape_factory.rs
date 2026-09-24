@@ -29,10 +29,23 @@ fn wood_stairs() -> BlockGeometry {
     ])
 }
 
+/// A stand-alone fence facing South, upright: a central post plus two rails
+/// running east-west through it. There is no neighbor-aware connection
+/// logic; the rails simply span the cell so the silhouette reads as a
+/// post-and-rail fence with real gaps between the rails.
+fn fence() -> BlockGeometry {
+    composite(vec![
+        prism([0.375, 0.0, 0.375], [0.625, 1.0, 0.625]),
+        prism([0.0, 0.375, 0.4375], [1.0, 0.5625, 0.5625]),
+        prism([0.0, 0.75, 0.4375], [1.0, 0.9375, 0.5625]),
+    ])
+}
+
 /// The shape of `block_type` in its canonical pose (facing South, upright).
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
         BlockType::WoodStairs => wood_stairs(),
+        BlockType::Fence => fence(),
         _ => BlockGeometry::FullCube,
     }
 }
