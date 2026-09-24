@@ -8,4 +8,5 @@ pub mod math;
 pub mod prism;
 pub mod ray;
 pub mod reflection;
+pub mod refraction;
 pub mod texture;
