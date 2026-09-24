@@ -10,6 +10,9 @@ mod core {
         pub use ivec3::IVec3;
         pub use vec3::Vec3;
     }
+
+    #[path = "../src/core/ray.rs"]
+    pub mod ray;
 }
 
 #[path = "."]
