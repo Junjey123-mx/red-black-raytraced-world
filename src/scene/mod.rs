@@ -1,6 +1,7 @@
 pub mod block;
 pub mod block_geometry;
 pub mod block_type;
+pub mod geometry_orientation;
 pub mod light;
 pub mod orientation;
 pub mod scene;
