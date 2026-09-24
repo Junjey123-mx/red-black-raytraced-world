@@ -59,6 +59,8 @@ mod scene {
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/material_library.rs"]
+    pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
     #[path = "../src/scene/scene.rs"]
@@ -85,8 +87,6 @@ mod renderer {
     pub mod voxel_traversal;
 }
 
-use std::collections::HashMap;
-
 use camera::{Camera, primary_ray};
 use core::color::Color;
 use core::face_textures::FaceTextures;
@@ -104,6 +104,7 @@ use renderer::texture_sampling::sample_nearest;
 use scene::block::BlockInstance;
 use scene::block_type::BlockType;
 use scene::light::{DirectionalLight, Light, PointLight};
+use scene::material_library::MaterialLibrary;
 use scene::orientation::Orientation;
 use scene::scene::{
     diagnostic_materials, diagnostic_voxel_world, grass_material_id, stone_material_id,
@@ -352,12 +353,12 @@ fn material_ids_resolve_to_the_expected_diagnostic_materials() {
     assert_eq!(grass_block.material_id(), grass_material_id());
     assert_eq!(stone_block.material_id(), stone_material_id());
 
-    let grass = &materials[&grass_block.material_id()];
+    let grass = materials.get(grass_block.material_id()).unwrap();
     assert!(grass.face_textures.is_some());
     assert!(approx(grass.specular, 0.04));
     assert!(approx(grass.shininess, 8.0));
 
-    let stone = &materials[&stone_block.material_id()];
+    let stone = materials.get(stone_block.material_id()).unwrap();
     assert!(stone.face_textures.is_none());
 }
 
@@ -370,7 +371,7 @@ fn every_voxel_in_the_scene_has_a_material_in_the_map() {
     for position in all_terrain_cells() {
         if let Some(block) = world.get(position) {
             assert!(
-                materials.contains_key(&block.material_id()),
+                materials.contains(block.material_id()),
                 "missing material at {position:?}"
             );
         }
@@ -384,7 +385,7 @@ fn a_voxel_with_an_unknown_material_renders_the_loud_missing_color() {
         cell(0, 0, 0),
         BlockInstance::new(BlockType::Stone, MaterialId::new(999), Orientation::Up),
     );
-    let materials: HashMap<MaterialId, Material> = HashMap::new();
+    let materials: MaterialLibrary = MaterialLibrary::new();
     let manager = TextureManager::new();
     let ray = make_ray((0.5, 5.0, 0.5), (0.0, -1.0, 0.0));
 
@@ -521,8 +522,8 @@ fn a_voxel_behind_a_point_light_does_not_block_it() {
     assert!(!is_voxel_occluded(&behind, &ray, distance));
 }
 
-fn matte_materials() -> HashMap<MaterialId, Material> {
-    let mut materials = HashMap::new();
+fn matte_materials() -> MaterialLibrary {
+    let mut materials = MaterialLibrary::new();
     materials.insert(
         MaterialId::new(9),
         Material::matte(Color::new(0.6, 0.6, 0.6, 1.0)),

@@ -3,14 +3,13 @@
 // noise, no rhombus, no house, pond, portal, or Red-Black content.
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::material::{Material, MaterialId};
 use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
+use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 use crate::scene::voxel_world::VoxelWorld;
@@ -50,13 +49,12 @@ pub fn diagnostic_voxel_world() -> VoxelWorld {
     world
 }
 
-/// The minimal `MaterialId -> Material` map for the diagnostic terrain (not
-/// a `MaterialLibrary`): grass uses the real Grass Block face textures with
+/// The `MaterialLibrary` for the diagnostic terrain: grass uses the real Grass Block face textures with
 /// the project's subtle Grass specular, and stone is a plain matte uniform
 /// material, showing that uniform materials keep working next to textured
 /// ones.
-pub fn diagnostic_materials(grass_face_textures: FaceTextures) -> HashMap<MaterialId, Material> {
-    let mut materials = HashMap::new();
+pub fn diagnostic_materials(grass_face_textures: FaceTextures) -> MaterialLibrary {
+    let mut materials = MaterialLibrary::new();
 
     materials.insert(
         grass_material_id(),
@@ -234,9 +232,7 @@ impl PartialSceneTextures {
 /// Materials for the gallery: terrain plus textured wood, door halves, and
 /// the dark-crimson portal core (no emission or translucency yet), and a
 /// uniform matte violet for amethyst (no optics yet).
-pub fn diagnostic_partial_materials(
-    textures: &PartialSceneTextures,
-) -> HashMap<MaterialId, Material> {
+pub fn diagnostic_partial_materials(textures: &PartialSceneTextures) -> MaterialLibrary {
     let mut materials = diagnostic_materials(textures.grass);
 
     materials.insert(

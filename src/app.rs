@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use raylib::prelude::*;
 
 use crate::camera::camera::Camera;
 use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
-use crate::core::material::{Material, MaterialId};
 use crate::core::math::Vec3;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
+use crate::scene::material_library::MaterialLibrary;
 use crate::scene::scene::{
     PartialSceneTextures, diagnostic_partial_materials, diagnostic_partial_voxel_world,
 };
@@ -47,7 +45,7 @@ fn render(
     framebuffer: &mut Framebuffer,
     camera: &Camera,
     world: &VoxelWorld,
-    materials: &HashMap<MaterialId, Material>,
+    materials: &MaterialLibrary,
     lights: &[Light],
     background: CpuColor,
     texture_manager: &TextureManager,
@@ -122,8 +120,8 @@ pub fn run() {
 
     // The visible scene is the mixed partial-geometry diagnostic VoxelWorld
     // (stairs, fence, door, portal core, amethyst cluster); blocks reference
-    // their material by `MaterialId`, resolved through this minimal
-    // diagnostic map.
+    // their material by `MaterialId`, resolved through the
+    // scene `MaterialLibrary`.
     let world = diagnostic_partial_voxel_world();
     let materials = diagnostic_partial_materials(&scene_textures);
 

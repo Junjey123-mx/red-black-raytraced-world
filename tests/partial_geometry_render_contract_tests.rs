@@ -59,6 +59,8 @@ mod scene {
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/material_library.rs"]
+    pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
     #[path = "../src/scene/scene.rs"]
@@ -85,13 +87,10 @@ mod renderer {
     pub mod voxel_traversal;
 }
 
-use std::collections::HashMap;
-
 use camera::{Camera, primary_ray};
 use core::color::Color;
 use core::face_textures::FaceTextures;
 use core::hit::Face;
-use core::material::{Material, MaterialId};
 use core::math::{IVec3, Vec3};
 use core::ray::Ray;
 use renderer::framebuffer::Framebuffer;
@@ -104,6 +103,7 @@ use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
 use scene::block_type::BlockType;
 use scene::light::{DirectionalLight, Light, PointLight};
+use scene::material_library::MaterialLibrary;
 use scene::orientation::Orientation;
 use scene::scene::{
     PartialSceneTextures, diagnostic_partial_materials, diagnostic_partial_voxel_world,
@@ -584,7 +584,7 @@ fn mixed_scene_lights() -> [Light; 2] {
 fn the_mixed_scene_renders_lit_without_missing_materials() {
     let world = diagnostic_partial_voxel_world();
     let (textures, scene_textures) = scene_textures();
-    let materials: HashMap<MaterialId, Material> = diagnostic_partial_materials(&scene_textures);
+    let materials: MaterialLibrary = diagnostic_partial_materials(&scene_textures);
     let lights = mixed_scene_lights();
     let camera = app_camera();
     let background = Color::new(0.05, 0.05, 0.08, 1.0);

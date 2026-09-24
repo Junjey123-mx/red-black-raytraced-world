@@ -48,6 +48,8 @@ mod scene {
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
+    #[path = "../src/scene/material_library.rs"]
+    pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
     #[path = "../src/scene/texture_manager.rs"]

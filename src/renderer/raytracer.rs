@@ -2,12 +2,10 @@
 // loop that will call `cast_ray`/`cast_ray_lit` once per pixel.
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-
 use crate::core::color::Color;
 use crate::core::cube::Cube;
 use crate::core::hit::{Face, HitRecord};
-use crate::core::material::{Material, MaterialId};
+use crate::core::material::Material;
 use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::renderer::shading;
@@ -17,6 +15,7 @@ use crate::renderer::voxel_traversal::DdaState;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_shape_factory::block_geometry;
 use crate::scene::light::Light;
+use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 
@@ -300,8 +299,8 @@ pub const MISSING_MATERIAL_COLOR: Color = Color {
 };
 
 /// Full voxel render path for one primary ray: `VoxelWorld` + 3D DDA finds
-/// the first real voxel hit, its `MaterialId` is resolved through
-/// `materials`, the albedo comes from the same `FaceTextures` /
+/// the first real voxel hit, its `MaterialId` is resolved through the
+/// `MaterialLibrary`, the albedo comes from the same `FaceTextures` /
 /// `sample_nearest(hit.uv)` route as before, and ambient + diffuse +
 /// specular are evaluated by the shared `shade_surface`. Shadow rays query
 /// the *same* `world` through `is_voxel_occluded`.
@@ -312,7 +311,7 @@ pub const MISSING_MATERIAL_COLOR: Color = Color {
 #[allow(clippy::too_many_arguments)]
 pub fn cast_ray_voxel_lit(
     world: &VoxelWorld,
-    materials: &HashMap<MaterialId, Material>,
+    materials: &MaterialLibrary,
     ray: &Ray,
     camera_position: Vec3,
     lights: &[Light],
@@ -325,7 +324,7 @@ pub fn cast_ray_voxel_lit(
         return background;
     };
 
-    let Some(material) = materials.get(&voxel.block.material_id()) else {
+    let Some(material) = materials.get(voxel.block.material_id()) else {
         return MISSING_MATERIAL_COLOR;
     };
 
