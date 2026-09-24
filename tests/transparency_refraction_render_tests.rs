@@ -74,6 +74,8 @@ mod scene {
 
 #[path = "."]
 mod renderer {
+    #[path = "../src/renderer/emission.rs"]
+    pub mod emission;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
     #[path = "../src/renderer/shading.rs"]
@@ -233,7 +235,12 @@ fn an_object_behind_a_transparent_material_contributes_to_its_color() {
 #[test]
 fn glass_and_water_use_their_expected_indices_of_refraction() {
     let mut manager = TextureManager::new();
-    let textures = GalleryTextures::load(&mut manager, "assets/textures/overworld").unwrap();
+    let textures = GalleryTextures::load(
+        &mut manager,
+        "assets/textures/overworld",
+        "assets/textures/portal",
+    )
+    .unwrap();
     let library = advanced_materials_library(&textures);
 
     let glass = library.get(glass_material_id()).unwrap();
@@ -388,7 +395,12 @@ fn texture_alpha_only_matters_in_blend_mode() {
 #[test]
 fn a_glass_frame_texel_is_opaque_while_a_clear_texel_is_transmissive() {
     let mut manager = TextureManager::new();
-    let textures = GalleryTextures::load(&mut manager, "assets/textures/overworld").unwrap();
+    let textures = GalleryTextures::load(
+        &mut manager,
+        "assets/textures/overworld",
+        "assets/textures/portal",
+    )
+    .unwrap();
     let library = advanced_materials_library(&textures);
     let glass = library.get(glass_material_id()).unwrap();
     assert_eq!(glass.alpha_mode, AlphaMode::Blend);

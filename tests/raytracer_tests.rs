@@ -64,6 +64,8 @@ mod scene {
 
 #[path = "."]
 mod renderer {
+    #[path = "../src/renderer/emission.rs"]
+    pub mod emission;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
     #[path = "../src/renderer/shading.rs"]

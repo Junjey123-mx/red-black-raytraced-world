@@ -59,8 +59,14 @@ pub fn redstone_lamp_material_id() -> MaterialId {
     MaterialId::new(19)
 }
 
-/// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in `0..GALLERY_DEPTH`.
+pub fn portal_core_material_id() -> MaterialId {
+    MaterialId::new(20)
+}
+
+/// Floor of the gallery: `x` in `0..GALLERY_WIDTH`, `z` in
+/// `GALLERY_Z_MIN..GALLERY_DEPTH`.
 pub const GALLERY_WIDTH: i32 = 12;
+pub const GALLERY_Z_MIN: i32 = -1;
 pub const GALLERY_DEPTH: i32 = 7;
 
 /// Front row (closest to the camera) of specimens, at `y = 1`.
@@ -68,11 +74,13 @@ const FRONT_Z: i32 = 5;
 /// Backdrop cubes sit just behind the transmissive specimens.
 const BACKDROP_Z: i32 = 3;
 
-/// Back row of specimens (`z = 1`), with a red cube right behind the leaves
+/// Back row of specimens (`z = 0`), with a red cube right behind the leaves
 /// so the holes of the cut-out texture visibly show what lies beyond.
-const BACK_Z: i32 = 1;
+const BACK_Z: i32 = 0;
 
 pub const LEAVES_X: i32 = 1;
+pub const LAMP_X: i32 = 4;
+pub const PORTAL_X: i32 = 8;
 pub const MATTE_X: i32 = 1;
 pub const MIRROR_X: i32 = 4;
 pub const GLASS_X: i32 = 7;
@@ -85,15 +93,18 @@ pub const WATER_X: i32 = 10;
 /// Matte control x=1   Mirror x=4   Glass x=7   Water x=10
 /// ```
 ///
-/// Back row (`z = 1`): a Leaves cube (alpha cutout) at `x=1`, with a red cube
-/// directly behind it.
+/// Back row (`z = 0`):
+///
+/// ```text
+/// Leaves x=1 (red cube behind)   Redstone Lamp x=4   Portal core x=7
+/// ```
 ///
 /// A red and a blue cube stand behind the glass and the water so the
 /// refracted view of them is unmistakable.
 pub fn advanced_materials_world() -> VoxelWorld {
     let mut world = VoxelWorld::new();
 
-    for z in 0..GALLERY_DEPTH {
+    for z in GALLERY_Z_MIN..GALLERY_DEPTH {
         for x in 0..GALLERY_WIDTH {
             let id = if (x + z) % 2 == 0 {
                 checker_light_material_id()
@@ -128,6 +139,13 @@ pub fn advanced_materials_world() -> VoxelWorld {
     );
 
     place(
+        LAMP_X,
+        BACK_Z,
+        BlockType::RedstoneLampLit,
+        redstone_lamp_material_id(),
+    );
+
+    place(
         GLASS_X,
         BACKDROP_Z,
         BlockType::Stone,
@@ -140,6 +158,16 @@ pub fn advanced_materials_world() -> VoxelWorld {
         backdrop_blue_material_id(),
     );
 
+    // The portal membrane is a thin plane: broad faces toward the camera.
+    world.insert(
+        IVec3::new(PORTAL_X, 1, BACK_Z),
+        BlockInstance::new(
+            BlockType::PortalCoreDarkCrimson,
+            portal_core_material_id(),
+            Orientation::South,
+        ),
+    );
+
     world
 }
 
@@ -150,20 +178,26 @@ pub struct GalleryTextures {
     pub leaves: FaceTextures,
     pub redstone_lamp: FaceTextures,
     pub redstone_lamp_emissive: TextureId,
+    pub portal_core: FaceTextures,
+    pub portal_core_emissive: TextureId,
 }
 
 impl GalleryTextures {
-    /// Loads the gallery PNGs from `overworld_dir` (`glass.png`, `water.png`)
-    /// once, through the shared `TextureManager`.
+    /// Loads the gallery PNGs once, through the shared `TextureManager`:
+    /// the Overworld ones from `overworld_dir` and the portal core from
+    /// `portal_dir`.
     pub fn load(
         manager: &mut TextureManager,
         overworld_dir: &str,
+        portal_dir: &str,
     ) -> Result<Self, TextureLoadError> {
         let glass = manager.load(format!("{overworld_dir}/glass.png"))?;
         let water = manager.load(format!("{overworld_dir}/water.png"))?;
         let leaves = manager.load(format!("{overworld_dir}/leaves.png"))?;
         let lamp_albedo = manager.load(format!("{overworld_dir}/redstone_lamp/albedo.png"))?;
         let lamp_emissive = manager.load(format!("{overworld_dir}/redstone_lamp/emissive.png"))?;
+        let portal_albedo = manager.load(format!("{portal_dir}/core_albedo.png"))?;
+        let portal_emissive = manager.load(format!("{portal_dir}/core_emissive.png"))?;
 
         Ok(Self {
             glass: FaceTextures::uniform(glass),
@@ -171,6 +205,8 @@ impl GalleryTextures {
             leaves: FaceTextures::uniform(leaves),
             redstone_lamp: FaceTextures::uniform(lamp_albedo),
             redstone_lamp_emissive: lamp_emissive,
+            portal_core: FaceTextures::uniform(portal_albedo),
+            portal_core_emissive: portal_emissive,
         })
     }
 }
@@ -185,6 +221,9 @@ impl GalleryTextures {
 /// - Redstone Lamp (lit): albedo plus a separate emissive mask, so only the
 ///   amber panels are self-luminous (`emission_strength` 1.8, the low end of
 ///   the documented 1.8-3.0 range); the dark-brown frame does not emit.
+/// - Portal core: dark-crimson/wine albedo with a separate emissive mask on the
+///   brighter swirls only, mild transparency (0.25, inside the documented
+///   0.20-0.35) and no refraction (IOR 1); strongly emissive (2.5).
 /// - Everything else is a plain matte control.
 pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary {
     let mut library = MaterialLibrary::new();
@@ -212,6 +251,15 @@ pub fn advanced_materials_library(textures: &GalleryTextures) -> MaterialLibrary
             .with_face_textures(textures.redstone_lamp)
             .with_emissive_texture(textures.redstone_lamp_emissive)
             .with_emission_strength(1.8),
+    );
+    library.insert(
+        portal_core_material_id(),
+        Material::new(Color::new(0.42, 0.05, 0.18, 1.0), 0.12, 30.0)
+            .with_face_textures(textures.portal_core)
+            .with_emissive_texture(textures.portal_core_emissive)
+            .with_emission_strength(2.5)
+            .with_transparency(0.25)
+            .with_reflectivity(0.03),
     );
     library.insert(
         glass_material_id(),
@@ -246,7 +294,7 @@ pub fn gallery_background() -> Color {
 pub fn gallery_camera(aspect_ratio: f32) -> Camera {
     Camera::new(
         Vec3::new(6.0, 5.6, 14.0),
-        Vec3::new(6.0, 0.6, 2.6),
+        Vec3::new(6.0, 0.6, 2.2),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
@@ -254,7 +302,10 @@ pub fn gallery_camera(aspect_ratio: f32) -> Camera {
 }
 
 /// A soft overhead directional fill plus a stronger point light above the
-/// front row, casting hard shadows and driving the specular highlights.
+/// front row, casting shadows and driving the specular highlights, and two
+/// small representative point lights for the emissive specimens (warm for the
+/// redstone lamp, dark crimson for the portal) so they tint their
+/// surroundings without any global illumination.
 pub fn gallery_lights() -> Vec<Light> {
     vec![
         Light::Directional(DirectionalLight::new(
@@ -266,6 +317,16 @@ pub fn gallery_lights() -> Vec<Light> {
             Vec3::new(2.0, 8.0, 9.0),
             Color::white(),
             1.0,
+        )),
+        Light::Point(PointLight::new(
+            Vec3::new(LAMP_X as f32 + 0.5, 2.6, 1.2),
+            Color::new(1.0, 0.68, 0.32, 1.0),
+            0.3,
+        )),
+        Light::Point(PointLight::new(
+            Vec3::new(PORTAL_X as f32 + 0.5, 1.5, 1.4),
+            Color::new(0.75, 0.10, 0.30, 1.0),
+            0.4,
         )),
     ]
 }

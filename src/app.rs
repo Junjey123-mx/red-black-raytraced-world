@@ -17,13 +17,14 @@ use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 
 const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
+const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
 
 /// Loads every gallery PNG once through a single `TextureManager` and
 /// returns it with the per-face texture mappings. Called exactly once during
 /// scene setup, never per pixel/frame.
 fn load_scene_textures() -> (TextureManager, GalleryTextures) {
     let mut manager = TextureManager::new();
-    let textures = GalleryTextures::load(&mut manager, OVERWORLD_TEXTURES_DIR)
+    let textures = GalleryTextures::load(&mut manager, OVERWORLD_TEXTURES_DIR, PORTAL_TEXTURES_DIR)
         .expect("missing gallery texture");
 
     (manager, textures)

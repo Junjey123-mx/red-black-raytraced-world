@@ -74,6 +74,8 @@ mod scene {
 
 #[path = "."]
 mod renderer {
+    #[path = "../src/renderer/emission.rs"]
+    pub mod emission;
     #[path = "../src/renderer/raytracer.rs"]
     pub mod raytracer;
     #[path = "../src/renderer/shading.rs"]
@@ -143,7 +145,12 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     let mut manager = TextureManager::new();
-    let textures = GalleryTextures::load(&mut manager, "assets/textures/overworld").unwrap();
+    let textures = GalleryTextures::load(
+        &mut manager,
+        "assets/textures/overworld",
+        "assets/textures/portal",
+    )
+    .unwrap();
     let mut library = advanced_materials_library(&textures);
     library.insert(MaterialId::new(RED), Material::matte(red()));
 

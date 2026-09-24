@@ -77,6 +77,8 @@ mod scene {
 
 #[path = "."]
 mod renderer {
+    #[path = "../src/renderer/emission.rs"]
+    pub mod emission;
     #[path = "../src/renderer/framebuffer.rs"]
     pub mod framebuffer;
     #[path = "../src/renderer/raytracer.rs"]

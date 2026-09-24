@@ -10,6 +10,7 @@ use crate::core::math::{IVec3, Vec2, Vec3};
 use crate::core::ray::Ray;
 use crate::core::reflection::reflect;
 use crate::core::refraction::refract;
+use crate::renderer::emission::sample_emissive;
 use crate::renderer::shading;
 use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
@@ -203,15 +204,19 @@ struct SurfaceHit<'a> {
 
 /// The local-lighting result split into the pieces transparent materials
 /// need: `full` is the classic ambient + diffuse + specular sum (what an
-/// opaque surface shows); `ambient`, `body` (ambient + diffuse, no
-/// highlight) and `specular` let a transparent surface keep its highlights
-/// at full strength while its body color is blended with what lies behind.
+/// opaque surface shows, plus emission); `ambient`, `body` (ambient +
+/// diffuse, no highlight, no emission) and `specular` let a transparent
+/// surface keep its highlights and self-emission at full strength while its
+/// body color is blended with what lies behind. `emissive` is the
+/// UV-masked self-emitted radiance: it is independent of every light and
+/// shadow, so an emissive texel stays visible in complete darkness.
 /// `texel_alpha` is the albedo texel's alpha (see `AlphaMode`).
 struct LocalShading {
     full: Color,
     ambient: Color,
     body: Color,
     specular: Color,
+    emissive: Color,
     texel_alpha: f32,
 }
 
@@ -297,11 +302,16 @@ fn shade_surface(
         }
     }
 
+    // Emission is added after (and regardless of) the lights and shadows.
+    let emissive = sample_emissive(material, surface.uv, texture_manager);
+    full = full + emissive;
+
     LocalShading {
         full: full.clamp(),
         ambient,
         body: body.clamp(),
         specular: specular.clamp(),
+        emissive,
         texel_alpha,
     }
 }
@@ -607,14 +617,17 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         };
 
         // The back face of a medium is only seen through it: tint with the
-        // ambient body color and skip lit body/highlights there.
-        let (body, specular) = if exiting {
-            (local.ambient, Color::black())
+        // ambient body color and skip lit body, highlights and emission there
+        // (a self-luminous membrane such as the portal core is counted once,
+        // on the face the viewer meets first).
+        let (body, specular, emissive) = if exiting {
+            (local.ambient, Color::black(), Color::black())
         } else {
-            (local.body, local.specular)
+            (local.body, local.specular, local.emissive)
         };
         surface_color =
-            (body * (1.0 - transparency) + transmitted * transparency + specular).clamp();
+            (body * (1.0 - transparency) + transmitted * transparency + specular + emissive)
+                .clamp();
     }
 
     if reflectivity > 0.0 {
