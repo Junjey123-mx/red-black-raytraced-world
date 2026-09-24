@@ -48,12 +48,21 @@ fn wood_door() -> BlockGeometry {
     BlockGeometry::prism(prism([0.0, 0.0, 0.8125], [1.0, 1.0, 1.0]))
 }
 
+/// The portal membrane facing South: a thin vertical plane-like slab
+/// (1/8 thick) centered in the cell and spanning its full width and height,
+/// so adjacent core cells tile into one continuous surface inside the frame.
+/// Geometry only: color, emission, and translucency are not part of it.
+fn portal_core() -> BlockGeometry {
+    BlockGeometry::prism(prism([0.0, 0.0, 0.4375], [1.0, 1.0, 0.5625]))
+}
+
 /// The shape of `block_type` in its canonical pose (facing South, upright).
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
         BlockType::WoodStairs => wood_stairs(),
         BlockType::Fence => fence(),
         BlockType::WoodDoor => wood_door(),
+        BlockType::PortalCoreDarkCrimson => portal_core(),
         _ => BlockGeometry::FullCube,
     }
 }
