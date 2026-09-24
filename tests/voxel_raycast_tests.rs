@@ -26,6 +26,8 @@ mod core {
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
+    #[path = "../src/core/prism.rs"]
+    pub mod prism;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
     #[path = "../src/core/texture.rs"]
@@ -36,8 +38,14 @@ mod core {
 mod scene {
     #[path = "../src/scene/block.rs"]
     pub mod block;
+    #[path = "../src/scene/block_geometry.rs"]
+    pub mod block_geometry;
+    #[path = "../src/scene/block_shape_factory.rs"]
+    pub mod block_shape_factory;
     #[path = "../src/scene/block_type.rs"]
     pub mod block_type;
+    #[path = "../src/scene/geometry_orientation.rs"]
+    pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
     #[path = "../src/scene/orientation.rs"]
@@ -262,8 +270,10 @@ fn traversal_continues_past_a_rejected_candidate_to_the_real_hit() {
 // ---------------------------------------------------------------------
 
 fn tagged_world() -> VoxelWorld {
+    // A full-cube block type: WoodStairs became a partial shape in Gate 06,
+    // and this fixture only needs *some* recognizable non-Stone type.
     let block = BlockInstance::new(
-        BlockType::WoodStairs,
+        BlockType::DoubleWoodSlab,
         MaterialId::new(42),
         Orientation::Down,
     );
@@ -277,7 +287,7 @@ fn tagged_ray() -> Ray {
 #[test]
 fn the_hit_preserves_block_type() {
     let voxel = nearest_voxel_hit(&tagged_world(), &tagged_ray(), FAR).unwrap();
-    assert_eq!(voxel.block.block_type(), BlockType::WoodStairs);
+    assert_eq!(voxel.block.block_type(), BlockType::DoubleWoodSlab);
 }
 
 #[test]

@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 use crate::core::hit::{Face, HitRecord};
+use crate::core::math::Vec3;
 use crate::core::prism::Prism;
 use crate::core::ray::Ray;
 
@@ -100,12 +101,26 @@ impl BlockGeometry {
         matches!(self, BlockGeometry::FullCube)
     }
 
+    /// The same shape shifted by `offset` (for example a cell's world-space
+    /// origin). A `FullCube` becomes the equivalent unit prism, since it is
+    /// no longer the canonical cell `[0, 1]^3`.
+    pub fn translated(&self, offset: Vec3) -> Self {
+        match self {
+            BlockGeometry::FullCube => BlockGeometry::Prism(Prism::unit().translated(offset)),
+            BlockGeometry::Prism(prism) => BlockGeometry::Prism(prism.translated(offset)),
+            BlockGeometry::Composite(parts) => {
+                BlockGeometry::Composite(parts.iter().map(|part| part.translated(offset)).collect())
+            }
+        }
+    }
+
     /// Nearest valid hit of `ray` against this shape, with the ray given in
     /// the same space as the geometry (local cell space for a freshly built
-    /// shape). `FullCube` and `Prism` go through `Prism::intersect`
-    /// (`Cube::intersect` underneath); a `Composite` intersects every part
-    /// and keeps the hit with the smallest distance, so the order of the
-    /// parts never changes the result.
+    /// shape, world space once `translated` to a cell). `FullCube` and
+    /// `Prism` go through `Prism::intersect` (`Cube::intersect` underneath);
+    /// a `Composite` intersects every part and keeps the hit with the
+    /// smallest distance, so the order of the parts never changes the
+    /// result.
     pub fn intersect_local(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         match self {
             BlockGeometry::FullCube => Prism::unit().intersect(ray, t_min, t_max),

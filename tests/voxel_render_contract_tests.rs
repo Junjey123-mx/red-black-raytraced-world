@@ -26,6 +26,8 @@ mod core {
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
+    #[path = "../src/core/prism.rs"]
+    pub mod prism;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
     #[path = "../src/core/texture.rs"]
@@ -47,8 +49,14 @@ mod camera {
 mod scene {
     #[path = "../src/scene/block.rs"]
     pub mod block;
+    #[path = "../src/scene/block_geometry.rs"]
+    pub mod block_geometry;
+    #[path = "../src/scene/block_shape_factory.rs"]
+    pub mod block_shape_factory;
     #[path = "../src/scene/block_type.rs"]
     pub mod block_type;
+    #[path = "../src/scene/geometry_orientation.rs"]
+    pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
     #[path = "../src/scene/orientation.rs"]
@@ -600,7 +608,8 @@ fn the_app_renders_through_the_voxel_world_instead_of_a_manual_cube_list() {
     let app = code_of(include_str!("../src/app.rs"));
 
     assert!(has_token(&app, "cast_ray_voxel_lit"));
-    assert!(has_token(&app, "diagnostic_voxel_world"));
+    // Gate 06: the visible scene is the mixed partial-geometry VoxelWorld.
+    assert!(has_token(&app, "diagnostic_partial_voxel_world"));
     assert!(has_token(&app, "VoxelWorld"));
     // No hand-built cube list and no legacy explicit-object raycast.
     assert!(!has_token(&app, "Cube"));

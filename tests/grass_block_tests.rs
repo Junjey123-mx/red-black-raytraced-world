@@ -26,6 +26,8 @@ mod core {
     pub mod hit;
     #[path = "../src/core/material.rs"]
     pub mod material;
+    #[path = "../src/core/prism.rs"]
+    pub mod prism;
     #[path = "../src/core/ray.rs"]
     pub mod ray;
     #[path = "../src/core/texture.rs"]
@@ -36,8 +38,14 @@ mod core {
 mod scene {
     #[path = "../src/scene/block.rs"]
     pub mod block;
+    #[path = "../src/scene/block_geometry.rs"]
+    pub mod block_geometry;
+    #[path = "../src/scene/block_shape_factory.rs"]
+    pub mod block_shape_factory;
     #[path = "../src/scene/block_type.rs"]
     pub mod block_type;
+    #[path = "../src/scene/geometry_orientation.rs"]
+    pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
     pub mod light;
     #[path = "../src/scene/orientation.rs"]

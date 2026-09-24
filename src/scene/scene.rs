@@ -69,3 +69,110 @@ pub fn diagnostic_materials(grass_face_textures: FaceTextures) -> HashMap<Materi
 
     materials
 }
+
+pub fn wood_material_id() -> MaterialId {
+    MaterialId::new(3)
+}
+
+pub fn portal_core_material_id() -> MaterialId {
+    MaterialId::new(4)
+}
+
+pub fn amethyst_material_id() -> MaterialId {
+    MaterialId::new(5)
+}
+
+/// Grass ground of the partial-geometry diagnostic scene: `x` in `0..7`,
+/// `z` in `0..4`, at `y = 0`.
+const PARTIAL_GROUND_WIDTH: i32 = 7;
+const PARTIAL_GROUND_DEPTH: i32 = 4;
+
+/// Builds the mixed partial-geometry diagnostic scene as a sparse
+/// `VoxelWorld`: a small grass ground with one block of each shape in a row
+/// at `y = 1`, from west to east:
+///
+/// ```text
+/// x=0 Stone control cube      x=3 WoodDoor        (facing South)
+/// x=1 WoodStairs (South)      x=4 PortalCore      (facing South)
+/// x=2 Fence      (South)      x=5 AmethystCluster (growing Up)
+/// ```
+///
+/// Two stone cubes sit right behind the fence and the amethyst cluster so
+/// rays that slip through their gaps end on a visible full cube. This is a
+/// diagnostic layout, not the final Overworld.
+pub fn diagnostic_partial_voxel_world() -> VoxelWorld {
+    let mut world = VoxelWorld::new();
+
+    for z in 0..PARTIAL_GROUND_DEPTH {
+        for x in 0..PARTIAL_GROUND_WIDTH {
+            world.insert(
+                IVec3::new(x, 0, z),
+                BlockInstance::new(BlockType::Grass, grass_material_id(), Orientation::Up),
+            );
+        }
+    }
+
+    let stone = BlockInstance::new(BlockType::Stone, stone_material_id(), Orientation::Up);
+    let wood =
+        |block_type, orientation| BlockInstance::new(block_type, wood_material_id(), orientation);
+
+    world.insert(IVec3::new(0, 1, 2), stone);
+    world.insert(
+        IVec3::new(1, 1, 2),
+        wood(BlockType::WoodStairs, Orientation::South),
+    );
+    world.insert(
+        IVec3::new(2, 1, 2),
+        wood(BlockType::Fence, Orientation::South),
+    );
+    world.insert(
+        IVec3::new(3, 1, 2),
+        wood(BlockType::WoodDoor, Orientation::South),
+    );
+    world.insert(
+        IVec3::new(4, 1, 2),
+        BlockInstance::new(
+            BlockType::PortalCoreDarkCrimson,
+            portal_core_material_id(),
+            Orientation::South,
+        ),
+    );
+    world.insert(
+        IVec3::new(5, 1, 2),
+        BlockInstance::new(
+            BlockType::AmethystCluster,
+            amethyst_material_id(),
+            Orientation::Up,
+        ),
+    );
+
+    // Full cubes right behind the fence and the cluster.
+    world.insert(IVec3::new(2, 1, 1), stone);
+    world.insert(IVec3::new(5, 1, 1), stone);
+
+    world
+}
+
+/// Materials for the partial-geometry scene: the terrain materials plus
+/// plain uniform, opaque, matte colors for wood, the portal core (dark
+/// crimson, no emission or translucency yet), and amethyst (no optics yet).
+pub fn diagnostic_partial_materials(
+    grass_face_textures: FaceTextures,
+) -> HashMap<MaterialId, Material> {
+    let mut materials = diagnostic_materials(grass_face_textures);
+
+    materials.insert(
+        wood_material_id(),
+        Material::new(Color::new(0.72, 0.55, 0.32, 1.0), 0.10, 18.0),
+    );
+    materials.insert(
+        portal_core_material_id(),
+        Material::new(Color::new(0.42, 0.05, 0.18, 1.0), 0.12, 30.0),
+    );
+    materials.insert(
+        amethyst_material_id(),
+        Material::new(Color::new(0.58, 0.36, 0.82, 1.0), 0.20, 40.0),
+    );
+
+    materials
+}

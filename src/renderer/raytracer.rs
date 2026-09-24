@@ -15,6 +15,7 @@ use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
 use crate::renderer::voxel_traversal::DdaState;
 use crate::scene::block::BlockInstance;
+use crate::scene::block_shape_factory::block_geometry;
 use crate::scene::light::Light;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
@@ -26,8 +27,8 @@ pub const MAX_VOXEL_STEPS: usize = 4096;
 
 /// The first real voxel hit of a ray: the occupied cell, its block record
 /// (type, material reference, orientation), and the geometric
-/// `HitRecord` (distance, point, normal, face, uv) produced by the
-/// existing `Cube::intersect` contract.
+/// `HitRecord` (distance, point, normal, face, uv) produced by the local
+/// geometry intersection (the `Cube::intersect` contract underneath).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VoxelHit {
     pub cell: IVec3,
@@ -42,15 +43,23 @@ pub fn cell_cube(cell: IVec3) -> Cube {
     Cube::new(min, min + Vec3::new(1.0, 1.0, 1.0))
 }
 
+/// World-space origin (minimum corner) of a voxel cell.
+fn cell_origin(cell: IVec3) -> Vec3 {
+    Vec3::new(cell.x as f32, cell.y as f32, cell.z as f32)
+}
+
 /// Finds the nearest real voxel hit along `ray` within `max_distance`.
 ///
 /// The 3D DDA only nominates candidate cells, in increasing entry
-/// distance. An occupied cell is *not* automatically a hit: its local
-/// geometry (today always a full cube) must actually be struck by the ray
-/// via `Cube::intersect`, otherwise traversal continues. Because cells are
-/// visited in increasing entry distance, the first confirmed hit is the
-/// nearest one. Returns `None` for an empty world, a miss, a
-/// non-positive/NaN `max_distance`, or when `MAX_VOXEL_STEPS` is reached.
+/// distance. An occupied cell is *not* automatically a hit: the local
+/// geometry of its block (resolved from `BlockType` + `Orientation`, and
+/// translated to the cell) must actually be struck by the ray, otherwise
+/// traversal continues, so a ray can pass through the empty part of a stair,
+/// fence, door, portal, or crystal cluster and hit whatever lies behind.
+/// Every shape lives inside its own cell, and cells are visited in
+/// increasing entry distance, so the first confirmed hit is the nearest one.
+/// Returns `None` for an empty world, a miss, a non-positive/NaN
+/// `max_distance`, or when `MAX_VOXEL_STEPS` is reached.
 pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Option<VoxelHit> {
     if world.is_empty() || max_distance.is_nan() || max_distance <= 0.0 {
         return None;
@@ -60,7 +69,9 @@ pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Op
 
     for _ in 0..MAX_VOXEL_STEPS {
         if let Some(block) = world.get(state.cell)
-            && let Some(hit) = cell_cube(state.cell).intersect(ray, 0.0, max_distance)
+            && let Some(hit) = block_geometry(block.block_type(), block.orientation())
+                .translated(cell_origin(state.cell))
+                .intersect_local(ray, 0.0, max_distance)
         {
             return Some(VoxelHit {
                 cell: state.cell,
@@ -272,8 +283,9 @@ pub fn cast_ray_lit(
 
 /// Voxel occlusion query for shadow rays: `true` when any real voxel hit
 /// lies along `ray` within `max_distance`. It reuses `nearest_voxel_hit`, so
-/// shadows go through exactly the same DDA + `Cube::intersect` path as
-/// primary rays (no second traversal algorithm). Blocks are opaque.
+/// shadows go through exactly the same DDA + local-geometry path as primary
+/// rays (no second traversal algorithm), including partial shapes. Blocks
+/// are opaque.
 pub fn is_voxel_occluded(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> bool {
     nearest_voxel_hit(world, ray, max_distance).is_some()
 }

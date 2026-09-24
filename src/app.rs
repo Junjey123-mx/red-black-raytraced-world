@@ -13,7 +13,7 @@ use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::scene::light::{DirectionalLight, Light, PointLight};
-use crate::scene::scene::{diagnostic_materials, diagnostic_voxel_world};
+use crate::scene::scene::{diagnostic_partial_materials, diagnostic_partial_voxel_world};
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 
@@ -50,9 +50,9 @@ fn load_grass_face_textures() -> (TextureManager, FaceTextures) {
 }
 
 /// Casts one primary ray per pixel into the sparse `VoxelWorld` (3D DDA +
-/// local cube intersection) and writes the fully shaded color (ambient +
-/// visible diffuse/specular per light, hard shadows queried against the same
-/// world, or `background` on a miss) into the framebuffer.
+/// local block-geometry intersection) and writes the fully shaded color
+/// (ambient + visible diffuse/specular per light, hard shadows queried
+/// against the same world, or `background` on a miss) into the framebuffer.
 fn render(
     framebuffer: &mut Framebuffer,
     camera: &Camera,
@@ -118,8 +118,8 @@ pub fn run() {
 
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
     let camera = Camera::new(
-        Vec3::new(6.0, 5.0, 7.5),
-        Vec3::new(1.8, 1.0, 1.8),
+        Vec3::new(3.4, 3.4, 7.0),
+        Vec3::new(3.0, 1.3, 1.9),
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
@@ -130,10 +130,12 @@ pub fn run() {
     // an immutable reference, so no texture can be loaded mid-render.
     let (texture_manager, face_textures) = load_grass_face_textures();
 
-    // The visible scene is a small sparse VoxelWorld; blocks reference their
-    // material by `MaterialId`, resolved through this minimal diagnostic map.
-    let world = diagnostic_voxel_world();
-    let materials = diagnostic_materials(face_textures);
+    // The visible scene is the mixed partial-geometry diagnostic VoxelWorld
+    // (stairs, fence, door, portal core, amethyst cluster); blocks reference
+    // their material by `MaterialId`, resolved through this minimal
+    // diagnostic map.
+    let world = diagnostic_partial_voxel_world();
+    let materials = diagnostic_partial_materials(face_textures);
 
     // A soft overhead directional fill plus a stronger side point light: the
     // point light drives the visible diffuse gradient, specular highlight,
@@ -145,7 +147,7 @@ pub fn run() {
             0.4,
         )),
         Light::Point(PointLight::new(
-            Vec3::new(-3.0, 7.0, 6.0),
+            Vec3::new(-1.5, 6.5, 6.5),
             CpuColor::white(),
             1.5,
         )),
