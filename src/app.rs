@@ -1,6 +1,8 @@
 use raylib::prelude::*;
 
 use crate::camera::camera::Camera;
+use crate::camera::controls::{OrbitInput, apply_orbit_input};
+use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::projection::primary_ray;
 use crate::config;
 use crate::core::color::Color as CpuColor;
@@ -15,6 +17,12 @@ use crate::scene::material_gallery::{
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
+
+/// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
+/// of the window resolution (each preview pixel is stretched to fill its
+/// block) so interaction stays responsive on a single CPU thread; as soon as
+/// the input stops, one full-resolution frame is traced.
+const PREVIEW_DOWNSCALE: usize = 4;
 
 const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
 const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
@@ -86,19 +94,73 @@ fn framebuffer_to_image(framebuffer: &Framebuffer) -> Image {
     image
 }
 
+/// Polls the mouse and keyboard into one frame of `OrbitInput`: left-button
+/// drag orbits, the wheel zooms, arrows are an orbit fallback, `R` resets.
+fn poll_orbit_input(rl: &RaylibHandle) -> OrbitInput {
+    let dragging = rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT);
+    let delta = rl.get_mouse_delta();
+    let axis = |positive: KeyboardKey, negative: KeyboardKey| {
+        (rl.is_key_down(positive) as i32 - rl.is_key_down(negative) as i32) as f32
+    };
+
+    OrbitInput {
+        drag_dx: if dragging { delta.x } else { 0.0 },
+        drag_dy: if dragging { delta.y } else { 0.0 },
+        wheel: rl.get_mouse_wheel_move(),
+        key_yaw: axis(KeyboardKey::KEY_RIGHT, KeyboardKey::KEY_LEFT),
+        key_pitch: axis(KeyboardKey::KEY_UP, KeyboardKey::KEY_DOWN),
+        delta_time: rl.get_frame_time(),
+        reset: rl.is_key_pressed(KeyboardKey::KEY_R),
+    }
+}
+
+/// Traces the scene from `view` into a framebuffer of `width x height` and
+/// uploads it to a Raylib texture for presentation.
+#[allow(clippy::too_many_arguments)]
+fn trace_to_texture(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    view: &DiagnosticCameraState,
+    width: usize,
+    height: usize,
+    world: &VoxelWorld,
+    materials: &MaterialLibrary,
+    lights: &[Light],
+    background: CpuColor,
+    texture_manager: &TextureManager,
+) -> Texture2D {
+    let mut framebuffer = Framebuffer::new(width, height);
+    let camera = view.build_camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
+
+    render(
+        &mut framebuffer,
+        &camera,
+        world,
+        materials,
+        lights,
+        background,
+        texture_manager,
+    );
+
+    let image = framebuffer_to_image(&framebuffer);
+    rl.load_texture_from_image(thread, &image)
+        .expect("failed to upload the CPU framebuffer to a Raylib texture")
+}
+
 pub fn run() {
     let (mut rl, thread) = raylib::init()
         .size(config::WINDOW_WIDTH, config::WINDOW_HEIGHT)
         .title(config::WINDOW_TITLE)
         .build();
 
-    let mut framebuffer = Framebuffer::new(
-        config::WINDOW_WIDTH as usize,
-        config::WINDOW_HEIGHT as usize,
-    );
+    let full_width = config::WINDOW_WIDTH as usize;
+    let full_height = config::WINDOW_HEIGHT as usize;
 
+    // The diagnostic orbit camera starts on the gallery's framing, and `R`
+    // restores exactly that view.
     let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
-    let camera = gallery_camera(aspect_ratio);
+    let home = gallery_camera(aspect_ratio);
+    let mut view = DiagnosticCameraState::from_pose(home.position, home.target);
 
     // Gallery textures are loaded once here, before any per-pixel work
     // starts; the pixel loop only ever calls `TextureManager::get` through
@@ -114,24 +176,66 @@ pub fn run() {
     let lights = gallery_lights();
     let background = gallery_background();
 
-    render(
-        &mut framebuffer,
-        &camera,
+    let mut texture_scale = 1;
+    let mut texture = trace_to_texture(
+        &mut rl,
+        &thread,
+        &view,
+        full_width,
+        full_height,
         &world,
         &materials,
         &lights,
         background,
         &texture_manager,
     );
-
-    let image = framebuffer_to_image(&framebuffer);
-    let texture = rl
-        .load_texture_from_image(&thread, &image)
-        .expect("failed to upload the CPU framebuffer to a Raylib texture");
+    // A full-resolution frame is up to date until the camera moves again.
+    let mut needs_full_frame = false;
 
     while !rl.window_should_close() {
+        let input = poll_orbit_input(&rl);
+
+        if input.is_active() {
+            apply_orbit_input(&mut view, &input);
+            texture_scale = PREVIEW_DOWNSCALE;
+            texture = trace_to_texture(
+                &mut rl,
+                &thread,
+                &view,
+                full_width / PREVIEW_DOWNSCALE,
+                full_height / PREVIEW_DOWNSCALE,
+                &world,
+                &materials,
+                &lights,
+                background,
+                &texture_manager,
+            );
+            needs_full_frame = true;
+        } else if needs_full_frame {
+            texture_scale = 1;
+            texture = trace_to_texture(
+                &mut rl,
+                &thread,
+                &view,
+                full_width,
+                full_height,
+                &world,
+                &materials,
+                &lights,
+                background,
+                &texture_manager,
+            );
+            needs_full_frame = false;
+        }
+
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::BLACK);
-        d.draw_texture(&texture, 0, 0, Color::WHITE);
+        d.draw_texture_ex(
+            &texture,
+            Vector2::new(0.0, 0.0),
+            0.0,
+            texture_scale as f32,
+            Color::WHITE,
+        );
     }
 }

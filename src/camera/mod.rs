@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 
 pub mod camera;
+pub mod controls;
 pub mod diagnostic;
 pub mod projection;
 

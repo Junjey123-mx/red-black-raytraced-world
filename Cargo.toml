@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 raylib = "5.5"
+
+# The CPU raytracer is unusably slow unoptimized (about 16 s per full frame),
+# so `cargo run`/`cargo test` build with optimizations; debug info is kept.
+[profile.dev]
+opt-level = 3
