@@ -9,10 +9,10 @@ use crate::core::color::Color as CpuColor;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::cast_ray_voxel_lit;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
+use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
 use crate::scene::light::Light;
 use crate::scene::material_gallery::{
-    GALLERY_MAX_DISTANCE, GalleryTextures, advanced_materials_library, advanced_materials_world,
-    gallery_background, gallery_camera, gallery_lights,
+    GALLERY_MAX_DISTANCE, gallery_background, gallery_camera, gallery_lights,
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
@@ -26,14 +26,22 @@ const PREVIEW_DOWNSCALE: usize = 4;
 
 const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
 const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
+const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
+const SHAPE_TEXTURES_DIR: &str = "assets/textures/diagnostic/partial";
 
-/// Loads every gallery PNG once through a single `TextureManager` and
+/// Loads every catalog PNG once through a single `TextureManager` and
 /// returns it with the per-face texture mappings. Called exactly once during
 /// scene setup, never per pixel/frame.
-fn load_scene_textures() -> (TextureManager, GalleryTextures) {
+fn load_scene_textures() -> (TextureManager, CatalogTextures) {
     let mut manager = TextureManager::new();
-    let textures = GalleryTextures::load(&mut manager, OVERWORLD_TEXTURES_DIR, PORTAL_TEXTURES_DIR)
-        .expect("missing gallery texture");
+    let textures = CatalogTextures::load(
+        &mut manager,
+        OVERWORLD_TEXTURES_DIR,
+        PORTAL_TEXTURES_DIR,
+        GRASS_TEXTURES_DIR,
+        SHAPE_TEXTURES_DIR,
+    )
+    .expect("missing catalog texture");
 
     (manager, textures)
 }
@@ -167,11 +175,11 @@ pub fn run() {
     // an immutable reference, so no texture can be loaded mid-render.
     let (texture_manager, scene_textures) = load_scene_textures();
 
-    // The visible scene is the advanced-materials optical gallery
-    // (`advanced_materials_world`); blocks reference their material by
-    // `MaterialId`, resolved through the scene `MaterialLibrary`.
-    let world = advanced_materials_world();
-    let materials = advanced_materials_library(&scene_textures);
+    // The visible scene is the persistent block catalog (`CatalogScene`):
+    // the Gate 06 shapes plus the Gate 07 optical gallery. Blocks reference
+    // their material by `MaterialId`, resolved through the `MaterialLibrary`.
+    let mut catalog = CatalogScene::new();
+    let materials = catalog_materials(&scene_textures);
 
     let lights = gallery_lights();
     let background = gallery_background();
@@ -183,7 +191,7 @@ pub fn run() {
         &view,
         full_width,
         full_height,
-        &world,
+        catalog.world(),
         &materials,
         &lights,
         background,
@@ -195,7 +203,22 @@ pub fn run() {
     while !rl.window_should_close() {
         let input = poll_orbit_input(&rl);
 
-        if input.is_active() {
+        // Catalog selection: [ / Q previous, ] / E next (wrapping), F focus.
+        if rl.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) || rl.is_key_pressed(KeyboardKey::KEY_Q)
+        {
+            catalog.select_previous();
+        }
+        if rl.is_key_pressed(KeyboardKey::KEY_RIGHT_BRACKET)
+            || rl.is_key_pressed(KeyboardKey::KEY_E)
+        {
+            catalog.select_next();
+        }
+        let focus = rl.is_key_pressed(KeyboardKey::KEY_F);
+        if focus {
+            catalog.focus_camera(&mut view);
+        }
+
+        if input.is_active() || focus {
             apply_orbit_input(&mut view, &input);
             texture_scale = PREVIEW_DOWNSCALE;
             texture = trace_to_texture(
@@ -204,7 +227,7 @@ pub fn run() {
                 &view,
                 full_width / PREVIEW_DOWNSCALE,
                 full_height / PREVIEW_DOWNSCALE,
-                &world,
+                catalog.world(),
                 &materials,
                 &lights,
                 background,
@@ -219,7 +242,7 @@ pub fn run() {
                 &view,
                 full_width,
                 full_height,
-                &world,
+                catalog.world(),
                 &materials,
                 &lights,
                 background,
@@ -236,6 +259,14 @@ pub fn run() {
             0.0,
             texture_scale as f32,
             Color::WHITE,
+        );
+        d.draw_text(&catalog.label(), 12, 10, 20, Color::WHITE);
+        d.draw_text(
+            "Drag: orbit | Wheel: zoom | [ ] or Q E: select | F: focus | R: reset",
+            12,
+            config::WINDOW_HEIGHT - 26,
+            16,
+            Color::LIGHTGRAY,
         );
     }
 }

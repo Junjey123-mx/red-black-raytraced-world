@@ -583,7 +583,9 @@ fn the_dda_is_still_the_primary_traversal_of_every_ray_kind() {
     let app =
         std::fs::read_to_string(format!("{}/src/app.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
     assert!(app.contains("cast_ray_voxel_lit"));
-    assert!(app.contains("advanced_materials_world"));
+    // Gate 07.5: the visible scene is the CatalogScene, which is built on the
+    // advanced-materials gallery world.
+    assert!(app.contains("CatalogScene"));
 }
 
 #[test]

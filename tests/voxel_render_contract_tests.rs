@@ -619,7 +619,9 @@ fn the_app_renders_through_the_voxel_world_instead_of_a_manual_cube_list() {
     assert!(has_token(&app, "cast_ray_voxel_lit"));
     // Gate 07: the visible scene is the advanced-materials gallery VoxelWorld
     // (it replaced the Gate 06 partial-geometry gallery as the visible scene).
-    assert!(has_token(&app, "advanced_materials_world"));
+    // Gate 07.5: the persistent CatalogScene (built on that gallery) is now
+    // the visible scene.
+    assert!(has_token(&app, "CatalogScene"));
     assert!(has_token(&app, "VoxelWorld"));
     // No hand-built cube list and no legacy explicit-object raycast.
     assert!(!has_token(&app, "Cube"));
