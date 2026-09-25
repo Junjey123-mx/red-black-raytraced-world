@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 
 pub mod camera;
+pub mod diagnostic;
 pub mod projection;
 
 pub use camera::Camera;
