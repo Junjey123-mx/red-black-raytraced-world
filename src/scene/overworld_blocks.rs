@@ -120,6 +120,9 @@ pub struct OverworldBlockTextures {
     pub mycelium: FaceTextures,
     pub smooth_basalt: FaceTextures,
     pub crimson_heart: FaceTextures,
+    /// Emissive colour masks of the card-suit symbols (black off-symbol).
+    pub crimson_heart_glow: TextureId,
+    pub crimson_diamond_glow: TextureId,
     pub crimson_diamond: FaceTextures,
     pub orange_club: FaceTextures,
     pub orange_spade: FaceTextures,
@@ -160,6 +163,12 @@ impl OverworldBlockTextures {
         let mycelium_top = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/mycelium/top.png"))?;
         let mycelium_side = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/mycelium/side.png"))?;
         let smooth_basalt = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/smooth_basalt.png"))?;
+        let crimson_heart_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crimson/heart_emissive.png"
+        ))?;
+        let crimson_diamond_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crimson/diamond_emissive.png"
+        ))?;
         let crimson_heart =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/crimson/heart_albedo.png"))?;
         let crimson_diamond = manager.load(format!(
@@ -199,6 +208,8 @@ impl OverworldBlockTextures {
             // Its reference shows the same texture on the top and the sides.
             smooth_basalt: FaceTextures::uniform(smooth_basalt),
             crimson_heart: FaceTextures::uniform(crimson_heart),
+            crimson_heart_glow,
+            crimson_diamond_glow,
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
             orange_club: FaceTextures::uniform(orange_club),
             orange_spade: FaceTextures::uniform(orange_spade),
@@ -312,6 +323,9 @@ pub struct SymbolGlow {
     pub mask: TextureId,
     pub strength: f32,
 }
+
+/// Emission strength of the Crimson symbols (heart, diamond).
+pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
 
 /// Material of a card-suit block: an opaque, textured full cube with the
 /// given `(specular, shininess, reflectivity)` profile and, when `glow` is
@@ -447,13 +461,25 @@ pub fn insert_overworld_materials(
     // (specular, shininess, reflectivity): diamonds are a little more polished.
     let plain = (0.06, 8.0, 0.01);
     let polished = (0.10, 18.0, 0.03);
+    let glow = |mask, strength| Some(SymbolGlow { mask, strength });
+    let crimson_glow = |mask| glow(mask, CRIMSON_GLOW_STRENGTH);
     library.insert(
         crimson_heart_material_id(),
-        symbol_block_material(crimson, plain, textures.crimson_heart, None),
+        symbol_block_material(
+            crimson,
+            plain,
+            textures.crimson_heart,
+            crimson_glow(textures.crimson_heart_glow),
+        ),
     );
     library.insert(
         crimson_diamond_material_id(),
-        symbol_block_material(crimson, polished, textures.crimson_diamond, None),
+        symbol_block_material(
+            crimson,
+            polished,
+            textures.crimson_diamond,
+            crimson_glow(textures.crimson_diamond_glow),
+        ),
     );
     library.insert(
         orange_club_material_id(),
