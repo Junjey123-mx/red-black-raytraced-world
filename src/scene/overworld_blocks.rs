@@ -90,6 +90,10 @@ pub fn purple_diamond_material_id() -> MaterialId {
     MaterialId::new(53)
 }
 
+pub fn purple_club_material_id() -> MaterialId {
+    MaterialId::new(54)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -120,6 +124,7 @@ pub struct OverworldBlockTextures {
     pub orange_spade: FaceTextures,
     pub purple_heart: FaceTextures,
     pub purple_diamond: FaceTextures,
+    pub purple_club: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -168,6 +173,8 @@ impl OverworldBlockTextures {
         let purple_diamond = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/violet/diamond_albedo.png"
         ))?;
+        let purple_club =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/club_albedo.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -196,6 +203,7 @@ impl OverworldBlockTextures {
             orange_spade: FaceTextures::uniform(orange_spade),
             purple_heart: FaceTextures::uniform(purple_heart),
             purple_diamond: FaceTextures::uniform(purple_diamond),
+            purple_club: FaceTextures::uniform(purple_club),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -279,6 +287,9 @@ impl OverworldBlockTextures {
 ///   lilac centre facet on dark purple masonry, clearly distinct from
 ///   CrimsonDiamond. Opaque, non-emissive, with the diamond sheen (specular
 ///   0.10, shininess 18, reflectivity 0.03).
+/// - PurpleClub: the same re-drawn three-lobed club in the Violet family on
+///   dark purple masonry, clearly distinct from OrangeClub. Opaque,
+///   non-emissive (specular 0.06, shininess 8, reflectivity 0.01).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -430,5 +441,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.10, 18.0)
             .with_reflectivity(0.03)
             .with_face_textures(textures.purple_diamond),
+    );
+    library.insert(
+        purple_club_material_id(),
+        Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.06, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.purple_club),
     );
 }
