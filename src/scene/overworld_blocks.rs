@@ -123,6 +123,8 @@ pub struct OverworldBlockTextures {
     /// Emissive colour masks of the card-suit symbols (black off-symbol).
     pub crimson_heart_glow: TextureId,
     pub crimson_diamond_glow: TextureId,
+    pub orange_club_glow: TextureId,
+    pub orange_spade_glow: TextureId,
     pub crimson_diamond: FaceTextures,
     pub orange_club: FaceTextures,
     pub orange_spade: FaceTextures,
@@ -169,6 +171,11 @@ impl OverworldBlockTextures {
         let crimson_diamond_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/crimson/diamond_emissive.png"
         ))?;
+        let orange_club_glow =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/orange/club_emissive.png"))?;
+        let orange_spade_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/orange/spade_emissive.png"
+        ))?;
         let crimson_heart =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/crimson/heart_albedo.png"))?;
         let crimson_diamond = manager.load(format!(
@@ -210,6 +217,8 @@ impl OverworldBlockTextures {
             crimson_heart: FaceTextures::uniform(crimson_heart),
             crimson_heart_glow,
             crimson_diamond_glow,
+            orange_club_glow,
+            orange_spade_glow,
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
             orange_club: FaceTextures::uniform(orange_club),
             orange_spade: FaceTextures::uniform(orange_spade),
@@ -326,6 +335,9 @@ pub struct SymbolGlow {
 
 /// Emission strength of the Crimson symbols (heart, diamond).
 pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
+
+/// Emission strength of the Orange symbols (club, spade).
+pub const ORANGE_GLOW_STRENGTH: f32 = 1.8;
 
 /// Material of a card-suit block: an opaque, textured full cube with the
 /// given `(specular, shininess, reflectivity)` profile and, when `glow` is
@@ -463,6 +475,7 @@ pub fn insert_overworld_materials(
     let polished = (0.10, 18.0, 0.03);
     let glow = |mask, strength| Some(SymbolGlow { mask, strength });
     let crimson_glow = |mask| glow(mask, CRIMSON_GLOW_STRENGTH);
+    let orange_glow = |mask| glow(mask, ORANGE_GLOW_STRENGTH);
     library.insert(
         crimson_heart_material_id(),
         symbol_block_material(
@@ -483,11 +496,21 @@ pub fn insert_overworld_materials(
     );
     library.insert(
         orange_club_material_id(),
-        symbol_block_material(orange, plain, textures.orange_club, None),
+        symbol_block_material(
+            orange,
+            plain,
+            textures.orange_club,
+            orange_glow(textures.orange_club_glow),
+        ),
     );
     library.insert(
         orange_spade_material_id(),
-        symbol_block_material(orange, plain, textures.orange_spade, None),
+        symbol_block_material(
+            orange,
+            plain,
+            textures.orange_spade,
+            orange_glow(textures.orange_spade_glow),
+        ),
     );
     library.insert(
         purple_heart_material_id(),
