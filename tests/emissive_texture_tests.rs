@@ -189,11 +189,13 @@ fn albedo_and_emissive_share_the_same_uv() {
 
             if is_black(emitted) {
                 // Frame texel: dark brown, clearly darker than any panel.
-                assert!(base.r < 0.5, "texel ({i},{j}) frame albedo {base:?}");
+                let lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+                assert!(lum < 0.3, "texel ({i},{j}) frame albedo {base:?}");
             } else {
                 // Panel texel: amber/bright albedo, and the emitted color
                 // is the same hue as the albedo texel at that very UV.
-                assert!(base.r > 0.7, "texel ({i},{j}) panel albedo {base:?}");
+                let lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+                assert!(lum > 0.3, "texel ({i},{j}) panel albedo {base:?}");
                 assert!(emitted.r <= base.r + EPS && emitted.b <= base.b + EPS);
             }
         }
@@ -205,22 +207,20 @@ fn the_redstone_mask_does_not_emit_over_the_whole_block() {
     let lamp = lamp();
     let lit = lit_texels(&lamp).len();
 
-    // Four oval panels: a substantial part of the face, far from all of it.
+    // Five diamond panels (one central, four in the corners): a substantial
+    // part of the face, far from all of it.
     assert!(lit >= N * N / 4, "too few emitting texels: {lit}");
     assert!(lit <= N * N * 2 / 3, "too many emitting texels: {lit}");
-    // The center cross between panels is frame, not emission.
+    // The outer frame ring never emits.
     let material = lamp_material(&lamp, 1.0);
     for k in 0..N {
-        assert!(is_black(sample_emissive(
-            &material,
-            uv(7, k),
-            &lamp.manager
-        )));
-        assert!(is_black(sample_emissive(
-            &material,
-            uv(k, 7),
-            &lamp.manager
-        )));
+        for (x, y) in [(k, 0), (k, N - 1), (0, k), (N - 1, k)] {
+            assert!(is_black(sample_emissive(
+                &material,
+                uv(x, y),
+                &lamp.manager
+            )));
+        }
     }
 }
 
