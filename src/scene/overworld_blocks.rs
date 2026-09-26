@@ -62,6 +62,10 @@ pub fn mycelium_material_id() -> MaterialId {
     MaterialId::new(46)
 }
 
+pub fn smooth_basalt_material_id() -> MaterialId {
+    MaterialId::new(47)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -85,6 +89,7 @@ pub struct OverworldBlockTextures {
     pub amethyst_cluster: FaceTextures,
     /// Fungal top, living-surface sides, earthy (Dirt) bottom.
     pub mycelium: FaceTextures,
+    pub smooth_basalt: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -118,6 +123,7 @@ impl OverworldBlockTextures {
         let cluster = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/amethyst_cluster.png"))?;
         let mycelium_top = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/mycelium/top.png"))?;
         let mycelium_side = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/mycelium/side.png"))?;
+        let smooth_basalt = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/smooth_basalt.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -138,6 +144,8 @@ impl OverworldBlockTextures {
                 mycelium_side,
                 mycelium_side,
             ),
+            // Its reference shows the same texture on the top and the sides.
+            smooth_basalt: FaceTextures::uniform(smooth_basalt),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -193,6 +201,10 @@ impl OverworldBlockTextures {
 /// - Mycelium: grey-violet fungal top, sides where that surface drips over
 ///   the soil, and a Dirt bottom. Opaque, matte, non-emissive (specular 0.03,
 ///   shininess 5, no reflectivity).
+/// - SmoothBasalt: dense, dark blue-grey volcanic stone, one texture on all
+///   six faces (darker than Stone and Deepslate, far less contrast than
+///   Cobblestone). Opaque, non-emissive (specular 0.05, shininess 8,
+///   reflectivity 0.01).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -302,5 +314,11 @@ pub fn insert_overworld_materials(
         mycelium_material_id(),
         Material::new(Color::new(0.43, 0.38, 0.40, 1.0), 0.03, 5.0)
             .with_face_textures(textures.mycelium),
+    );
+    library.insert(
+        smooth_basalt_material_id(),
+        Material::new(Color::new(0.28, 0.28, 0.30, 1.0), 0.05, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.smooth_basalt),
     );
 }

@@ -26,6 +26,7 @@ use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
 use crate::scene::overworld_blocks::portal_frame_material_id;
+use crate::scene::overworld_blocks::smooth_basalt_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::wood_stairs_material_id;
 use crate::scene::overworld_blocks::{
@@ -61,6 +62,7 @@ pub const BUDDING_AMETHYST_X: i32 = 10;
 /// Row of the first Red-Black catalog blocks, behind the Overworld II row.
 pub const RED_BLACK_I_Z: i32 = -8;
 pub const MYCELIUM_X: i32 = 1;
+pub const SMOOTH_BASALT_X: i32 = 3;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -270,6 +272,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::Mycelium,
             mycelium_material_id(),
             at(MYCELIUM_X, RED_BLACK_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Smooth basalt",
+            SampleKind::PlainBlock,
+            BlockType::SmoothBasalt,
+            smooth_basalt_material_id(),
+            at(SMOOTH_BASALT_X, RED_BLACK_I_Z),
             up,
         ),
         CatalogEntry::new(
