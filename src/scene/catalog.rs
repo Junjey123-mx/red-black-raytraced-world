@@ -27,6 +27,7 @@ use crate::scene::overworld_blocks::crimson_heart_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
+use crate::scene::overworld_blocks::orange_club_material_id;
 use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::smooth_basalt_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
@@ -67,6 +68,7 @@ pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
 pub const CRIMSON_HEART_X: i32 = 5;
 pub const CRIMSON_DIAMOND_X: i32 = 7;
+pub const ORANGE_CLUB_X: i32 = 9;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -300,6 +302,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::CrimsonDiamond,
             crimson_diamond_material_id(),
             at(CRIMSON_DIAMOND_X, RED_BLACK_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Orange club",
+            SampleKind::PlainBlock,
+            BlockType::OrangeClub,
+            orange_club_material_id(),
+            at(ORANGE_CLUB_X, RED_BLACK_I_Z),
             up,
         ),
         CatalogEntry::new(

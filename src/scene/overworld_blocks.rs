@@ -74,6 +74,10 @@ pub fn crimson_diamond_material_id() -> MaterialId {
     MaterialId::new(49)
 }
 
+pub fn orange_club_material_id() -> MaterialId {
+    MaterialId::new(50)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -100,6 +104,7 @@ pub struct OverworldBlockTextures {
     pub smooth_basalt: FaceTextures,
     pub crimson_heart: FaceTextures,
     pub crimson_diamond: FaceTextures,
+    pub orange_club: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -139,6 +144,8 @@ impl OverworldBlockTextures {
         let crimson_diamond = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/crimson/diamond_albedo.png"
         ))?;
+        let orange_club =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/orange/club_albedo.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -163,6 +170,7 @@ impl OverworldBlockTextures {
             smooth_basalt: FaceTextures::uniform(smooth_basalt),
             crimson_heart: FaceTextures::uniform(crimson_heart),
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
+            orange_club: FaceTextures::uniform(orange_club),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -230,6 +238,10 @@ impl OverworldBlockTextures {
 ///   crimson rhombus with its ivory centre facet on dark wine masonry.
 ///   Opaque, non-emissive, a little more polished than the heart (specular
 ///   0.10, shininess 18, reflectivity 0.03).
+/// - OrangeClub: club.png re-drawn as a 16x16 Red-Black block and recoloured
+///   to the warm Orange family (three-lobed club with stem and foot) on
+///   near-black masonry. Opaque, non-emissive (specular 0.06, shininess 8,
+///   reflectivity 0.01).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -357,5 +369,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.82, 0.12, 0.17, 1.0), 0.10, 18.0)
             .with_reflectivity(0.03)
             .with_face_textures(textures.crimson_diamond),
+    );
+    library.insert(
+        orange_club_material_id(),
+        Material::new(Color::new(1.00, 0.48, 0.00, 1.0), 0.06, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.orange_club),
     );
 }
