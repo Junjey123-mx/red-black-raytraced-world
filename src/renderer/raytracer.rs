@@ -52,6 +52,29 @@ fn cell_origin(cell: IVec3) -> Vec3 {
     Vec3::new(cell.x as f32, cell.y as f32, cell.z as f32)
 }
 
+/// UV of a point on a face measured against the *whole cell* (`local` in
+/// `[0, 1]^3`), with exactly the per-face mapping `Cube` uses. Partial shapes
+/// (stairs, fences, doors) use it instead of their own prism's extents, so a
+/// half-height step shows the matching *part* of the texture — the pattern
+/// continues across tread and riser instead of being squashed into each box.
+/// For a prism that spans the full cell on the two axes of a face (a door's or
+/// the portal membrane's broad faces) the result equals the prism-local UV.
+fn cell_local_uv(local: Vec3, face: Face) -> Vec2 {
+    let (lx, ly, lz) = (
+        local.x.clamp(0.0, 1.0),
+        local.y.clamp(0.0, 1.0),
+        local.z.clamp(0.0, 1.0),
+    );
+    match face {
+        Face::PositiveZ => Vec2::new(lx, 1.0 - ly),
+        Face::NegativeZ => Vec2::new(1.0 - lx, 1.0 - ly),
+        Face::PositiveX => Vec2::new(1.0 - lz, 1.0 - ly),
+        Face::NegativeX => Vec2::new(lz, 1.0 - ly),
+        Face::PositiveY => Vec2::new(lx, lz),
+        Face::NegativeY => Vec2::new(lx, 1.0 - lz),
+    }
+}
+
 /// Finds the nearest real voxel hit along `ray` within `max_distance`.
 ///
 /// The 3D DDA only nominates candidate cells, in increasing entry
@@ -97,8 +120,10 @@ pub fn nearest_voxel_hit_where(
 
     for _ in 0..MAX_VOXEL_STEPS {
         if let Some(block) = world.get(state.cell) {
-            let geometry = block_geometry(block.block_type(), block.orientation())
-                .translated(cell_origin(state.cell));
+            let base_geometry = block_geometry(block.block_type(), block.orientation());
+            let partial = !base_geometry.is_full_cube();
+            let origin = cell_origin(state.cell);
+            let geometry = base_geometry.translated(origin);
             let mut current = *ray;
             let mut offset = 0.0;
 
@@ -108,6 +133,9 @@ pub fn nearest_voxel_hit_where(
                     break;
                 };
                 hit.distance += offset;
+                if partial {
+                    hit.uv = cell_local_uv(hit.point - origin, hit.face);
+                }
 
                 let candidate = VoxelHit {
                     cell: state.cell,
