@@ -54,6 +54,10 @@ pub fn budding_amethyst_material_id() -> MaterialId {
     MaterialId::new(44)
 }
 
+pub fn amethyst_cluster_material_id() -> MaterialId {
+    MaterialId::new(45)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -72,6 +76,9 @@ pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
     pub budding_amethyst: FaceTextures,
+    /// Crystal facets of the partial-geometry cluster (cell-space UV, so the
+    /// light tips sit in the upper rows).
+    pub amethyst_cluster: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -102,6 +109,7 @@ impl OverworldBlockTextures {
         let thin = |broad, edge| FaceTextures::new(edge, edge, edge, edge, broad, broad);
         let portal_frame = manager.load(format!("{PORTAL_TEXTURES_DIR}/frame_albedo.png"))?;
         let budding = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/budding_amethyst.png"))?;
+        let cluster = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/amethyst_cluster.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -111,6 +119,7 @@ impl OverworldBlockTextures {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
             budding_amethyst: FaceTextures::uniform(budding),
+            amethyst_cluster: FaceTextures::uniform(cluster),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -159,6 +168,10 @@ impl OverworldBlockTextures {
 /// - BuddingAmethyst: a full violet crystalline cube (specular 0.10, shininess
 ///   18, reflectivity 0.03), opaque and non-emissive. It is the mother rock,
 ///   distinct from the partial-geometry AmethystCluster.
+/// - AmethystCluster: the Gate 06 clustered crystal geometry (unchanged),
+///   now wearing crystal facets taken from its reference palette (violet
+///   body, lilac/pink edges, cream highlights). Opaque and non-emissive
+///   (specular 0.10, shininess 18, reflectivity 0.03).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -257,5 +270,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.45, 0.30, 0.70, 1.0), 0.10, 18.0)
             .with_reflectivity(0.03)
             .with_face_textures(textures.budding_amethyst),
+    );
+    library.insert(
+        amethyst_cluster_material_id(),
+        Material::new(Color::new(0.58, 0.40, 0.82, 1.0), 0.10, 18.0)
+            .with_reflectivity(0.03)
+            .with_face_textures(textures.amethyst_cluster),
     );
 }

@@ -101,17 +101,17 @@ mod renderer {
 }
 
 use core::hit::Face;
-use core::math::{IVec3, Vec2};
-use renderer::texture_sampling::sample_nearest;
+use core::math::{IVec3, Vec3};
 use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
 use scene::block_type::BlockType;
 use scene::catalog::{
-    CatalogScene, CatalogTextures, SampleKind, catalog_entries, catalog_materials,
+    AMETHYST_X, CatalogScene, CatalogTextures, SHAPES_Z, SampleKind, catalog_entries,
+    catalog_materials,
 };
 use scene::material_library::MaterialLibrary;
 use scene::orientation::Orientation;
-use scene::overworld_blocks::budding_amethyst_material_id;
+use scene::overworld_blocks::{amethyst_cluster_material_id, budding_amethyst_material_id};
 use scene::texture_manager::TextureManager;
 
 const FACES: [Face; 6] = [
@@ -144,142 +144,86 @@ fn env() -> Env {
 
 fn faces(e: &Env) -> core::face_textures::FaceTextures {
     e.library
-        .get(budding_amethyst_material_id())
+        .get(amethyst_cluster_material_id())
         .unwrap()
         .face_textures
         .unwrap()
 }
 
 #[test]
-fn buddingamethyst_is_a_full_cube_block_type() {
-    let geometry = block_geometry(BlockType::BuddingAmethyst, Orientation::Up);
-    assert!(matches!(geometry, BlockGeometry::FullCube));
+fn the_amethyst_cluster_block_type_exists() {
+    assert!(format!("{:?}", BlockType::AmethystCluster).contains("AmethystCluster"));
+}
+
+#[test]
+fn the_geometry_is_the_reused_gate_06_composite_cluster() {
+    let geometry = block_geometry(BlockType::AmethystCluster, Orientation::Up);
+    assert!(matches!(geometry, BlockGeometry::Composite(_)));
+    assert_eq!(
+        geometry.part_count(),
+        5,
+        "one tall crystal plus four shorter"
+    );
+
+    // The exact Gate 06 crystals: the promotion never rebuilt the shape.
+    let expected = [
+        ([0.375, 0.0, 0.375], [0.625, 0.8125, 0.625]),
+        ([0.125, 0.0, 0.4375], [0.3125, 0.5, 0.6875]),
+        ([0.6875, 0.0, 0.3125], [0.875, 0.4375, 0.5625]),
+        ([0.4375, 0.0, 0.6875], [0.6875, 0.375, 0.875]),
+        ([0.3125, 0.0, 0.125], [0.5625, 0.5625, 0.3125]),
+    ];
+    let v = |a: [f32; 3]| Vec3::new(a[0], a[1], a[2]);
+    for (part, (min, max)) in geometry.parts().iter().zip(expected) {
+        assert!((part.min() - v(min)).length() < 1e-6, "{part:?}");
+        assert!((part.max() - v(max)).length() < 1e-6, "{part:?}");
+    }
+}
+
+#[test]
+fn it_is_never_a_full_cube() {
+    for o in [Orientation::Up, Orientation::Down, Orientation::North] {
+        let geometry = block_geometry(BlockType::AmethystCluster, o);
+        assert!(!geometry.is_full_cube(), "{o:?}");
+        assert!(!matches!(geometry, BlockGeometry::FullCube), "{o:?}");
+    }
 }
 
 #[test]
 fn the_material_and_every_face_texture_resolve() {
     let e = env();
+    assert!(e.library.contains(amethyst_cluster_material_id()));
     let f = faces(&e);
     for face in FACES {
-        assert!(
-            e.manager.get(f.texture_for_face(face)).is_some(),
-            "{face:?}"
-        );
-    }
-}
-
-#[test]
-fn the_face_texture_policy_matches_the_block() {
-    let e = env();
-    let f = faces(&e);
-    let uniform = true;
-    if uniform {
-        let first = f.texture_for_face(Face::PositiveY);
-        for face in FACES {
-            assert_eq!(
-                f.texture_for_face(face),
-                first,
-                "{face:?} shares the one texture"
-            );
-        }
-    } else {
-        assert_ne!(
-            f.texture_for_face(Face::PositiveY),
-            f.texture_for_face(Face::PositiveZ)
-        );
-    }
-    for t in FACES.iter().map(|x| f.texture_for_face(*x)) {
-        let tex = e.manager.get(t).unwrap();
-        assert_eq!((tex.width(), tex.height()), (16, 16), "pixel-art tile");
+        let t = e.manager.get(f.texture_for_face(face)).expect("loaded");
+        assert_eq!((t.width(), t.height()), (16, 16), "{face:?}");
     }
 }
 
 #[test]
 fn the_material_is_opaque_non_emissive_and_matches_its_profile() {
     let e = env();
-    let m = e.library.get(budding_amethyst_material_id()).unwrap();
-
+    let m = e.library.get(amethyst_cluster_material_id()).unwrap();
     assert_eq!(m.transparency, 0.0);
     assert_eq!(m.emission_strength, 0.0);
-    assert!(m.emissive_texture.is_none());
+    assert!(m.emissive_texture.is_none() && m.normal_texture.is_none());
     assert_eq!(m.refractive_index, 1.0);
-    assert!((m.specular - 0.1).abs() < 1e-6, "specular {}", m.specular);
+    assert!((m.specular - 0.10).abs() < 1e-6);
     assert!((m.shininess - 18.0).abs() < 1e-6);
     assert!((m.reflectivity - 0.03).abs() < 1e-6);
-}
 
-#[test]
-fn every_texel_is_fully_opaque() {
-    let e = env();
-    let f = faces(&e);
-    for face in FACES {
-        let t = e.manager.get(f.texture_for_face(face)).unwrap();
-        assert!(t.pixels().iter().all(|c| c.a == 1.0), "{face:?}");
-    }
-}
-
-#[test]
-fn it_is_an_official_catalog_entry_with_a_finite_focus_point() {
-    let scene = CatalogScene::new();
-    let entry = scene
-        .entries()
-        .iter()
-        .find(|e| e.material_id == budding_amethyst_material_id())
-        .expect("in the catalog");
-
-    assert_eq!(entry.display_name, "Budding amethyst");
-    assert_eq!(entry.block_type, BlockType::BuddingAmethyst);
-    assert_eq!(entry.kind, SampleKind::PlainBlock);
-    assert_eq!(entry.material_id, budding_amethyst_material_id());
-    assert_eq!(scene.world().get(entry.position), Some(&entry.block()));
-    let p = entry.focus_point;
-    assert!(p.x.is_finite() && p.y.is_finite() && p.z.is_finite());
-}
-
-#[test]
-fn there_is_exactly_one_sample_of_this_block() {
-    let count = catalog_entries()
-        .iter()
-        .filter(|e| e.material_id == budding_amethyst_material_id())
-        .count();
-    assert_eq!(count, 1);
-
-    let scene = CatalogScene::new();
-    let mut uses = 0;
-    for x in -1..14 {
-        for y in -1..5 {
-            for z in -10..12 {
-                if let Some(b) = scene.world().get(IVec3::new(x, y, z)) {
-                    if b.material_id() == budding_amethyst_material_id() {
-                        uses += 1;
-                    }
-                }
-            }
-        }
-    }
-    assert_eq!(uses, 1, "no diagnostic duplicate");
-}
-
-#[test]
-fn sampling_is_nearest_neighbor() {
-    let e = env();
-    let f = faces(&e);
-    let tex = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
-
-    for (i, j) in [(0usize, 0usize), (5, 3), (15, 15), (8, 12)] {
-        let expected = tex.texel(i, j).unwrap();
-        for (du, dv) in [(0.05, 0.05), (0.5, 0.5), (0.95, 0.95)] {
-            let uv = Vec2::new((i as f32 + du) / 16.0, (j as f32 + dv) / 16.0);
-            assert_eq!(sample_nearest(tex, uv), expected, "texel ({i},{j})");
-        }
-    }
-}
-
-#[test]
-fn the_texture_reads_violet_lilac_with_light_accents() {
-    let e = env();
     let f = faces(&e);
     let t = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
+    assert!(t.pixels().iter().all(|c| c.a == 1.0), "opaque facets");
+}
+
+#[test]
+fn the_texture_reads_violet_lilac_with_light_tips() {
+    let e = env();
+    let t = e
+        .manager
+        .get(faces(&e).texture_for_face(Face::PositiveZ))
+        .unwrap();
 
     let n = t.pixels().len() as f32;
     let (r, g, b) = t
@@ -287,56 +231,91 @@ fn the_texture_reads_violet_lilac_with_light_accents() {
         .iter()
         .fold((0.0, 0.0, 0.0), |a, c| (a.0 + c.r, a.1 + c.g, a.2 + c.b));
     let (r, g, b) = (r / n, g / n, b / n);
-    assert!(b > r && r > g, "violet: {r} {g} {b}");
+    assert!(b > r && r > g, "violet/lilac: {r} {g} {b}");
 
-    let light = t.pixels().iter().filter(|c| c.r > 0.7 && c.g > 0.5).count();
-    assert!(light > 3, "pale pink/lilac crystal accents: {light}");
-    let deep = t.pixels().iter().filter(|c| c.b > c.g * 1.5).count();
-    assert!(deep > 150, "mostly purple body: {deep}");
+    // Pale pink/cream crystal accents exist.
+    let pale = t.pixels().iter().filter(|c| c.r > 0.9 && c.g > 0.7).count();
+    assert!(pale >= 4, "light accents: {pale}");
+
+    // Tips are lighter than the base: cell-space v = 0 is the top.
+    let row_luma = |y: usize| {
+        (0..16)
+            .map(|x| {
+                let c = t.texel(x, y).unwrap();
+                0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+            })
+            .sum::<f32>()
+    };
+    let top: f32 = (0..4).map(row_luma).sum();
+    let base: f32 = (12..16).map(row_luma).sum();
+    assert!(top > base, "light tips over a darker base: {top} vs {base}");
 }
 
 #[test]
-fn it_is_a_full_cube_and_never_the_partial_amethyst_cluster() {
+fn it_is_the_official_catalog_entry_at_its_existing_slot() {
+    let scene = CatalogScene::new();
+    let entry = scene
+        .entries()
+        .iter()
+        .find(|e| e.block_type == BlockType::AmethystCluster)
+        .expect("in the catalog");
+    assert_eq!(entry.display_name, "Amethyst cluster");
+    assert_eq!(entry.kind, SampleKind::PartialGeometry);
+    assert_eq!(entry.material_id, amethyst_cluster_material_id());
+    assert_eq!(entry.position, IVec3::new(AMETHYST_X, 1, SHAPES_Z));
+    assert_eq!(entry.orientation, Orientation::Up);
+    assert_eq!(scene.world().get(entry.position), Some(&entry.block()));
+
+    let p = entry.focus_point;
+    assert!(p.x.is_finite() && p.y.is_finite() && p.z.is_finite());
+    let c = Vec3::new(AMETHYST_X as f32 + 0.5, 1.5, SHAPES_Z as f32 + 0.5);
+    assert!((p - c).length() < 1e-6);
+}
+
+#[test]
+fn there_is_exactly_one_cluster_in_the_catalog() {
+    let count = catalog_entries()
+        .iter()
+        .filter(|e| e.block_type == BlockType::AmethystCluster)
+        .count();
+    assert_eq!(count, 1, "promoted, not duplicated");
+
+    let scene = CatalogScene::new();
+    let mut uses = 0;
+    for x in -1..14 {
+        for y in -1..5 {
+            for z in -14..12 {
+                if let Some(b) = scene.world().get(IVec3::new(x, y, z)) {
+                    if b.block_type() == BlockType::AmethystCluster {
+                        uses += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(uses, 1);
+}
+
+#[test]
+fn it_stays_distinct_from_budding_amethyst() {
+    assert_ne!(BlockType::AmethystCluster, BlockType::BuddingAmethyst);
     assert!(matches!(
         block_geometry(BlockType::BuddingAmethyst, Orientation::Up),
         BlockGeometry::FullCube
     ));
-    assert!(!matches!(
-        block_geometry(BlockType::AmethystCluster, Orientation::Up),
-        BlockGeometry::FullCube
-    ));
-    assert_ne!(BlockType::BuddingAmethyst, BlockType::AmethystCluster);
-
-    let e = env();
-    let entries = catalog_entries();
-    let cluster = entries
-        .iter()
-        .find(|x| x.block_type == BlockType::AmethystCluster)
-        .expect("cluster stays");
-    let budding = entries
-        .iter()
-        .find(|x| x.block_type == BlockType::BuddingAmethyst)
-        .unwrap();
-    assert_ne!(cluster.material_id, budding.material_id);
-    assert_ne!(cluster.position, budding.position);
-    assert_eq!(cluster.kind, SampleKind::PartialGeometry);
-    assert_eq!(budding.kind, SampleKind::PlainBlock);
-
-    // The cluster keeps its own material and its own crystal texture.
-    let cm = e.library.get(cluster.material_id).unwrap();
-    let bm = e.library.get(budding.material_id).unwrap();
     assert_ne!(
-        cm.face_textures.unwrap().texture_for_face(Face::PositiveZ),
-        bm.face_textures.unwrap().texture_for_face(Face::PositiveZ),
-        "the cluster never wears the budding-amethyst block texture"
+        amethyst_cluster_material_id(),
+        budding_amethyst_material_id()
     );
-}
 
-#[test]
-fn the_block_is_not_emissive_and_has_only_a_subtle_shine() {
     let e = env();
-    let m = e.library.get(budding_amethyst_material_id()).unwrap();
-    assert_eq!(m.emission_strength, 0.0);
-    assert!(m.emissive_texture.is_none() && m.normal_texture.is_none());
-    assert!(m.specular <= 0.2 && m.reflectivity <= 0.06);
+    let cluster = faces(&e).texture_for_face(Face::PositiveZ);
+    let budding = e
+        .library
+        .get(budding_amethyst_material_id())
+        .unwrap()
+        .face_textures
+        .unwrap()
+        .texture_for_face(Face::PositiveZ);
+    assert_ne!(cluster, budding, "its own crystal texture");
 }

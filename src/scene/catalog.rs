@@ -20,6 +20,7 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld_blocks::amethyst_cluster_material_id;
 use crate::scene::overworld_blocks::budding_amethyst_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
@@ -344,7 +345,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             "Amethyst cluster",
             SampleKind::PartialGeometry,
             BlockType::AmethystCluster,
-            amethyst_material_id(),
+            amethyst_cluster_material_id(),
             at(AMETHYST_X, SHAPES_Z),
             up,
         ),
