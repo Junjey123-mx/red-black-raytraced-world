@@ -18,11 +18,16 @@ pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
 
+pub fn sand_material_id() -> MaterialId {
+    MaterialId::new(34)
+}
+
 /// Face textures of the definitive blocks, loaded once through the shared
 /// `TextureManager` (nearest-neighbor sampling happens at render time).
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub cobblestone: FaceTextures,
+    pub sand: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -33,10 +38,12 @@ impl OverworldBlockTextures {
     ) -> Result<Self, TextureLoadError> {
         let dirt = manager.load(format!("{overworld_dir}/dirt.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
+        let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             cobblestone: FaceTextures::uniform(cobblestone),
+            sand: FaceTextures::uniform(sand),
         })
     }
 }
@@ -47,6 +54,8 @@ impl OverworldBlockTextures {
 /// - Dirt: one texture on all six faces, very matte (specular 0.02).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
+/// - Sand: one texture on all six faces, light and matte (specular 0.03). It
+///   is a static block: nothing here (or anywhere) simulates gravity.
 pub fn insert_overworld_materials(
     library: &mut MaterialLibrary,
     textures: &OverworldBlockTextures,
@@ -61,5 +70,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.50, 0.50, 0.50, 1.0), 0.04, 5.0)
             .with_reflectivity(0.01)
             .with_face_textures(textures.cobblestone),
+    );
+    library.insert(
+        sand_material_id(),
+        Material::new(Color::new(0.78, 0.72, 0.52, 1.0), 0.03, 5.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.sand),
     );
 }
