@@ -50,6 +50,10 @@ pub fn portal_frame_material_id() -> MaterialId {
     MaterialId::new(43)
 }
 
+pub fn budding_amethyst_material_id() -> MaterialId {
+    MaterialId::new(44)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -67,6 +71,7 @@ pub fn deepslate_material_id() -> MaterialId {
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
+    pub budding_amethyst: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -96,6 +101,7 @@ impl OverworldBlockTextures {
         let edge_top = manager.load(format!("{overworld_dir}/wood_door/edge_top.png"))?;
         let thin = |broad, edge| FaceTextures::new(edge, edge, edge, edge, broad, broad);
         let portal_frame = manager.load(format!("{PORTAL_TEXTURES_DIR}/frame_albedo.png"))?;
+        let budding = manager.load(format!("{RED_BLACK_TEXTURES_DIR}/budding_amethyst.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -104,6 +110,7 @@ impl OverworldBlockTextures {
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
+            budding_amethyst: FaceTextures::uniform(budding),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -149,6 +156,9 @@ impl OverworldBlockTextures {
 /// - PortalFrameRedObsidian: the project's red-black obsidian (dark crimson
 ///   mass with red veins, never vanilla purple), opaque and non-emissive
 ///   (specular 0.05, shininess 8, reflectivity 0.02).
+/// - BuddingAmethyst: a full violet crystalline cube (specular 0.10, shininess
+///   18, reflectivity 0.03), opaque and non-emissive. It is the mother rock,
+///   distinct from the partial-geometry AmethystCluster.
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -157,6 +167,9 @@ impl OverworldBlockTextures {
 ///   sides use the two textures visible in its reference. No normal map.
 /// Directory (relative to the repository root) of the portal frame texture.
 pub const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
+
+/// Directory (relative to the repository root) of the Red-Black block textures.
+pub const RED_BLACK_TEXTURES_DIR: &str = "assets/textures/red_black_maze";
 
 pub fn insert_overworld_materials(
     library: &mut MaterialLibrary,
@@ -238,5 +251,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.20, 0.04, 0.06, 1.0), 0.05, 8.0)
             .with_reflectivity(0.02)
             .with_face_textures(textures.portal_frame),
+    );
+    library.insert(
+        budding_amethyst_material_id(),
+        Material::new(Color::new(0.45, 0.30, 0.70, 1.0), 0.10, 18.0)
+            .with_reflectivity(0.03)
+            .with_face_textures(textures.budding_amethyst),
     );
 }

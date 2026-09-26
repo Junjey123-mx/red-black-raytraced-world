@@ -20,6 +20,7 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld_blocks::budding_amethyst_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::portal_frame_material_id;
@@ -54,6 +55,7 @@ pub const LOG_X: i32 = 2;
 pub const WOOD_PLANKS_X: i32 = 4;
 pub const DOUBLE_SLAB_X: i32 = 6;
 pub const PORTAL_FRAME_X: i32 = 8;
+pub const BUDDING_AMETHYST_X: i32 = 10;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -247,6 +249,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::PortalFrameRedObsidian,
             portal_frame_material_id(),
             at(PORTAL_FRAME_X, OVERWORLD_II_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Budding amethyst",
+            SampleKind::PlainBlock,
+            BlockType::BuddingAmethyst,
+            budding_amethyst_material_id(),
+            at(BUDDING_AMETHYST_X, OVERWORLD_II_Z),
             up,
         ),
         CatalogEntry::new(
