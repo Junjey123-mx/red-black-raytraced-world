@@ -20,6 +20,7 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::{
     OverworldBlockTextures, cobblestone_material_id, deepslate_material_id, dirt_material_id,
     insert_overworld_materials, log_material_id, sand_material_id, stone_block_material_id,
@@ -45,6 +46,7 @@ pub const OVERWORLD_I_Z: i32 = -4;
 /// Row of the Overworld II / Portal blocks behind the Overworld I row.
 pub const OVERWORLD_II_Z: i32 = -6;
 pub const LOG_X: i32 = 2;
+pub const WOOD_PLANKS_X: i32 = 4;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -214,6 +216,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::Log,
             log_material_id(),
             at(LOG_X, OVERWORLD_II_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Wood planks",
+            SampleKind::PlainBlock,
+            BlockType::WoodPlanks,
+            wood_planks_material_id(),
+            at(WOOD_PLANKS_X, OVERWORLD_II_Z),
             up,
         ),
         CatalogEntry::new(

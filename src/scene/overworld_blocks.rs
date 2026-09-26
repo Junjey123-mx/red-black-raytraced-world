@@ -22,6 +22,10 @@ pub fn log_material_id() -> MaterialId {
     MaterialId::new(36)
 }
 
+pub fn wood_planks_material_id() -> MaterialId {
+    MaterialId::new(37)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -39,6 +43,7 @@ pub fn deepslate_material_id() -> MaterialId {
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
+    pub wood_planks: FaceTextures,
     pub log: FaceTextures,
     pub cobblestone: FaceTextures,
     pub sand: FaceTextures,
@@ -55,6 +60,7 @@ impl OverworldBlockTextures {
         let stone = manager.load(format!("{overworld_dir}/stone.png"))?;
         let log_end = manager.load(format!("{overworld_dir}/log/end.png"))?;
         let log_side = manager.load(format!("{overworld_dir}/log/side.png"))?;
+        let wood_planks = manager.load(format!("{overworld_dir}/wood_planks.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -63,6 +69,7 @@ impl OverworldBlockTextures {
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
+            wood_planks: FaceTextures::uniform(wood_planks),
             // End grain on +Y/-Y, bark on the four sides.
             log: FaceTextures::new(log_side, log_side, log_end, log_end, log_side, log_side),
             cobblestone: FaceTextures::uniform(cobblestone),
@@ -89,6 +96,8 @@ impl OverworldBlockTextures {
 ///   small specular response (0.08, shininess 12). No normal map.
 /// - Log: end grain on top and bottom, bark on the four sides (specular 0.07,
 ///   shininess 10), semimatte.
+/// - WoodPlanks: one plank texture on all six faces, semimatte (specular 0.06,
+///   shininess 8); the canonical wooden base of the architectural blocks.
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -133,5 +142,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.40, 0.31, 0.19, 1.0), 0.07, 10.0)
             .with_reflectivity(0.015)
             .with_face_textures(textures.log),
+    );
+    library.insert(
+        wood_planks_material_id(),
+        Material::new(Color::new(0.63, 0.50, 0.30, 1.0), 0.06, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.wood_planks),
     );
 }
