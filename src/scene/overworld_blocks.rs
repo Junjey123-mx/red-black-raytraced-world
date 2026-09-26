@@ -46,6 +46,10 @@ pub fn wood_door_top_material_id() -> MaterialId {
     MaterialId::new(42)
 }
 
+pub fn portal_frame_material_id() -> MaterialId {
+    MaterialId::new(43)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -63,6 +67,7 @@ pub fn deepslate_material_id() -> MaterialId {
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
+    pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
     pub wood_door_bottom: FaceTextures,
@@ -90,6 +95,7 @@ impl OverworldBlockTextures {
         let edge_bottom = manager.load(format!("{overworld_dir}/wood_door/edge_bottom.png"))?;
         let edge_top = manager.load(format!("{overworld_dir}/wood_door/edge_top.png"))?;
         let thin = |broad, edge| FaceTextures::new(edge, edge, edge, edge, broad, broad);
+        let portal_frame = manager.load(format!("{PORTAL_TEXTURES_DIR}/frame_albedo.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -98,6 +104,7 @@ impl OverworldBlockTextures {
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
+            portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
             wood_planks: FaceTextures::uniform(wood_planks),
@@ -139,12 +146,18 @@ impl OverworldBlockTextures {
 /// - WoodDoor: two stacked halves of the reference door texture on the broad
 ///   faces; the four window panes of the upper half are real holes
 ///   (`AlphaMode::Cutout`). Wood profile (specular 0.10, shininess 18).
+/// - PortalFrameRedObsidian: the project's red-black obsidian (dark crimson
+///   mass with red veins, never vanilla purple), opaque and non-emissive
+///   (specular 0.05, shininess 8, reflectivity 0.02).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
 ///   is a static block: nothing here (or anywhere) simulates gravity.
 /// - Deepslate: dark and matte (specular 0.06, shininess 10). Top/bottom and
 ///   sides use the two textures visible in its reference. No normal map.
+/// Directory (relative to the repository root) of the portal frame texture.
+pub const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
+
 pub fn insert_overworld_materials(
     library: &mut MaterialLibrary,
     textures: &OverworldBlockTextures,
@@ -220,4 +233,10 @@ pub fn insert_overworld_materials(
                 .with_alpha_mode(AlphaMode::Cutout),
         );
     }
+    library.insert(
+        portal_frame_material_id(),
+        Material::new(Color::new(0.20, 0.04, 0.06, 1.0), 0.05, 8.0)
+            .with_reflectivity(0.02)
+            .with_face_textures(textures.portal_frame),
+    );
 }

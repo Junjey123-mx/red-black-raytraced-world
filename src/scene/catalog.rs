@@ -22,6 +22,7 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
+use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::wood_stairs_material_id;
 use crate::scene::overworld_blocks::{
@@ -52,6 +53,7 @@ pub const OVERWORLD_II_Z: i32 = -6;
 pub const LOG_X: i32 = 2;
 pub const WOOD_PLANKS_X: i32 = 4;
 pub const DOUBLE_SLAB_X: i32 = 6;
+pub const PORTAL_FRAME_X: i32 = 8;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -237,6 +239,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::DoubleWoodSlab,
             double_wood_slab_material_id(),
             at(DOUBLE_SLAB_X, OVERWORLD_II_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Portal frame (red obsidian)",
+            SampleKind::PlainBlock,
+            BlockType::PortalFrameRedObsidian,
+            portal_frame_material_id(),
+            at(PORTAL_FRAME_X, OVERWORLD_II_Z),
             up,
         ),
         CatalogEntry::new(
