@@ -17,6 +17,7 @@ use crate::renderer::shadows;
 use crate::renderer::texture_sampling::sample_nearest;
 use crate::renderer::voxel_traversal::DdaState;
 use crate::scene::block::BlockInstance;
+use crate::scene::block_geometry::BlockGeometry;
 use crate::scene::block_shape_factory::block_geometry;
 use crate::scene::light::Light;
 use crate::scene::material_library::MaterialLibrary;
@@ -461,13 +462,63 @@ fn mix(a: Color, b: Color, t: f32) -> Color {
     (a * (1.0 - t) + b * t).clamp()
 }
 
-/// Whether a geometric voxel hit is a real surface point: `false` only for a
-/// hit on an `AlphaMode::Cutout` material at an empty texel (air). Unknown
-/// materials are accepted so the loud missing-material path still triggers.
+/// The integer step across a face of a full cube, to the neighboring cell.
+fn face_step(face: Face) -> IVec3 {
+    match face {
+        Face::PositiveX => IVec3::new(1, 0, 0),
+        Face::NegativeX => IVec3::new(-1, 0, 0),
+        Face::PositiveY => IVec3::new(0, 1, 0),
+        Face::NegativeY => IVec3::new(0, -1, 0),
+        Face::PositiveZ => IVec3::new(0, 0, 1),
+        Face::NegativeZ => IVec3::new(0, 0, -1),
+    }
+}
+
+/// `true` when `material` is a continuous transmissive medium (water, glass):
+/// transparent and not a cut-out.
+fn is_transmissive_medium(material: &Material) -> bool {
+    material.transparency > 0.0 && material.alpha_mode != AlphaMode::Cutout
+}
+
+/// Whether the hit is on a face shared by two contiguous cells of the *same*
+/// transmissive medium (two `Water` voxels side by side). Such a boundary is
+/// not an interface at all — light stays inside one body of water — so it must
+/// neither refract, reflect, tint, nor darken a shadow. Only full cubes of the
+/// same material qualify; a different neighbor, air, or a partial shape leaves
+/// the face a real surface.
+fn is_internal_medium_face(scene: &VoxelScene, voxel: &VoxelHit, material: &Material) -> bool {
+    if !is_transmissive_medium(material) {
+        return false;
+    }
+
+    let neighbor_cell = voxel.cell + face_step(voxel.hit.face);
+    let Some(neighbor) = scene.world.get(neighbor_cell) else {
+        return false;
+    };
+
+    neighbor.material_id() == voxel.block.material_id()
+        && matches!(
+            block_geometry(voxel.block.block_type(), voxel.block.orientation()),
+            BlockGeometry::FullCube
+        )
+        && matches!(
+            block_geometry(neighbor.block_type(), neighbor.orientation()),
+            BlockGeometry::FullCube
+        )
+}
+
+/// Whether a geometric voxel hit is a real surface point: `false` for a hit on
+/// an `AlphaMode::Cutout` material at an empty texel (air), and for a face
+/// shared by two contiguous voxels of the same transmissive medium (see
+/// `is_internal_medium_face`). Unknown materials are accepted so the loud
+/// missing-material path still triggers.
 fn is_solid_hit(scene: &VoxelScene, voxel: &VoxelHit) -> bool {
     let Some(material) = scene.materials.get(voxel.block.material_id()) else {
         return true;
     };
+    if is_internal_medium_face(scene, voxel, material) {
+        return false;
+    }
     if material.alpha_mode != AlphaMode::Cutout {
         return true;
     }
