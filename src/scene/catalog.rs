@@ -12,8 +12,9 @@ use crate::core::math::{IVec3, Vec3};
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::material_gallery::{
-    BACK_Z, BRICKS_X, FRONT_Z, GLASS_X, GalleryTextures, LAMP_X, LEAVES_X, MATTE_X, MIRROR_X,
-    PORTAL_X, WATER_X, advanced_materials_library, advanced_materials_world,
+    BACK_Z, BRICKS_X, FRONT_Z, GALLERY_WIDTH, GALLERY_Z_MIN, GLASS_X, GalleryTextures, LAMP_X,
+    LEAVES_X, MATTE_X, MIRROR_X, PORTAL_X, WATER_X, advanced_materials_library,
+    advanced_materials_world, checker_dark_material_id, checker_light_material_id,
     deepslate_bricks_material_id, glass_material_id, leaves_material_id, matte_material_id,
     mirror_material_id, portal_core_material_id, redstone_lamp_material_id, water_material_id,
 };
@@ -21,7 +22,7 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::scene::{
     PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
-    door_bottom_material_id, door_top_material_id, wood_material_id,
+    door_bottom_material_id, door_top_material_id, grass_material_id, wood_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 use crate::scene::voxel_world::VoxelWorld;
@@ -33,6 +34,12 @@ pub const FENCE_X: i32 = 3;
 pub const DOOR_X: i32 = 6;
 pub const AMETHYST_X: i32 = 9;
 
+/// Row of the definitive Overworld I full-cube blocks, behind the gallery's
+/// back row. Slots (x): Grass 1, Dirt 3, Stone 5 (reserved), Cobblestone 7,
+/// Sand 9, Deepslate 11.
+pub const OVERWORLD_I_Z: i32 = -4;
+pub const GRASS_X: i32 = 1;
+
 /// Standard inspection distance used when focusing a sample.
 pub const FOCUS_DISTANCE: f32 = 4.5;
 
@@ -41,6 +48,8 @@ pub const FOCUS_DISTANCE: f32 = 4.5;
 pub enum SampleKind {
     /// Plain full cube used as the untouched reference.
     Control,
+    /// A definitive Overworld full-cube block (opaque, non-emissive).
+    PlainBlock,
     /// A full cube with strong `reflectivity`.
     Reflective,
     /// Non-cubic geometry resolved through `BlockGeometry`.
@@ -139,6 +148,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
     door.focus_point = Vec3::new(DOOR_X as f32 + 0.5, 2.0, SHAPES_Z as f32 + 0.5);
 
     vec![
+        CatalogEntry::new(
+            "Grass",
+            SampleKind::PlainBlock,
+            BlockType::Grass,
+            grass_material_id(),
+            at(GRASS_X, OVERWORLD_I_Z),
+            up,
+        ),
         CatalogEntry::new(
             "Control cube",
             SampleKind::Control,
@@ -259,6 +276,7 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
     let shapes = diagnostic_partial_materials(&textures.shapes);
 
     for id in [
+        grass_material_id(),
         wood_material_id(),
         door_bottom_material_id(),
         door_top_material_id(),
@@ -271,7 +289,35 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
         library.insert(id, material);
     }
 
+    // Grass keeps its Gate 04 face textures and matte look, plus the 0.01
+    // reflectivity of the definitive Overworld profile.
+    let grass = library
+        .get(grass_material_id())
+        .expect("grass was just inserted")
+        .clone()
+        .with_reflectivity(0.01);
+    library.insert(grass_material_id(), grass);
+
     library
+}
+
+/// Continues the gallery's checker floor behind it (`z` from
+/// `OVERWORLD_I_Z - 2` up to the gallery's own first row) so the Overworld I
+/// row stands on the same floor.
+fn extend_floor_backward(world: &mut VoxelWorld) {
+    for z in OVERWORLD_I_Z - 2..GALLERY_Z_MIN {
+        for x in 0..GALLERY_WIDTH {
+            let id = if (x + z) % 2 == 0 {
+                checker_light_material_id()
+            } else {
+                checker_dark_material_id()
+            };
+            world.insert(
+                IVec3::new(x, 0, z),
+                BlockInstance::new(BlockType::Stone, id, Orientation::Up),
+            );
+        }
+    }
 }
 
 /// The persistent inspection scene: the world, its sample list, and which
@@ -288,6 +334,7 @@ impl CatalogScene {
     pub fn new() -> Self {
         let entries = catalog_entries();
         let mut world = advanced_materials_world();
+        extend_floor_backward(&mut world);
 
         for entry in &entries {
             world.insert(entry.position, entry.block());

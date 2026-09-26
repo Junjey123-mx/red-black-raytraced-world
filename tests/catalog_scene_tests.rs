@@ -126,6 +126,8 @@ use scene::voxel_world::VoxelWorld;
 
 const EPS: f32 = 1e-4;
 const RANGE: f32 = 60.0;
+/// Number of catalog samples (updated as definitive blocks join the catalog).
+const ENTRY_COUNT: usize = 13;
 
 fn cell(x: i32, y: i32, z: i32) -> IVec3 {
     IVec3::new(x, y, z)
@@ -182,11 +184,11 @@ fn world_with(entry: &CatalogEntry) -> VoxelWorld {
 // ---- catalog contents -------------------------------------------------
 
 #[test]
-fn the_catalog_is_not_empty_and_has_the_twelve_current_samples() {
+fn the_catalog_is_not_empty_and_has_every_current_sample() {
     let scene = CatalogScene::new();
     assert!(!scene.is_empty());
-    assert_eq!(scene.len(), 12);
-    assert_eq!(scene.entries().len(), 12);
+    assert_eq!(scene.len(), ENTRY_COUNT);
+    assert_eq!(scene.entries().len(), ENTRY_COUNT);
 }
 
 #[test]
@@ -203,7 +205,7 @@ fn positions_are_deterministic_unique_and_inside_the_floor() {
             e.display_name
         );
         assert!((0..GALLERY_WIDTH).contains(&e.position.x));
-        assert!((GALLERY_Z_MIN..9).contains(&e.position.z));
+        assert!((GALLERY_Z_MIN - 3..9).contains(&e.position.z));
         assert_eq!(e.position.y, 1, "samples stand on the floor");
     }
     let s1 = CatalogScene::new();
@@ -226,7 +228,7 @@ fn entries_have_names_and_finite_focus_points_near_their_cells() {
     let mut names: Vec<_> = catalog_entries().iter().map(|e| e.display_name).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 12, "names are unique");
+    assert_eq!(names.len(), ENTRY_COUNT, "names are unique");
 }
 
 #[test]
@@ -339,7 +341,7 @@ fn the_label_reports_the_selection() {
     s.select_next();
     let label = s.label();
     assert!(label.contains(s.selected().display_name));
-    assert!(label.contains("2 / 12"), "{label}");
+    assert!(label.contains(&format!("2 / {ENTRY_COUNT}")), "{label}");
 }
 
 #[test]
@@ -461,7 +463,7 @@ fn every_material_id_used_by_the_world_resolves() {
     let mut checked = 0;
     for x in -1..GALLERY_WIDTH + 1 {
         for y in -1..4 {
-            for z in GALLERY_Z_MIN - 1..10 {
+            for z in GALLERY_Z_MIN - 6..10 {
                 if let Some(b) = s.world().get(cell(x, y, z)) {
                     assert!(e.library.contains(b.material_id()), "({x},{y},{z})");
                     checked += 1;

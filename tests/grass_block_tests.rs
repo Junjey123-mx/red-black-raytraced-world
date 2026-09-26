@@ -119,9 +119,10 @@ fn unit_cube() -> Cube {
 
 /// Structural (not pixel-exact) green classifier matching the same
 /// heuristic used to build the palette from the reference image: the green
-/// channel at or above the red channel reads as "grass-family".
+/// channel strictly above the red channel reads as "grass-family" (neutral
+/// grey flecks in the dirt are not green).
 fn is_greenish(c: Color) -> bool {
-    c.g >= c.r
+    c.g > c.r
 }
 
 fn green_fraction(texture: &CpuTexture) -> f32 {
