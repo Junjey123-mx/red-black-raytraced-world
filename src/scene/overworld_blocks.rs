@@ -18,6 +18,10 @@ pub fn stone_block_material_id() -> MaterialId {
     MaterialId::new(32)
 }
 
+pub fn log_material_id() -> MaterialId {
+    MaterialId::new(36)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -35,6 +39,7 @@ pub fn deepslate_material_id() -> MaterialId {
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
+    pub log: FaceTextures,
     pub cobblestone: FaceTextures,
     pub sand: FaceTextures,
     pub deepslate: FaceTextures,
@@ -48,6 +53,8 @@ impl OverworldBlockTextures {
     ) -> Result<Self, TextureLoadError> {
         let dirt = manager.load(format!("{overworld_dir}/dirt.png"))?;
         let stone = manager.load(format!("{overworld_dir}/stone.png"))?;
+        let log_end = manager.load(format!("{overworld_dir}/log/end.png"))?;
+        let log_side = manager.load(format!("{overworld_dir}/log/side.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -56,6 +63,8 @@ impl OverworldBlockTextures {
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
+            // End grain on +Y/-Y, bark on the four sides.
+            log: FaceTextures::new(log_side, log_side, log_end, log_end, log_side, log_side),
             cobblestone: FaceTextures::uniform(cobblestone),
             sand: FaceTextures::uniform(sand),
             // The reference shows a distinct top (and bottom) from the four
@@ -78,6 +87,8 @@ impl OverworldBlockTextures {
 /// - Dirt: one texture on all six faces, very matte (specular 0.02).
 /// - Stone: one low-contrast grey texture on all six faces, matte with a very
 ///   small specular response (0.08, shininess 12). No normal map.
+/// - Log: end grain on top and bottom, bark on the four sides (specular 0.07,
+///   shininess 10), semimatte.
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -116,5 +127,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.50, 0.50, 0.50, 1.0), 0.08, 12.0)
             .with_reflectivity(0.02)
             .with_face_textures(textures.stone),
+    );
+    library.insert(
+        log_material_id(),
+        Material::new(Color::new(0.40, 0.31, 0.19, 1.0), 0.07, 10.0)
+            .with_reflectivity(0.015)
+            .with_face_textures(textures.log),
     );
 }

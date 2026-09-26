@@ -129,7 +129,7 @@ use scene::voxel_world::VoxelWorld;
 const EPS: f32 = 1e-4;
 const RANGE: f32 = 60.0;
 /// Number of catalog samples (updated as definitive blocks join the catalog).
-const ENTRY_COUNT: usize = 18;
+const ENTRY_COUNT: usize = 19;
 
 fn cell(x: i32, y: i32, z: i32) -> IVec3 {
     IVec3::new(x, y, z)
@@ -207,7 +207,7 @@ fn positions_are_deterministic_unique_and_inside_the_floor() {
             e.display_name
         );
         assert!((0..GALLERY_WIDTH).contains(&e.position.x));
-        assert!((GALLERY_Z_MIN - 3..9).contains(&e.position.z));
+        assert!((GALLERY_Z_MIN - 6..9).contains(&e.position.z));
         assert_eq!(e.position.y, 1, "samples stand on the floor");
     }
     let s1 = CatalogScene::new();
@@ -465,7 +465,7 @@ fn every_material_id_used_by_the_world_resolves() {
     let mut checked = 0;
     for x in -1..GALLERY_WIDTH + 1 {
         for y in -1..4 {
-            for z in GALLERY_Z_MIN - 6..10 {
+            for z in GALLERY_Z_MIN - 8..10 {
                 if let Some(b) = s.world().get(cell(x, y, z)) {
                     assert!(e.library.contains(b.material_id()), "({x},{y},{z})");
                     checked += 1;

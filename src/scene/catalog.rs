@@ -22,7 +22,7 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::{
     OverworldBlockTextures, cobblestone_material_id, deepslate_material_id, dirt_material_id,
-    insert_overworld_materials, sand_material_id, stone_block_material_id,
+    insert_overworld_materials, log_material_id, sand_material_id, stone_block_material_id,
 };
 use crate::scene::scene::{
     PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
@@ -42,6 +42,9 @@ pub const AMETHYST_X: i32 = 9;
 /// back row. Slots (x): Grass 1, Dirt 3, Stone 5 (reserved), Cobblestone 7,
 /// Sand 9, Deepslate 11 (Stone now fills its reserved slot).
 pub const OVERWORLD_I_Z: i32 = -4;
+/// Row of the Overworld II / Portal blocks behind the Overworld I row.
+pub const OVERWORLD_II_Z: i32 = -6;
+pub const LOG_X: i32 = 2;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -206,6 +209,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             up,
         ),
         CatalogEntry::new(
+            "Log",
+            SampleKind::PlainBlock,
+            BlockType::Log,
+            log_material_id(),
+            at(LOG_X, OVERWORLD_II_Z),
+            up,
+        ),
+        CatalogEntry::new(
             "Control cube",
             SampleKind::Control,
             BlockType::Stone,
@@ -355,10 +366,10 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
 }
 
 /// Continues the gallery's checker floor behind it (`z` from
-/// `OVERWORLD_I_Z - 2` up to the gallery's own first row) so the Overworld I
-/// row stands on the same floor.
+/// `OVERWORLD_II_Z - 2` up to the gallery's own first row) so the Overworld I
+/// and II rows stand on the same floor.
 fn extend_floor_backward(world: &mut VoxelWorld) {
-    for z in OVERWORLD_I_Z - 2..GALLERY_Z_MIN {
+    for z in OVERWORLD_II_Z - 2..GALLERY_Z_MIN {
         for x in 0..GALLERY_WIDTH {
             let id = if (x + z) % 2 == 0 {
                 checker_light_material_id()
