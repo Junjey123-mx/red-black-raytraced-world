@@ -24,6 +24,7 @@ use crate::scene::overworld_blocks::amethyst_cluster_material_id;
 use crate::scene::overworld_blocks::budding_amethyst_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
+use crate::scene::overworld_blocks::mycelium_material_id;
 use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::wood_stairs_material_id;
@@ -57,6 +58,9 @@ pub const WOOD_PLANKS_X: i32 = 4;
 pub const DOUBLE_SLAB_X: i32 = 6;
 pub const PORTAL_FRAME_X: i32 = 8;
 pub const BUDDING_AMETHYST_X: i32 = 10;
+/// Row of the first Red-Black catalog blocks, behind the Overworld II row.
+pub const RED_BLACK_I_Z: i32 = -8;
+pub const MYCELIUM_X: i32 = 1;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -261,6 +265,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             up,
         ),
         CatalogEntry::new(
+            "Mycelium",
+            SampleKind::PlainBlock,
+            BlockType::Mycelium,
+            mycelium_material_id(),
+            at(MYCELIUM_X, RED_BLACK_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
             "Control cube",
             SampleKind::Control,
             BlockType::Stone,
@@ -408,10 +420,10 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
 }
 
 /// Continues the gallery's checker floor behind it (`z` from
-/// `OVERWORLD_II_Z - 2` up to the gallery's own first row) so the Overworld I
-/// and II rows stand on the same floor.
+/// `RED_BLACK_I_Z - 2` up to the gallery's own first row) so the Overworld I
+/// and II rows and the Red-Black row stand on the same floor.
 fn extend_floor_backward(world: &mut VoxelWorld) {
-    for z in OVERWORLD_II_Z - 2..GALLERY_Z_MIN {
+    for z in RED_BLACK_I_Z - 2..GALLERY_Z_MIN {
         for x in 0..GALLERY_WIDTH {
             let id = if (x + z) % 2 == 0 {
                 checker_light_material_id()
