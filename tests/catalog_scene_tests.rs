@@ -129,7 +129,7 @@ use scene::voxel_world::VoxelWorld;
 const EPS: f32 = 1e-4;
 const RANGE: f32 = 60.0;
 /// Number of catalog samples (updated as definitive blocks join the catalog).
-const ENTRY_COUNT: usize = 16;
+const ENTRY_COUNT: usize = 17;
 
 fn cell(x: i32, y: i32, z: i32) -> IVec3 {
     IVec3::new(x, y, z)

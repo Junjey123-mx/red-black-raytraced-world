@@ -22,12 +22,17 @@ pub fn sand_material_id() -> MaterialId {
     MaterialId::new(34)
 }
 
+pub fn deepslate_material_id() -> MaterialId {
+    MaterialId::new(35)
+}
+
 /// Face textures of the definitive blocks, loaded once through the shared
 /// `TextureManager` (nearest-neighbor sampling happens at render time).
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub cobblestone: FaceTextures,
     pub sand: FaceTextures,
+    pub deepslate: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -39,11 +44,23 @@ impl OverworldBlockTextures {
         let dirt = manager.load(format!("{overworld_dir}/dirt.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
+        let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
+        let deepslate_side = manager.load(format!("{overworld_dir}/deepslate/side.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             cobblestone: FaceTextures::uniform(cobblestone),
             sand: FaceTextures::uniform(sand),
+            // The reference shows a distinct top (and bottom) from the four
+            // sides, so the block is not a single-texture cube.
+            deepslate: FaceTextures::new(
+                deepslate_side,
+                deepslate_side,
+                deepslate_top,
+                deepslate_top,
+                deepslate_side,
+                deepslate_side,
+            ),
         })
     }
 }
@@ -56,6 +73,8 @@ impl OverworldBlockTextures {
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
 ///   is a static block: nothing here (or anywhere) simulates gravity.
+/// - Deepslate: dark and matte (specular 0.06, shininess 10). Top/bottom and
+///   sides use the two textures visible in its reference. No normal map.
 pub fn insert_overworld_materials(
     library: &mut MaterialLibrary,
     textures: &OverworldBlockTextures,
@@ -76,5 +95,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.78, 0.72, 0.52, 1.0), 0.03, 5.0)
             .with_reflectivity(0.01)
             .with_face_textures(textures.sand),
+    );
+    library.insert(
+        deepslate_material_id(),
+        Material::new(Color::new(0.30, 0.30, 0.32, 1.0), 0.06, 10.0)
+            .with_reflectivity(0.015)
+            .with_face_textures(textures.deepslate),
     );
 }

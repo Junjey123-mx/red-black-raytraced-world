@@ -21,8 +21,8 @@ use crate::scene::material_gallery::{
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::{
-    OverworldBlockTextures, cobblestone_material_id, dirt_material_id, insert_overworld_materials,
-    sand_material_id,
+    OverworldBlockTextures, cobblestone_material_id, deepslate_material_id, dirt_material_id,
+    insert_overworld_materials, sand_material_id,
 };
 use crate::scene::scene::{
     PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
@@ -46,6 +46,7 @@ pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const COBBLESTONE_X: i32 = 7;
 pub const SAND_X: i32 = 9;
+pub const DEEPSLATE_X: i32 = 11;
 
 /// Standard inspection distance used when focusing a sample.
 pub const FOCUS_DISTANCE: f32 = 4.5;
@@ -185,6 +186,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::Sand,
             sand_material_id(),
             at(SAND_X, OVERWORLD_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Deepslate",
+            SampleKind::PlainBlock,
+            BlockType::Deepslate,
+            deepslate_material_id(),
+            at(DEEPSLATE_X, OVERWORLD_I_Z),
             up,
         ),
         CatalogEntry::new(
