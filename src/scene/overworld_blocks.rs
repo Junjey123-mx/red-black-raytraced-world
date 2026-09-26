@@ -82,6 +82,10 @@ pub fn orange_spade_material_id() -> MaterialId {
     MaterialId::new(51)
 }
 
+pub fn purple_heart_material_id() -> MaterialId {
+    MaterialId::new(52)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -110,6 +114,7 @@ pub struct OverworldBlockTextures {
     pub crimson_diamond: FaceTextures,
     pub orange_club: FaceTextures,
     pub orange_spade: FaceTextures,
+    pub purple_heart: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -153,6 +158,8 @@ impl OverworldBlockTextures {
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/orange/club_albedo.png"))?;
         let orange_spade =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/orange/spade_albedo.png"))?;
+        let purple_heart =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/heart_albedo.png"))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -179,6 +186,7 @@ impl OverworldBlockTextures {
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
             orange_club: FaceTextures::uniform(orange_club),
             orange_spade: FaceTextures::uniform(orange_spade),
+            purple_heart: FaceTextures::uniform(purple_heart),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -254,6 +262,10 @@ impl OverworldBlockTextures {
 ///   spade tinted to the warm Orange family (pointed tip, round lower lobes,
 ///   stem and foot) on near-black masonry. Opaque, non-emissive (specular
 ///   0.06, shininess 8, reflectivity 0.01).
+/// - PurpleHeart: the same re-drawn heart in the Violet family (dark purple
+///   outline, violet body, lilac glint) on dark purple masonry, clearly
+///   distinct from CrimsonHeart. Opaque, non-emissive (specular 0.06,
+///   shininess 8, reflectivity 0.01).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -393,5 +405,11 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(1.00, 0.48, 0.00, 1.0), 0.06, 8.0)
             .with_reflectivity(0.01)
             .with_face_textures(textures.orange_spade),
+    );
+    library.insert(
+        purple_heart_material_id(),
+        Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.06, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.purple_heart),
     );
 }
