@@ -253,7 +253,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             south,
         ),
         CatalogEntry::new(
-            "Deepslate Bricks (normal map)",
+            "Deepslate Bricks",
             SampleKind::NormalMapped,
             BlockType::DeepslateBricks,
             deepslate_bricks_material_id(),

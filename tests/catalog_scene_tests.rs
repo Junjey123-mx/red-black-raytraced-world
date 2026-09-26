@@ -522,11 +522,7 @@ fn the_samples_keep_their_gate_06_and_gate_07_materials() {
     let portal = get("Portal core");
     assert!(portal.emissive_texture.is_some() && portal.transparency > 0.0);
     assert!(get("Reflective cube").reflectivity > 0.3);
-    assert!(
-        get("Deepslate Bricks (normal map)")
-            .normal_texture
-            .is_some()
-    );
+    assert!(get("Deepslate Bricks").normal_texture.is_some());
     // Gate 06 shape materials keep their textures.
     assert!(get("Wood stairs").face_textures.is_some());
     assert!(get("WoodDoor").face_textures.is_some());
