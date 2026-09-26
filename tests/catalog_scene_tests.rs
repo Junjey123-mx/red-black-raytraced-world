@@ -70,6 +70,8 @@ mod scene {
     pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
+    #[path = "../src/scene/overworld_blocks.rs"]
+    pub mod overworld_blocks;
     #[path = "../src/scene/scene.rs"]
     pub mod scene;
     #[path = "../src/scene/texture_manager.rs"]
@@ -127,7 +129,7 @@ use scene::voxel_world::VoxelWorld;
 const EPS: f32 = 1e-4;
 const RANGE: f32 = 60.0;
 /// Number of catalog samples (updated as definitive blocks join the catalog).
-const ENTRY_COUNT: usize = 13;
+const ENTRY_COUNT: usize = 14;
 
 fn cell(x: i32, y: i32, z: i32) -> IVec3 {
     IVec3::new(x, y, z)

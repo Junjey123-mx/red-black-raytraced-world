@@ -20,6 +20,9 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld_blocks::{
+    OverworldBlockTextures, dirt_material_id, insert_overworld_materials,
+};
 use crate::scene::scene::{
     PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
     door_bottom_material_id, door_top_material_id, grass_material_id, wood_material_id,
@@ -39,6 +42,7 @@ pub const AMETHYST_X: i32 = 9;
 /// Sand 9, Deepslate 11.
 pub const OVERWORLD_I_Z: i32 = -4;
 pub const GRASS_X: i32 = 1;
+pub const DIRT_X: i32 = 3;
 
 /// Standard inspection distance used when focusing a sample.
 pub const FOCUS_DISTANCE: f32 = 4.5;
@@ -157,6 +161,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             up,
         ),
         CatalogEntry::new(
+            "Dirt",
+            SampleKind::PlainBlock,
+            BlockType::Dirt,
+            dirt_material_id(),
+            at(DIRT_X, OVERWORLD_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
             "Control cube",
             SampleKind::Control,
             BlockType::Stone,
@@ -252,6 +264,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
 pub struct CatalogTextures {
     pub gallery: GalleryTextures,
     pub shapes: PartialSceneTextures,
+    pub blocks: OverworldBlockTextures,
 }
 
 impl CatalogTextures {
@@ -265,6 +278,7 @@ impl CatalogTextures {
         Ok(Self {
             gallery: GalleryTextures::load(manager, overworld_dir, portal_dir)?,
             shapes: PartialSceneTextures::load(manager, grass_dir, partial_dir)?,
+            blocks: OverworldBlockTextures::load(manager, overworld_dir)?,
         })
     }
 }
@@ -288,6 +302,8 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
             .clone();
         library.insert(id, material);
     }
+
+    insert_overworld_materials(&mut library, &textures.blocks);
 
     // Grass keeps its Gate 04 face textures and matte look, plus the 0.01
     // reflectivity of the definitive Overworld profile.

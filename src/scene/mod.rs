@@ -8,6 +8,7 @@ pub mod light;
 pub mod material_gallery;
 pub mod material_library;
 pub mod orientation;
+pub mod overworld_blocks;
 pub mod scene;
 pub mod texture_manager;
 pub mod voxel_world;

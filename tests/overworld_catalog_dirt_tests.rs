@@ -101,7 +101,7 @@ mod renderer {
 }
 
 use core::hit::Face;
-use core::math::{Vec2, Vec3};
+use core::math::{IVec3, Vec2};
 use renderer::texture_sampling::sample_nearest;
 use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
@@ -109,8 +109,9 @@ use scene::block_type::BlockType;
 use scene::catalog::{
     CatalogScene, CatalogTextures, SampleKind, catalog_entries, catalog_materials,
 };
+use scene::material_library::MaterialLibrary;
 use scene::orientation::Orientation;
-use scene::scene::grass_material_id;
+use scene::overworld_blocks::dirt_material_id;
 use scene::texture_manager::TextureManager;
 
 const FACES: [Face; 6] = [
@@ -124,7 +125,7 @@ const FACES: [Face; 6] = [
 
 struct Env {
     manager: TextureManager,
-    library: scene::material_library::MaterialLibrary,
+    library: MaterialLibrary,
 }
 
 fn env() -> Env {
@@ -141,163 +142,158 @@ fn env() -> Env {
     Env { manager, library }
 }
 
-fn grass_faces(e: &Env) -> core::face_textures::FaceTextures {
+fn faces(e: &Env) -> core::face_textures::FaceTextures {
     e.library
-        .get(grass_material_id())
+        .get(dirt_material_id())
         .unwrap()
         .face_textures
         .unwrap()
 }
 
 #[test]
-fn grass_is_a_definitive_full_cube_block_type() {
-    let geometry = block_geometry(BlockType::Grass, Orientation::Up);
+fn dirt_is_a_full_cube_block_type() {
+    let geometry = block_geometry(BlockType::Dirt, Orientation::Up);
     assert!(matches!(geometry, BlockGeometry::FullCube));
 }
 
 #[test]
-fn the_grass_material_and_all_face_textures_resolve() {
+fn the_material_and_every_face_texture_resolve() {
     let e = env();
-    let faces = grass_faces(&e);
-    for f in FACES {
-        assert!(e.manager.get(faces.texture_for_face(f)).is_some(), "{f:?}");
-    }
-}
-
-#[test]
-fn top_side_and_bottom_are_distinct_textures() {
-    let e = env();
-    let f = grass_faces(&e);
-    let top = f.texture_for_face(Face::PositiveY);
-    let side = f.texture_for_face(Face::PositiveZ);
-    let bottom = f.texture_for_face(Face::NegativeY);
-
-    assert_ne!(top, side);
-    assert_ne!(side, bottom);
-    assert_ne!(top, bottom);
-    for face in [Face::PositiveX, Face::NegativeX, Face::NegativeZ] {
-        assert_eq!(
-            f.texture_for_face(face),
-            side,
-            "all four laterals share the side"
+    let f = faces(&e);
+    for face in FACES {
+        assert!(
+            e.manager.get(f.texture_for_face(face)).is_some(),
+            "{face:?}"
         );
     }
 }
 
 #[test]
-fn the_side_keeps_its_green_fringe_on_top_and_dirt_below() {
+fn the_face_texture_policy_matches_the_block() {
     let e = env();
-    let f = grass_faces(&e);
-    let side = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
-    let greenish = |x: usize, y: usize| {
-        let c = side.texel(x, y).unwrap();
-        c.g > c.r
-    };
-    let row_green = |y: usize| (0..16).filter(|&x| greenish(x, y)).count();
-
-    // Top rows are mostly green, the lower half is dirt (no vertical flip).
-    assert!(
-        row_green(0) >= 10,
-        "row 0 has {} green texels",
-        row_green(0)
-    );
-    let lower: usize = (8..16).map(row_green).sum();
-    assert!(
-        lower < 8,
-        "the lower half is dirt, got {lower} green texels"
-    );
-    let upper: usize = (0..3).map(row_green).sum();
-    assert!(upper > lower * 3);
+    let f = faces(&e);
+    let uniform = true;
+    if uniform {
+        let first = f.texture_for_face(Face::PositiveY);
+        for face in FACES {
+            assert_eq!(
+                f.texture_for_face(face),
+                first,
+                "{face:?} shares the one texture"
+            );
+        }
+    } else {
+        assert_ne!(
+            f.texture_for_face(Face::PositiveY),
+            f.texture_for_face(Face::PositiveZ)
+        );
+    }
+    for t in FACES.iter().map(|x| f.texture_for_face(*x)) {
+        let tex = e.manager.get(t).unwrap();
+        assert_eq!((tex.width(), tex.height()), (16, 16), "pixel-art tile");
+    }
 }
 
 #[test]
-fn the_top_is_green_and_the_bottom_is_dirt() {
+fn the_material_is_opaque_non_emissive_and_matches_its_profile() {
     let e = env();
-    let f = grass_faces(&e);
-    let green = |id| {
-        let t = e.manager.get(id).unwrap();
-        (0..256)
-            .filter(|n| t.texel(n % 16, n / 16).unwrap().g > t.texel(n % 16, n / 16).unwrap().r)
-            .count()
-    };
-    assert!(
-        green(f.texture_for_face(Face::PositiveY)) > 230,
-        "top is green"
-    );
-    assert!(
-        green(f.texture_for_face(Face::NegativeY)) < 8,
-        "bottom is dirt"
-    );
-}
-
-#[test]
-fn grass_is_opaque_non_emissive_and_matte() {
-    let e = env();
-    let m = e.library.get(grass_material_id()).unwrap();
+    let m = e.library.get(dirt_material_id()).unwrap();
 
     assert_eq!(m.transparency, 0.0);
     assert_eq!(m.emission_strength, 0.0);
-    assert!(m.emissive_texture.is_none() && m.normal_texture.is_none());
-    assert!((m.specular - 0.04).abs() < 1e-6);
-    assert!((m.shininess - 8.0).abs() < 1e-6);
-    assert!((m.reflectivity - 0.01).abs() < 1e-6);
+    assert!(m.emissive_texture.is_none());
     assert_eq!(m.refractive_index, 1.0);
+    assert!((m.specular - 0.02).abs() < 1e-6, "specular {}", m.specular);
+    assert!((m.shininess - 4.0).abs() < 1e-6);
+    assert!((m.reflectivity - 0.0).abs() < 1e-6);
 }
 
 #[test]
-fn grass_is_an_official_catalog_entry_with_a_finite_focus_point() {
+fn every_texel_is_fully_opaque() {
+    let e = env();
+    let f = faces(&e);
+    for face in FACES {
+        let t = e.manager.get(f.texture_for_face(face)).unwrap();
+        assert!(t.pixels().iter().all(|c| c.a == 1.0), "{face:?}");
+    }
+}
+
+#[test]
+fn it_is_an_official_catalog_entry_with_a_finite_focus_point() {
     let scene = CatalogScene::new();
     let entry = scene
         .entries()
         .iter()
-        .find(|e| e.block_type == BlockType::Grass)
-        .expect("Grass is in the catalog");
+        .find(|e| e.block_type == BlockType::Dirt)
+        .expect("in the catalog");
 
-    assert_eq!(entry.display_name, "Grass");
+    assert_eq!(entry.display_name, "Dirt");
     assert_eq!(entry.kind, SampleKind::PlainBlock);
-    assert_eq!(entry.material_id, grass_material_id());
+    assert_eq!(entry.material_id, dirt_material_id());
     assert_eq!(scene.world().get(entry.position), Some(&entry.block()));
-    let p: Vec3 = entry.focus_point;
+    let p = entry.focus_point;
     assert!(p.x.is_finite() && p.y.is_finite() && p.z.is_finite());
 }
 
 #[test]
-fn there_is_exactly_one_grass_sample_and_no_diagnostic_duplicate() {
-    let grass_entries = catalog_entries()
+fn there_is_exactly_one_sample_of_this_block() {
+    let count = catalog_entries()
         .iter()
-        .filter(|e| e.block_type == BlockType::Grass || e.display_name.contains("Grass"))
+        .filter(|e| e.block_type == BlockType::Dirt)
         .count();
-    assert_eq!(grass_entries, 1);
+    assert_eq!(count, 1);
 
-    // No other block of the catalog world uses the grass material.
     let scene = CatalogScene::new();
     let mut uses = 0;
     for x in -1..14 {
         for y in -1..5 {
             for z in -10..12 {
-                if let Some(b) = scene.world().get(core::math::IVec3::new(x, y, z)) {
-                    if b.material_id() == grass_material_id() {
+                if let Some(b) = scene.world().get(IVec3::new(x, y, z)) {
+                    if b.material_id() == dirt_material_id() {
                         uses += 1;
                     }
                 }
             }
         }
     }
-    assert_eq!(uses, 1);
+    assert_eq!(uses, 1, "no diagnostic duplicate");
 }
 
 #[test]
-fn face_textures_are_sampled_nearest_neighbor() {
+fn sampling_is_nearest_neighbor() {
     let e = env();
-    let f = grass_faces(&e);
-    let side = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
+    let f = faces(&e);
+    let tex = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
 
-    // Every point inside one texel returns exactly that texel's color.
     for (i, j) in [(0usize, 0usize), (5, 3), (15, 15), (8, 12)] {
-        let expected = side.texel(i, j).unwrap();
+        let expected = tex.texel(i, j).unwrap();
         for (du, dv) in [(0.05, 0.05), (0.5, 0.5), (0.95, 0.95)] {
             let uv = Vec2::new((i as f32 + du) / 16.0, (j as f32 + dv) / 16.0);
-            assert_eq!(sample_nearest(side, uv), expected, "texel ({i},{j})");
+            assert_eq!(sample_nearest(tex, uv), expected, "texel ({i},{j})");
         }
     }
+}
+
+#[test]
+fn dirt_is_not_grass_and_is_brown_and_dry() {
+    let e = env();
+    let f = faces(&e);
+    let t = e.manager.get(f.texture_for_face(Face::PositiveY)).unwrap();
+    let (mut r, mut g, mut b) = (0.0f32, 0.0f32, 0.0f32);
+    for c in t.pixels() {
+        r += c.r;
+        g += c.g;
+        b += c.b;
+    }
+    // Warm brown overall: red > green > blue, nothing like grass green.
+    assert!(r > g && g > b, "avg = {r} {g} {b}");
+    assert!(g < r * 0.85);
+    let grass = e.library.get(scene::scene::grass_material_id()).unwrap();
+    assert_ne!(
+        grass
+            .face_textures
+            .unwrap()
+            .texture_for_face(Face::PositiveY),
+        f.texture_for_face(Face::PositiveY)
+    );
 }
