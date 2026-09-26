@@ -7,6 +7,7 @@
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::material::{AlphaMode, Material, MaterialId};
+use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -302,6 +303,38 @@ pub const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
 /// Directory (relative to the repository root) of the Red-Black block textures.
 pub const RED_BLACK_TEXTURES_DIR: &str = "assets/textures/red_black_maze";
 
+/// Self-illumination of a Red-Black card-suit block. `mask` is an emissive
+/// colour mask sharing the albedo UV, exactly like the redstone lamp's: the
+/// symbol texels carry the colour they radiate and every other texel (the
+/// masonry, its joints and the dark frame) is black, so it never emits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SymbolGlow {
+    pub mask: TextureId,
+    pub strength: f32,
+}
+
+/// Material of a card-suit block: an opaque, textured full cube with the
+/// given `(specular, shininess, reflectivity)` profile and, when `glow` is
+/// present, the existing emissive path (`emissive_texture` +
+/// `emission_strength`). With `glow = None` (or a zero strength) the block
+/// shades exactly as a plain non-emissive block.
+pub fn symbol_block_material(
+    base: Color,
+    (specular, shininess, reflectivity): (f32, f32, f32),
+    faces: FaceTextures,
+    glow: Option<SymbolGlow>,
+) -> Material {
+    let material = Material::new(base, specular, shininess)
+        .with_reflectivity(reflectivity)
+        .with_face_textures(faces);
+    match glow {
+        Some(glow) => material
+            .with_emissive_texture(glow.mask)
+            .with_emission_strength(glow.strength),
+        None => material,
+    }
+}
+
 pub fn insert_overworld_materials(
     library: &mut MaterialLibrary,
     textures: &OverworldBlockTextures,
@@ -406,46 +439,40 @@ pub fn insert_overworld_materials(
             .with_reflectivity(0.01)
             .with_face_textures(textures.smooth_basalt),
     );
+    // The Red-Black card-suit blocks share one profile builder so their
+    // optional symbol glow is wired exactly like the redstone lamp's.
+    let crimson = Color::new(0.82, 0.12, 0.17, 1.0);
+    let orange = Color::new(1.00, 0.48, 0.00, 1.0);
+    let purple = Color::new(0.76, 0.24, 1.00, 1.0);
+    // (specular, shininess, reflectivity): diamonds are a little more polished.
+    let plain = (0.06, 8.0, 0.01);
+    let polished = (0.10, 18.0, 0.03);
     library.insert(
         crimson_heart_material_id(),
-        Material::new(Color::new(0.82, 0.12, 0.17, 1.0), 0.06, 8.0)
-            .with_reflectivity(0.01)
-            .with_face_textures(textures.crimson_heart),
+        symbol_block_material(crimson, plain, textures.crimson_heart, None),
     );
     library.insert(
         crimson_diamond_material_id(),
-        Material::new(Color::new(0.82, 0.12, 0.17, 1.0), 0.10, 18.0)
-            .with_reflectivity(0.03)
-            .with_face_textures(textures.crimson_diamond),
+        symbol_block_material(crimson, polished, textures.crimson_diamond, None),
     );
     library.insert(
         orange_club_material_id(),
-        Material::new(Color::new(1.00, 0.48, 0.00, 1.0), 0.06, 8.0)
-            .with_reflectivity(0.01)
-            .with_face_textures(textures.orange_club),
+        symbol_block_material(orange, plain, textures.orange_club, None),
     );
     library.insert(
         orange_spade_material_id(),
-        Material::new(Color::new(1.00, 0.48, 0.00, 1.0), 0.06, 8.0)
-            .with_reflectivity(0.01)
-            .with_face_textures(textures.orange_spade),
+        symbol_block_material(orange, plain, textures.orange_spade, None),
     );
     library.insert(
         purple_heart_material_id(),
-        Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.06, 8.0)
-            .with_reflectivity(0.01)
-            .with_face_textures(textures.purple_heart),
+        symbol_block_material(purple, plain, textures.purple_heart, None),
     );
     library.insert(
         purple_diamond_material_id(),
-        Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.10, 18.0)
-            .with_reflectivity(0.03)
-            .with_face_textures(textures.purple_diamond),
+        symbol_block_material(purple, polished, textures.purple_diamond, None),
     );
     library.insert(
         purple_club_material_id(),
-        Material::new(Color::new(0.76, 0.24, 1.00, 1.0), 0.06, 8.0)
-            .with_reflectivity(0.01)
-            .with_face_textures(textures.purple_club),
+        symbol_block_material(purple, plain, textures.purple_club, None),
     );
 }
