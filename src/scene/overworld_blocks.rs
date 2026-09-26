@@ -26,6 +26,10 @@ pub fn wood_planks_material_id() -> MaterialId {
     MaterialId::new(37)
 }
 
+pub fn double_wood_slab_material_id() -> MaterialId {
+    MaterialId::new(38)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -98,6 +102,9 @@ impl OverworldBlockTextures {
 ///   shininess 10), semimatte.
 /// - WoodPlanks: one plank texture on all six faces, semimatte (specular 0.06,
 ///   shininess 8); the canonical wooden base of the architectural blocks.
+/// - DoubleWoodSlab: a full cube that deliberately reuses the WoodPlanks
+///   texture (same texture id) with the wood profile of the spec (specular
+///   0.10, shininess 18, reflectivity 0.02).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -147,6 +154,12 @@ pub fn insert_overworld_materials(
         wood_planks_material_id(),
         Material::new(Color::new(0.63, 0.50, 0.30, 1.0), 0.06, 8.0)
             .with_reflectivity(0.01)
+            .with_face_textures(textures.wood_planks),
+    );
+    library.insert(
+        double_wood_slab_material_id(),
+        Material::new(Color::new(0.63, 0.50, 0.30, 1.0), 0.10, 18.0)
+            .with_reflectivity(0.02)
             .with_face_textures(textures.wood_planks),
     );
 }
