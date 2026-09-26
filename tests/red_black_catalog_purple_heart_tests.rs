@@ -216,12 +216,12 @@ fn the_face_texture_policy_matches_the_block() {
 }
 
 #[test]
-fn the_material_is_opaque_non_emissive_and_matches_its_profile() {
+fn the_material_is_opaque_and_matches_its_profile() {
     let e = env();
     let m = e.library.get(purple_heart_material_id()).unwrap();
     assert_eq!(m.transparency, 0.0);
-    assert_eq!(m.emission_strength, 0.0);
-    assert!(m.emissive_texture.is_none());
+    // Gate 10.5: the only light of its own comes from the symbol mask.
+    assert!(m.emissive_texture.is_some() && m.emission_strength > 0.0);
     assert!(m.normal_texture.is_none());
     assert_eq!(m.refractive_index, 1.0);
     assert!((m.specular - 0.06).abs() < 1e-6, "specular {}", m.specular);

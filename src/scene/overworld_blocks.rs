@@ -125,6 +125,9 @@ pub struct OverworldBlockTextures {
     pub crimson_diamond_glow: TextureId,
     pub orange_club_glow: TextureId,
     pub orange_spade_glow: TextureId,
+    pub purple_heart_glow: TextureId,
+    pub purple_diamond_glow: TextureId,
+    pub purple_club_glow: TextureId,
     pub crimson_diamond: FaceTextures,
     pub orange_club: FaceTextures,
     pub orange_spade: FaceTextures,
@@ -176,6 +179,14 @@ impl OverworldBlockTextures {
         let orange_spade_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/orange/spade_emissive.png"
         ))?;
+        let purple_heart_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/violet/heart_emissive.png"
+        ))?;
+        let purple_diamond_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/violet/diamond_emissive.png"
+        ))?;
+        let purple_club_glow =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/club_emissive.png"))?;
         let crimson_heart =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/crimson/heart_albedo.png"))?;
         let crimson_diamond = manager.load(format!(
@@ -219,6 +230,9 @@ impl OverworldBlockTextures {
             crimson_diamond_glow,
             orange_club_glow,
             orange_spade_glow,
+            purple_heart_glow,
+            purple_diamond_glow,
+            purple_club_glow,
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
             orange_club: FaceTextures::uniform(orange_club),
             orange_spade: FaceTextures::uniform(orange_spade),
@@ -338,6 +352,9 @@ pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
 
 /// Emission strength of the Orange symbols (club, spade).
 pub const ORANGE_GLOW_STRENGTH: f32 = 1.8;
+
+/// Emission strength of the Purple symbols (heart, diamond, club).
+pub const PURPLE_GLOW_STRENGTH: f32 = 1.8;
 
 /// Material of a card-suit block: an opaque, textured full cube with the
 /// given `(specular, shininess, reflectivity)` profile and, when `glow` is
@@ -476,6 +493,7 @@ pub fn insert_overworld_materials(
     let glow = |mask, strength| Some(SymbolGlow { mask, strength });
     let crimson_glow = |mask| glow(mask, CRIMSON_GLOW_STRENGTH);
     let orange_glow = |mask| glow(mask, ORANGE_GLOW_STRENGTH);
+    let purple_glow = |mask| glow(mask, PURPLE_GLOW_STRENGTH);
     library.insert(
         crimson_heart_material_id(),
         symbol_block_material(
@@ -514,14 +532,29 @@ pub fn insert_overworld_materials(
     );
     library.insert(
         purple_heart_material_id(),
-        symbol_block_material(purple, plain, textures.purple_heart, None),
+        symbol_block_material(
+            purple,
+            plain,
+            textures.purple_heart,
+            purple_glow(textures.purple_heart_glow),
+        ),
     );
     library.insert(
         purple_diamond_material_id(),
-        symbol_block_material(purple, polished, textures.purple_diamond, None),
+        symbol_block_material(
+            purple,
+            polished,
+            textures.purple_diamond,
+            purple_glow(textures.purple_diamond_glow),
+        ),
     );
     library.insert(
         purple_club_material_id(),
-        symbol_block_material(purple, plain, textures.purple_club, None),
+        symbol_block_material(
+            purple,
+            plain,
+            textures.purple_club,
+            purple_glow(textures.purple_club_glow),
+        ),
     );
 }
