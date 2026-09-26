@@ -28,9 +28,10 @@ use crate::scene::overworld_blocks::{
     OverworldBlockTextures, cobblestone_material_id, deepslate_material_id, dirt_material_id,
     insert_overworld_materials, log_material_id, sand_material_id, stone_block_material_id,
 };
+use crate::scene::overworld_blocks::{wood_door_bottom_material_id, wood_door_top_material_id};
 use crate::scene::scene::{
-    PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
-    door_bottom_material_id, door_top_material_id, grass_material_id, wood_material_id,
+    PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials, grass_material_id,
+    wood_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 use crate::scene::voxel_world::VoxelWorld;
@@ -153,7 +154,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
         "WoodDoor",
         SampleKind::PartialGeometry,
         BlockType::WoodDoor,
-        door_bottom_material_id(),
+        wood_door_bottom_material_id(),
         at(DOOR_X, SHAPES_Z),
         south,
     );
@@ -161,7 +162,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
     // the middle of the whole door.
     door.extra_blocks.push((
         IVec3::new(DOOR_X, 2, SHAPES_Z),
-        BlockInstance::new(BlockType::WoodDoor, door_top_material_id(), south),
+        BlockInstance::new(BlockType::WoodDoor, wood_door_top_material_id(), south),
     ));
     door.focus_point = Vec3::new(DOOR_X as f32 + 0.5, 2.0, SHAPES_Z as f32 + 0.5);
 
@@ -362,8 +363,6 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
     for id in [
         grass_material_id(),
         wood_material_id(),
-        door_bottom_material_id(),
-        door_top_material_id(),
         amethyst_material_id(),
     ] {
         let material = shapes

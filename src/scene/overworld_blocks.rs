@@ -6,7 +6,7 @@
 
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
-use crate::core::material::{Material, MaterialId};
+use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -38,6 +38,14 @@ pub fn fence_material_id() -> MaterialId {
     MaterialId::new(40)
 }
 
+pub fn wood_door_bottom_material_id() -> MaterialId {
+    MaterialId::new(41)
+}
+
+pub fn wood_door_top_material_id() -> MaterialId {
+    MaterialId::new(42)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -55,6 +63,10 @@ pub fn deepslate_material_id() -> MaterialId {
 pub struct OverworldBlockTextures {
     pub dirt: FaceTextures,
     pub stone: FaceTextures,
+    /// Lower and upper halves of the two-cell-tall door (broad faces on
+    /// +/-Z, narrow dark-wood edges elsewhere).
+    pub wood_door_bottom: FaceTextures,
+    pub wood_door_top: FaceTextures,
     pub wood_planks: FaceTextures,
     pub log: FaceTextures,
     pub cobblestone: FaceTextures,
@@ -73,6 +85,11 @@ impl OverworldBlockTextures {
         let log_end = manager.load(format!("{overworld_dir}/log/end.png"))?;
         let log_side = manager.load(format!("{overworld_dir}/log/side.png"))?;
         let wood_planks = manager.load(format!("{overworld_dir}/wood_planks.png"))?;
+        let door_bottom = manager.load(format!("{overworld_dir}/wood_door/bottom.png"))?;
+        let door_top = manager.load(format!("{overworld_dir}/wood_door/top.png"))?;
+        let edge_bottom = manager.load(format!("{overworld_dir}/wood_door/edge_bottom.png"))?;
+        let edge_top = manager.load(format!("{overworld_dir}/wood_door/edge_top.png"))?;
+        let thin = |broad, edge| FaceTextures::new(edge, edge, edge, edge, broad, broad);
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -81,6 +98,8 @@ impl OverworldBlockTextures {
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
             stone: FaceTextures::uniform(stone),
+            wood_door_bottom: thin(door_bottom, edge_bottom),
+            wood_door_top: thin(door_top, edge_top),
             wood_planks: FaceTextures::uniform(wood_planks),
             // End grain on +Y/-Y, bark on the four sides.
             log: FaceTextures::new(log_side, log_side, log_end, log_end, log_side, log_side),
@@ -117,6 +136,9 @@ impl OverworldBlockTextures {
 ///   WoodPlanks texture with the wood profile (specular 0.10, shininess 18).
 /// - Fence: the Gate 06 post-and-rails geometry with the WoodPlanks texture
 ///   and the wood profile (specular 0.10, shininess 18).
+/// - WoodDoor: two stacked halves of the reference door texture on the broad
+///   faces; the four window panes of the upper half are real holes
+///   (`AlphaMode::Cutout`). Wood profile (specular 0.10, shininess 18).
 /// - Cobblestone: one texture on all six faces, rough and matte (specular
 ///   0.04, shininess 5). No normal map: its albedo already carries the joints.
 /// - Sand: one texture on all six faces, light and matte (specular 0.03). It
@@ -186,4 +208,16 @@ pub fn insert_overworld_materials(
             .with_reflectivity(0.02)
             .with_face_textures(textures.wood_planks),
     );
+    for (id, faces) in [
+        (wood_door_bottom_material_id(), textures.wood_door_bottom),
+        (wood_door_top_material_id(), textures.wood_door_top),
+    ] {
+        library.insert(
+            id,
+            Material::new(Color::new(0.55, 0.42, 0.24, 1.0), 0.10, 18.0)
+                .with_reflectivity(0.02)
+                .with_face_textures(faces)
+                .with_alpha_mode(AlphaMode::Cutout),
+        );
+    }
 }
