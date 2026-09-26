@@ -21,6 +21,7 @@ use crate::scene::material_gallery::{
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
+use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::wood_stairs_material_id;
 use crate::scene::overworld_blocks::{
@@ -313,7 +314,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             "Fence",
             SampleKind::PartialGeometry,
             BlockType::Fence,
-            wood_material_id(),
+            fence_material_id(),
             at(FENCE_X, SHAPES_Z),
             south,
         ),
