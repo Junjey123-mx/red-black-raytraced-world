@@ -22,7 +22,7 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::{
     OverworldBlockTextures, cobblestone_material_id, deepslate_material_id, dirt_material_id,
-    insert_overworld_materials, sand_material_id,
+    insert_overworld_materials, sand_material_id, stone_block_material_id,
 };
 use crate::scene::scene::{
     PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials,
@@ -40,10 +40,11 @@ pub const AMETHYST_X: i32 = 9;
 
 /// Row of the definitive Overworld I full-cube blocks, behind the gallery's
 /// back row. Slots (x): Grass 1, Dirt 3, Stone 5 (reserved), Cobblestone 7,
-/// Sand 9, Deepslate 11.
+/// Sand 9, Deepslate 11 (Stone now fills its reserved slot).
 pub const OVERWORLD_I_Z: i32 = -4;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
+pub const STONE_X: i32 = 5;
 pub const COBBLESTONE_X: i32 = 7;
 pub const SAND_X: i32 = 9;
 pub const DEEPSLATE_X: i32 = 11;
@@ -194,6 +195,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::Deepslate,
             deepslate_material_id(),
             at(DEEPSLATE_X, OVERWORLD_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Stone",
+            SampleKind::PlainBlock,
+            BlockType::Stone,
+            stone_block_material_id(),
+            at(STONE_X, OVERWORLD_I_Z),
             up,
         ),
         CatalogEntry::new(
