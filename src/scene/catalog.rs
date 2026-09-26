@@ -22,6 +22,7 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::amethyst_cluster_material_id;
 use crate::scene::overworld_blocks::budding_amethyst_material_id;
+use crate::scene::overworld_blocks::crimson_diamond_material_id;
 use crate::scene::overworld_blocks::crimson_heart_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
@@ -65,6 +66,7 @@ pub const RED_BLACK_I_Z: i32 = -8;
 pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
 pub const CRIMSON_HEART_X: i32 = 5;
+pub const CRIMSON_DIAMOND_X: i32 = 7;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -290,6 +292,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::CrimsonHeart,
             crimson_heart_material_id(),
             at(CRIMSON_HEART_X, RED_BLACK_I_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Crimson diamond",
+            SampleKind::PlainBlock,
+            BlockType::CrimsonDiamond,
+            crimson_diamond_material_id(),
+            at(CRIMSON_DIAMOND_X, RED_BLACK_I_Z),
             up,
         ),
         CatalogEntry::new(
