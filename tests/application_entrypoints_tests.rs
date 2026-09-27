@@ -233,3 +233,22 @@ fn the_registry_and_material_library_exist_exactly_once() {
     assert_eq!(occurrences_in_src("pub struct TextureManager"), 1);
     assert_eq!(occurrences_in_src("pub fn cast_ray_voxel_lit("), 1);
 }
+
+#[test]
+fn the_catalog_binary_is_a_thin_launcher_of_the_shared_bootstrap() {
+    let bin = std::fs::read_to_string("src/bin/catalog.rs").unwrap();
+    assert!(bin.contains("red_black_raytraced_world::run_catalog_app()"));
+    // No engine, scene, registry, material or texture code of its own.
+    for forbidden in [
+        "mod ",
+        "BlockType",
+        "MaterialLibrary",
+        "TextureManager",
+        "VoxelWorld",
+        "raylib",
+        "CatalogEntry",
+    ] {
+        assert!(!bin.contains(forbidden), "{forbidden}");
+    }
+    assert!(bin.lines().count() <= 10);
+}
