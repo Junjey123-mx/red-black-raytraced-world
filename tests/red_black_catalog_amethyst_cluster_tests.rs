@@ -201,20 +201,22 @@ fn the_material_and_every_face_texture_resolve() {
 }
 
 #[test]
-fn the_material_is_opaque_non_emissive_and_matches_its_profile() {
+fn the_facets_are_solid_texels_with_the_final_crystal_profile() {
     let e = env();
     let m = e.library.get(amethyst_cluster_material_id()).unwrap();
-    assert_eq!(m.transparency, 0.0);
-    assert_eq!(m.emission_strength, 0.0);
-    assert!(m.emissive_texture.is_none() && m.normal_texture.is_none());
-    assert_eq!(m.refractive_index, 1.0);
-    assert!((m.specular - 0.10).abs() < 1e-6);
-    assert!((m.shininess - 18.0).abs() < 1e-6);
-    assert!((m.reflectivity - 0.03).abs() < 1e-6);
+    // Gate 11 optics (specular 0.65 / 110, reflectivity 0.20, slight
+    // translucency, IOR 1.45, soft glow); see the optics tests for details.
+    assert!(m.transparency > 0.0 && m.transparency <= 0.15);
+    assert!(m.emission_strength > 0.0 && m.emission_strength <= 0.9);
+    assert!(m.normal_texture.is_none());
+    assert!((m.refractive_index - 1.45).abs() < 1e-6);
+    assert!((m.specular - 0.65).abs() < 1e-6);
+    assert!((m.shininess - 110.0).abs() < 1e-6);
+    assert!((m.reflectivity - 0.20).abs() < 1e-6);
 
     let f = faces(&e);
     let t = e.manager.get(f.texture_for_face(Face::PositiveZ)).unwrap();
-    assert!(t.pixels().iter().all(|c| c.a == 1.0), "opaque facets");
+    assert!(t.pixels().iter().all(|c| c.a == 1.0), "solid facet texels");
 }
 
 #[test]

@@ -6,6 +6,7 @@
 
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
+use crate::core::hit::Face;
 use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
@@ -413,9 +414,11 @@ impl OverworldBlockTextures {
 ///   18, reflectivity 0.03), opaque and non-emissive. It is the mother rock,
 ///   distinct from the partial-geometry AmethystCluster.
 /// - AmethystCluster: the Gate 06 clustered crystal geometry (unchanged),
-///   now wearing crystal facets taken from its reference palette (violet
-///   body, lilac/pink edges, cream highlights). Opaque and non-emissive
-///   (specular 0.10, shininess 18, reflectivity 0.03).
+///   wearing crystal facets taken from its reference palette (violet body,
+///   lilac/pink edges, cream highlights). Final crystal optics: strong
+///   highlights (specular 0.65, shininess 110), reflectivity 0.20, slight
+///   translucency (0.08, IOR 1.45) and a soft violet glow (0.6) from its own
+///   facets: a crystal accent, never glass nor a lamp.
 /// - Mycelium: grey-violet fungal top, sides where that surface drips over
 ///   the soil, and a Dirt bottom. Opaque, matte, non-emissive (specular 0.03,
 ///   shininess 5, no reflectivity).
@@ -474,6 +477,9 @@ pub struct SymbolGlow {
     pub mask: TextureId,
     pub strength: f32,
 }
+
+/// Soft violet self-illumination of the amethyst cluster crystals.
+pub const AMETHYST_CLUSTER_GLOW_STRENGTH: f32 = 0.6;
 
 /// Emission strength of the crying-obsidian cracks (every colour family).
 pub const CRYING_OBSIDIAN_GLOW_STRENGTH: f32 = 1.4;
@@ -600,11 +606,17 @@ pub fn insert_overworld_materials(
             .with_reflectivity(0.03)
             .with_face_textures(textures.budding_amethyst),
     );
+    // The cluster's crystal facets double as its emissive mask (same texture
+    // id), so the soft glow carries each facet's own violet/lilac tone.
     library.insert(
         amethyst_cluster_material_id(),
-        Material::new(Color::new(0.58, 0.40, 0.82, 1.0), 0.10, 18.0)
-            .with_reflectivity(0.03)
-            .with_face_textures(textures.amethyst_cluster),
+        Material::new(Color::new(0.58, 0.40, 0.82, 1.0), 0.65, 110.0)
+            .with_reflectivity(0.20)
+            .with_transparency(0.08)
+            .with_refractive_index(1.45)
+            .with_face_textures(textures.amethyst_cluster)
+            .with_emissive_texture(textures.amethyst_cluster.texture_for_face(Face::PositiveZ))
+            .with_emission_strength(AMETHYST_CLUSTER_GLOW_STRENGTH),
     );
     library.insert(
         mycelium_material_id(),
