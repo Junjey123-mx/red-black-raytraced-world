@@ -98,22 +98,23 @@ fn catalog_contains_representative_blocks_of_all_three_families() {
         BlockType::CryingObsidianViolet,
         BlockType::RedBlackDeepslateBricksCrimson,
         BlockType::RedBlackDeepslateBricksOrange,
+        BlockType::RedBlackDeepslateBricksViolet,
         BlockType::PolishedBlackstoneBricks,
         BlockType::NetherWartBlock,
     ];
 
     assert_eq!(overworld.len(), 17);
     assert_eq!(portal.len(), 2);
-    assert_eq!(red_black.len(), 19);
+    assert_eq!(red_black.len(), 20);
 
-    // The whole catalog (38 entries) is pairwise distinct.
+    // The whole catalog (39 entries) is pairwise distinct.
     let all: HashSet<BlockType> = overworld
         .iter()
         .chain(portal.iter())
         .chain(red_black.iter())
         .copied()
         .collect();
-    assert_eq!(all.len(), 38);
+    assert_eq!(all.len(), 39);
 }
 
 #[test]

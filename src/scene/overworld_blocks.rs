@@ -115,6 +115,10 @@ pub fn red_black_deepslate_bricks_orange_material_id() -> MaterialId {
     MaterialId::new(59)
 }
 
+pub fn red_black_deepslate_bricks_violet_material_id() -> MaterialId {
+    MaterialId::new(60)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -168,6 +172,8 @@ pub struct OverworldBlockTextures {
     pub red_black_bricks_crimson_glow: TextureId,
     pub red_black_bricks_orange: FaceTextures,
     pub red_black_bricks_orange_glow: TextureId,
+    pub red_black_bricks_violet: FaceTextures,
+    pub red_black_bricks_violet_glow: TextureId,
     pub deepslate_bricks_normal: TextureId,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
@@ -272,6 +278,12 @@ impl OverworldBlockTextures {
         let rb_bricks_orange_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/orange_emissive.png"
         ))?;
+        let rb_bricks_violet = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/violet_albedo.png"
+        ))?;
+        let rb_bricks_violet_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/violet_emissive.png"
+        ))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -318,6 +330,8 @@ impl OverworldBlockTextures {
             red_black_bricks_crimson_glow: rb_bricks_crimson_glow,
             red_black_bricks_orange: FaceTextures::uniform(rb_bricks_orange),
             red_black_bricks_orange_glow: rb_bricks_orange_glow,
+            red_black_bricks_violet: FaceTextures::uniform(rb_bricks_violet),
+            red_black_bricks_violet_glow: rb_bricks_violet_glow,
             deepslate_bricks_normal,
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
@@ -708,6 +722,19 @@ pub fn insert_overworld_materials(
             textures.red_black_bricks_orange,
             glow(
                 textures.red_black_bricks_orange_glow,
+                RED_BLACK_BRICKS_GLOW_STRENGTH,
+            ),
+        )
+        .with_normal_texture(textures.deepslate_bricks_normal),
+    );
+    library.insert(
+        red_black_deepslate_bricks_violet_material_id(),
+        symbol_block_material(
+            Color::new(0.25, 0.22, 0.22, 1.0),
+            bricks,
+            textures.red_black_bricks_violet,
+            glow(
+                textures.red_black_bricks_violet_glow,
                 RED_BLACK_BRICKS_GLOW_STRENGTH,
             ),
         )
