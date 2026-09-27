@@ -95,6 +95,10 @@ pub fn purple_club_material_id() -> MaterialId {
     MaterialId::new(54)
 }
 
+pub fn crying_obsidian_crimson_material_id() -> MaterialId {
+    MaterialId::new(55)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -134,6 +138,10 @@ pub struct OverworldBlockTextures {
     pub purple_heart: FaceTextures,
     pub purple_diamond: FaceTextures,
     pub purple_club: FaceTextures,
+    /// Crying obsidian: one pattern on all six faces, cracks glowing
+    /// through their own emissive colour mask.
+    pub crying_obsidian_crimson: FaceTextures,
+    pub crying_obsidian_crimson_glow: TextureId,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -203,6 +211,12 @@ impl OverworldBlockTextures {
         ))?;
         let purple_club =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/club_albedo.png"))?;
+        let crying_crimson = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/crimson_albedo.png"
+        ))?;
+        let crying_crimson_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/crimson_emissive.png"
+        ))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -239,6 +253,8 @@ impl OverworldBlockTextures {
             purple_heart: FaceTextures::uniform(purple_heart),
             purple_diamond: FaceTextures::uniform(purple_diamond),
             purple_club: FaceTextures::uniform(purple_club),
+            crying_obsidian_crimson: FaceTextures::uniform(crying_crimson),
+            crying_obsidian_crimson_glow: crying_crimson_glow,
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -337,7 +353,8 @@ pub const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
 /// Directory (relative to the repository root) of the Red-Black block textures.
 pub const RED_BLACK_TEXTURES_DIR: &str = "assets/textures/red_black_maze";
 
-/// Self-illumination of a Red-Black card-suit block. `mask` is an emissive
+/// Self-illumination of a Red-Black block (card-suit symbols, crying
+/// obsidian cracks). `mask` is an emissive
 /// colour mask sharing the albedo UV, exactly like the redstone lamp's: the
 /// symbol texels carry the colour they radiate and every other texel (the
 /// masonry, its joints and the dark frame) is black, so it never emits.
@@ -346,6 +363,9 @@ pub struct SymbolGlow {
     pub mask: TextureId,
     pub strength: f32,
 }
+
+/// Emission strength of the crying-obsidian cracks (every colour family).
+pub const CRYING_OBSIDIAN_GLOW_STRENGTH: f32 = 1.4;
 
 /// Emission strength of the Crimson symbols (heart, diamond).
 pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
@@ -356,7 +376,7 @@ pub const ORANGE_GLOW_STRENGTH: f32 = 1.8;
 /// Emission strength of the Purple symbols (heart, diamond, club).
 pub const PURPLE_GLOW_STRENGTH: f32 = 1.8;
 
-/// Material of a card-suit block: an opaque, textured full cube with the
+/// Material of a glowing Red-Black block: an opaque, textured full cube with the
 /// given `(specular, shininess, reflectivity)` profile and, when `glow` is
 /// present, the existing emissive path (`emissive_texture` +
 /// `emission_strength`). With `glow = None` (or a zero strength) the block
@@ -555,6 +575,21 @@ pub fn insert_overworld_materials(
             plain,
             textures.purple_club,
             purple_glow(textures.purple_club_glow),
+        ),
+    );
+    // Crying obsidian: a near-black, slightly polished body (specular 0.30,
+    // shininess 60, reflectivity 0.12) whose cracks alone glow.
+    let crying = (0.30, 60.0, 0.12);
+    library.insert(
+        crying_obsidian_crimson_material_id(),
+        symbol_block_material(
+            Color::new(0.30, 0.03, 0.07, 1.0),
+            crying,
+            textures.crying_obsidian_crimson,
+            glow(
+                textures.crying_obsidian_crimson_glow,
+                CRYING_OBSIDIAN_GLOW_STRENGTH,
+            ),
         ),
     );
 }

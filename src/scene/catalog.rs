@@ -24,6 +24,7 @@ use crate::scene::overworld_blocks::amethyst_cluster_material_id;
 use crate::scene::overworld_blocks::budding_amethyst_material_id;
 use crate::scene::overworld_blocks::crimson_diamond_material_id;
 use crate::scene::overworld_blocks::crimson_heart_material_id;
+use crate::scene::overworld_blocks::crying_obsidian_crimson_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
@@ -72,6 +73,11 @@ pub const RED_BLACK_I_Z: i32 = -8;
 /// samples sit on the even columns, in the gaps of the first row, so a
 /// focused view from the front is never blocked.
 pub const RED_BLACK_I_BACK_Z: i32 = -10;
+/// Crimson family row (card suits, crying obsidian, nether wart).
+pub const CRIMSON_ROW_Z: i32 = -12;
+pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
+/// The farthest catalog row; the checker floor reaches two cells past it.
+pub const CATALOG_BACK_ROW_Z: i32 = CRIMSON_ROW_Z;
 pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
 pub const CRIMSON_HEART_X: i32 = 5;
@@ -357,6 +363,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             up,
         ),
         CatalogEntry::new(
+            "Crying obsidian (crimson)",
+            SampleKind::Emissive,
+            BlockType::CryingObsidianCrimson,
+            crying_obsidian_crimson_material_id(),
+            at(CRYING_OBSIDIAN_CRIMSON_X, CRIMSON_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
             "Control cube",
             SampleKind::Control,
             BlockType::Stone,
@@ -504,10 +518,10 @@ pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
 }
 
 /// Continues the gallery's checker floor behind it (`z` from
-/// `RED_BLACK_I_BACK_Z - 2` up to the gallery's own first row) so the
-/// Overworld I and II rows and the two Red-Black rows stand on the same floor.
+/// `CATALOG_BACK_ROW_Z - 2` up to the gallery's own first row) so every
+/// Overworld and Red-Black row stands on the same floor.
 fn extend_floor_backward(world: &mut VoxelWorld) {
-    for z in RED_BLACK_I_BACK_Z - 2..GALLERY_Z_MIN {
+    for z in CATALOG_BACK_ROW_Z - 2..GALLERY_Z_MIN {
         for x in 0..GALLERY_WIDTH {
             let id = if (x + z) % 2 == 0 {
                 checker_light_material_id()
