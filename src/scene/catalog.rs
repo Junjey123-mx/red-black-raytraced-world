@@ -32,6 +32,7 @@ use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
 use crate::scene::overworld_blocks::orange_club_material_id;
 use crate::scene::overworld_blocks::orange_spade_material_id;
+use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
 use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::purple_club_material_id;
 use crate::scene::overworld_blocks::purple_diamond_material_id;
@@ -89,6 +90,7 @@ pub const CRYING_OBSIDIAN_VIOLET_X: i32 = 2;
 pub const STRUCTURAL_ROW_Z: i32 = -16;
 pub const RED_BLACK_BRICKS_CRIMSON_X: i32 = 1;
 pub const RED_BLACK_BRICKS_VIOLET_X: i32 = 5;
+pub const POLISHED_BLACKSTONE_X: i32 = 7;
 pub const RED_BLACK_BRICKS_ORANGE_X: i32 = 3;
 /// The farthest catalog row; the checker floor reaches two cells past it.
 pub const CATALOG_BACK_ROW_Z: i32 = STRUCTURAL_ROW_Z;
@@ -422,6 +424,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::RedBlackDeepslateBricksViolet,
             red_black_deepslate_bricks_violet_material_id(),
             at(RED_BLACK_BRICKS_VIOLET_X, STRUCTURAL_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Polished blackstone bricks",
+            SampleKind::PlainBlock,
+            BlockType::PolishedBlackstoneBricks,
+            polished_blackstone_bricks_material_id(),
+            at(POLISHED_BLACKSTONE_X, STRUCTURAL_ROW_Z),
             up,
         ),
         CatalogEntry::new(

@@ -119,6 +119,10 @@ pub fn red_black_deepslate_bricks_violet_material_id() -> MaterialId {
     MaterialId::new(60)
 }
 
+pub fn polished_blackstone_bricks_material_id() -> MaterialId {
+    MaterialId::new(61)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -175,6 +179,7 @@ pub struct OverworldBlockTextures {
     pub red_black_bricks_violet: FaceTextures,
     pub red_black_bricks_violet_glow: TextureId,
     pub deepslate_bricks_normal: TextureId,
+    pub polished_blackstone_bricks: FaceTextures,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -284,6 +289,9 @@ impl OverworldBlockTextures {
         let rb_bricks_violet_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/violet_emissive.png"
         ))?;
+        let polished_blackstone = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/polished_blackstone_bricks.png"
+        ))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -333,6 +341,8 @@ impl OverworldBlockTextures {
             red_black_bricks_violet: FaceTextures::uniform(rb_bricks_violet),
             red_black_bricks_violet_glow: rb_bricks_violet_glow,
             deepslate_bricks_normal,
+            // Its reference shows one texture on the top and the sides.
+            polished_blackstone_bricks: FaceTextures::uniform(polished_blackstone),
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -739,5 +749,14 @@ pub fn insert_overworld_materials(
             ),
         )
         .with_normal_texture(textures.deepslate_bricks_normal),
+    );
+    // Polished blackstone bricks: refined anthracite masonry, semipolished
+    // but never metallic (specular 0.20, shininess 38, reflectivity 0.06),
+    // opaque and non-emissive. Its albedo already carries the joints.
+    library.insert(
+        polished_blackstone_bricks_material_id(),
+        Material::new(Color::new(0.16, 0.14, 0.16, 1.0), 0.20, 38.0)
+            .with_reflectivity(0.06)
+            .with_face_textures(textures.polished_blackstone_bricks),
     );
 }
