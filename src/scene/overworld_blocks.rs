@@ -127,6 +127,10 @@ pub fn nether_wart_block_material_id() -> MaterialId {
     MaterialId::new(62)
 }
 
+pub fn purple_spade_material_id() -> MaterialId {
+    MaterialId::new(63)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -152,6 +156,7 @@ pub struct OverworldBlockTextures {
     pub mycelium: FaceTextures,
     pub smooth_basalt: FaceTextures,
     pub crimson_heart: FaceTextures,
+    pub purple_spade: FaceTextures,
     /// Emissive colour masks of the card-suit symbols (black off-symbol).
     pub crimson_heart_glow: TextureId,
     pub crimson_diamond_glow: TextureId,
@@ -160,6 +165,7 @@ pub struct OverworldBlockTextures {
     pub purple_heart_glow: TextureId,
     pub purple_diamond_glow: TextureId,
     pub purple_club_glow: TextureId,
+    pub purple_spade_glow: TextureId,
     pub crimson_diamond: FaceTextures,
     pub orange_club: FaceTextures,
     pub orange_spade: FaceTextures,
@@ -238,6 +244,11 @@ impl OverworldBlockTextures {
         ))?;
         let purple_club_glow =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/club_emissive.png"))?;
+        let purple_spade =
+            manager.load(format!("{RED_BLACK_TEXTURES_DIR}/violet/spade_albedo.png"))?;
+        let purple_spade_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/violet/spade_emissive.png"
+        ))?;
         let crimson_heart =
             manager.load(format!("{RED_BLACK_TEXTURES_DIR}/crimson/heart_albedo.png"))?;
         let crimson_diamond = manager.load(format!(
@@ -329,6 +340,8 @@ impl OverworldBlockTextures {
             purple_heart_glow,
             purple_diamond_glow,
             purple_club_glow,
+            purple_spade_glow,
+            purple_spade: FaceTextures::uniform(purple_spade),
             crimson_diamond: FaceTextures::uniform(crimson_diamond),
             orange_club: FaceTextures::uniform(orange_club),
             orange_spade: FaceTextures::uniform(orange_spade),
@@ -434,6 +447,8 @@ impl OverworldBlockTextures {
 ///   lilac centre facet on dark purple masonry, clearly distinct from
 ///   CrimsonDiamond. Opaque, non-emissive, with the diamond sheen (specular
 ///   0.10, shininess 18, reflectivity 0.03).
+/// - PurpleSpade: the OrangeSpade re-drawing (same spade, bevel and glint)
+///   in the Violet family on dark purple masonry, with the Purple glow.
 /// - PurpleClub: the same re-drawn three-lobed club in the Violet family on
 ///   dark purple masonry, clearly distinct from OrangeClub. Opaque,
 ///   non-emissive (specular 0.06, shininess 8, reflectivity 0.01).
@@ -473,7 +488,7 @@ pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
 /// Emission strength of the Orange symbols (club, spade).
 pub const ORANGE_GLOW_STRENGTH: f32 = 1.8;
 
-/// Emission strength of the Purple symbols (heart, diamond, club).
+/// Emission strength of the Purple symbols (heart, diamond, club, spade).
 pub const PURPLE_GLOW_STRENGTH: f32 = 1.8;
 
 /// Material of a glowing Red-Black block: an opaque, textured full cube with the
@@ -675,6 +690,15 @@ pub fn insert_overworld_materials(
             plain,
             textures.purple_club,
             purple_glow(textures.purple_club_glow),
+        ),
+    );
+    library.insert(
+        purple_spade_material_id(),
+        symbol_block_material(
+            purple,
+            plain,
+            textures.purple_spade,
+            purple_glow(textures.purple_spade_glow),
         ),
     );
     // Crying obsidian: a near-black, slightly polished body (specular 0.30,

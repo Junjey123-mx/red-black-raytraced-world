@@ -38,6 +38,7 @@ use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::purple_club_material_id;
 use crate::scene::overworld_blocks::purple_diamond_material_id;
 use crate::scene::overworld_blocks::purple_heart_material_id;
+use crate::scene::overworld_blocks::purple_spade_material_id;
 use crate::scene::overworld_blocks::red_black_deepslate_bricks_crimson_material_id;
 use crate::scene::overworld_blocks::red_black_deepslate_bricks_orange_material_id;
 use crate::scene::overworld_blocks::red_black_deepslate_bricks_violet_material_id;
@@ -105,6 +106,7 @@ pub const ORANGE_SPADE_X: i32 = 11;
 pub const PURPLE_HEART_X: i32 = 4;
 pub const PURPLE_DIAMOND_X: i32 = 6;
 pub const PURPLE_CLUB_X: i32 = 8;
+pub const PURPLE_SPADE_X: i32 = 10;
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -442,6 +444,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::NetherWartBlock,
             nether_wart_block_material_id(),
             at(NETHER_WART_X, CRIMSON_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Purple spade",
+            SampleKind::PlainBlock,
+            BlockType::PurpleSpade,
+            purple_spade_material_id(),
+            at(PURPLE_SPADE_X, RED_BLACK_I_BACK_Z),
             up,
         ),
         CatalogEntry::new(

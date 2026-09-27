@@ -117,7 +117,7 @@ use scene::overworld_blocks::{
 };
 use scene::overworld_blocks::{
     PURPLE_GLOW_STRENGTH, purple_club_material_id, purple_diamond_material_id,
-    purple_heart_material_id,
+    purple_heart_material_id, purple_spade_material_id,
 };
 use scene::texture_manager::TextureManager;
 
@@ -129,7 +129,8 @@ const TIERS: [[u8; 3]; 4] = [
     [234, 196, 255],
 ];
 
-/// (block, material, catalog name, fingerprint of the Gate 10 albedo pixels).
+/// (block, material, catalog name, fingerprint of the approved albedo
+/// pixels: Gate 10 for heart/diamond/club, Gate 11 for the spade).
 fn blocks() -> Vec<(BlockType, MaterialId, &'static str, u64)> {
     vec![
         (
@@ -149,6 +150,12 @@ fn blocks() -> Vec<(BlockType, MaterialId, &'static str, u64)> {
             purple_club_material_id(),
             "Purple club",
             117772177821,
+        ),
+        (
+            BlockType::PurpleSpade,
+            purple_spade_material_id(),
+            "Purple spade",
+            138665943904,
         ),
     ]
 }
@@ -358,6 +365,7 @@ fn purple_never_reads_as_crimson_or_orange() {
         (purple_heart_material_id(), crimson_heart_material_id()),
         (purple_diamond_material_id(), crimson_diamond_material_id()),
         (purple_club_material_id(), orange_club_material_id()),
+        (purple_spade_material_id(), orange_spade_material_id()),
     ] {
         let (a, b) = (mask(&e, purple), mask(&e, twin));
         for (p, t) in a.pixels().iter().zip(b.pixels()) {
