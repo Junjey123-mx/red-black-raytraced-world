@@ -13,5 +13,7 @@ mod scene;
 
 /// Opens the interactive block catalog (`CatalogScene`): every official
 /// block plus the optical diagnostics, with selection, focus, orbit, zoom
-/// and reset.
+/// and reset (`cargo run --bin catalog`).
 pub use app::run_catalog_app;
+/// Opens the main world scene (`cargo run`).
+pub use app::run_world_app;

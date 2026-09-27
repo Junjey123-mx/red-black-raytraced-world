@@ -12,3 +12,4 @@ pub mod overworld_blocks;
 pub mod scene;
 pub mod texture_manager;
 pub mod voxel_world;
+pub mod world;

@@ -78,6 +78,8 @@ mod scene {
     pub mod texture_manager;
     #[path = "../src/scene/voxel_world.rs"]
     pub mod voxel_world;
+    #[path = "../src/scene/world.rs"]
+    pub mod world;
 }
 
 #[path = "."]
@@ -108,6 +110,7 @@ use scene::catalog::{
 };
 use scene::material_gallery::gallery_camera;
 use scene::texture_manager::TextureManager;
+use scene::world::{WORLD_MAX_DISTANCE, WorldScene, world_background, world_camera, world_lights};
 use std::path::{Path, PathBuf};
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -148,7 +151,7 @@ fn the_shared_catalog_bootstrap_is_exposed_by_the_library() {
 #[test]
 fn main_is_a_thin_entrypoint_without_its_own_module_tree() {
     let main = std::fs::read_to_string("src/main.rs").unwrap();
-    assert!(main.contains("red_black_raytraced_world::"));
+    assert!(main.contains("red_black_raytraced_world::run_world_app()"));
     assert!(
         !main.contains("mod "),
         "the module tree lives only in lib.rs"
@@ -251,4 +254,90 @@ fn the_catalog_binary_is_a_thin_launcher_of_the_shared_bootstrap() {
         assert!(!bin.contains(forbidden), "{forbidden}");
     }
     assert!(bin.lines().count() <= 10);
+}
+
+#[test]
+fn both_entrypoints_exist_in_the_library() {
+    let _catalog: fn() = red_black_raytraced_world::run_catalog_app;
+    let _world: fn() = red_black_raytraced_world::run_world_app;
+    let lib = std::fs::read_to_string("src/lib.rs").unwrap();
+    assert!(lib.contains("pub use app::run_world_app;"));
+}
+
+#[test]
+fn both_modes_run_on_the_one_shared_runtime() {
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    assert!(app.contains("pub fn run_catalog_app() {\n    run_viewer(CatalogMode::new);\n}"));
+    assert!(app.contains("pub fn run_world_app() {\n    run_viewer(WorldMode::new);\n}"));
+    // One window bootstrap, one texture manager, one render loop.
+    assert_eq!(occurrences_in_src("raylib::init()"), 1);
+    assert_eq!(occurrences_in_src("TextureManager::new()"), 1);
+    assert_eq!(occurrences_in_src("fn render("), 1);
+    assert_eq!(occurrences_in_src("fn run_viewer<"), 1);
+    assert_eq!(occurrences_in_src("begin_drawing("), 1);
+}
+
+#[test]
+fn the_catalog_mode_builds_the_catalog_scene() {
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    let catalog_mode = &app[app.find("impl CatalogMode").unwrap()
+        ..app.find("impl ViewerMode for CatalogMode").unwrap()];
+    assert!(catalog_mode.contains("CatalogScene::new()"));
+    assert!(catalog_mode.contains("catalog_materials("));
+}
+
+#[test]
+fn the_world_mode_never_builds_the_catalog_scene() {
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    let world_mode =
+        &app[app.find("struct WorldMode").unwrap()..app.find("/// Casts one primary ray").unwrap()];
+    assert!(!world_mode.contains("CatalogScene"));
+    assert!(!world_mode.contains("catalog_materials"));
+    let world_rs = std::fs::read_to_string("src/scene/world.rs").unwrap();
+    assert!(!world_rs.contains("CatalogScene::new") && !world_rs.contains("catalog::"));
+
+    // Before Gate 12 the world is empty and every ray sees the sky.
+    let scene = WorldScene::new();
+    assert!(scene.world().is_empty());
+    let camera = world_camera(4.0 / 3.0);
+    let materials = scene::material_library::MaterialLibrary::new();
+    let manager = TextureManager::new();
+    let lights = world_lights();
+    for (x, y) in [(0, 0), (40, 30), (79, 59)] {
+        let ray = camera::projection::primary_ray(&camera, x, y, 80, 60);
+        let c = renderer::raytracer::cast_ray_voxel_lit(
+            scene.world(),
+            &materials,
+            &ray,
+            camera.position,
+            &lights,
+            renderer::shading::DEFAULT_AMBIENT_FACTOR,
+            world_background(),
+            &manager,
+            WORLD_MAX_DISTANCE,
+        );
+        assert_eq!(c, world_background());
+    }
+}
+
+#[test]
+fn default_run_is_the_world_binary() {
+    let cargo = std::fs::read_to_string("Cargo.toml").unwrap();
+    let package = cargo
+        .lines()
+        .find_map(|l| l.strip_prefix("name = "))
+        .expect("package name")
+        .trim_matches('"')
+        .to_string();
+    assert!(cargo.contains(&format!("default-run = \"{package}\"")));
+    // The package-named binary is src/main.rs, which opens the world; the
+    // catalog binary opens the catalog.
+    let main = std::fs::read_to_string("src/main.rs").unwrap();
+    assert!(main.contains("run_world_app()") && !main.contains("run_catalog_app"));
+    let catalog = std::fs::read_to_string("src/bin/catalog.rs").unwrap();
+    assert!(catalog.contains("run_catalog_app()") && !catalog.contains("run_world_app"));
+    assert!(
+        !cargo.contains("[[bin]]"),
+        "Cargo autodetects both binaries"
+    );
 }

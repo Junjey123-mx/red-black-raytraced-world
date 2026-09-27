@@ -2,6 +2,8 @@
 name = "red-black-raytraced-world"
 version = "0.1.0"
 edition = "2024"
+# `cargo run` opens the world; the block catalog is `cargo run --bin catalog`.
+default-run = "red-black-raytraced-world"
 
 [dependencies]
 raylib = "5.5"
