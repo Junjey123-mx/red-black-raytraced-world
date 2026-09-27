@@ -131,10 +131,16 @@ const GLOW: [u8; 3] = [200, 30, 40];
 /// whatever the face's UV orientation.
 fn quadrant_mask(manager: &mut TextureManager) -> TextureId {
     use raylib::prelude::{Color as RlColor, Image};
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    // One file per call: the tests run in parallel and must never read a
-    // mask another test is still writing.
+    // One file per call, and one writer/reader at a time: the tests run in
+    // parallel, and Raylib's image export/load keep internal static buffers
+    // (file names, extensions) that are not safe to use concurrently.
     static NEXT: AtomicUsize = AtomicUsize::new(0);
+    static RAYLIB_IO: Mutex<()> = Mutex::new(());
+    let _io = RAYLIB_IO
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = std::env::temp_dir().join(format!(
         "rb_symbol_glow_fixture_{}_{}.png",
         std::process::id(),

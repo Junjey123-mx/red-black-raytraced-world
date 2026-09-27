@@ -25,6 +25,7 @@ use crate::scene::overworld_blocks::budding_amethyst_material_id;
 use crate::scene::overworld_blocks::crimson_diamond_material_id;
 use crate::scene::overworld_blocks::crimson_heart_material_id;
 use crate::scene::overworld_blocks::crying_obsidian_crimson_material_id;
+use crate::scene::overworld_blocks::crying_obsidian_orange_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
@@ -76,8 +77,11 @@ pub const RED_BLACK_I_BACK_Z: i32 = -10;
 /// Crimson family row (card suits, crying obsidian, nether wart).
 pub const CRIMSON_ROW_Z: i32 = -12;
 pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
+/// Orange family row (card suits, crying obsidian).
+pub const ORANGE_ROW_Z: i32 = -14;
+pub const CRYING_OBSIDIAN_ORANGE_X: i32 = 6;
 /// The farthest catalog row; the checker floor reaches two cells past it.
-pub const CATALOG_BACK_ROW_Z: i32 = CRIMSON_ROW_Z;
+pub const CATALOG_BACK_ROW_Z: i32 = ORANGE_ROW_Z;
 pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
 pub const CRIMSON_HEART_X: i32 = 5;
@@ -368,6 +372,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::CryingObsidianCrimson,
             crying_obsidian_crimson_material_id(),
             at(CRYING_OBSIDIAN_CRIMSON_X, CRIMSON_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Crying obsidian (orange)",
+            SampleKind::Emissive,
+            BlockType::CryingObsidianOrange,
+            crying_obsidian_orange_material_id(),
+            at(CRYING_OBSIDIAN_ORANGE_X, ORANGE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
