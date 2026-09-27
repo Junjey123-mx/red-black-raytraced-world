@@ -114,7 +114,7 @@ use renderer::raytracer::{
 use scene::block::BlockInstance;
 use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
-use scene::block_type::BlockType;
+use scene::block_type::{BlockType, OFFICIAL_BLOCK_COUNT};
 use scene::catalog::*;
 use scene::material_gallery::{
     BACK_Z, GALLERY_MAX_DISTANCE, GALLERY_WIDTH, LEAVES_X, gallery_background, gallery_camera,
@@ -128,8 +128,9 @@ use scene::voxel_world::VoxelWorld;
 
 const EPS: f32 = 1e-4;
 const RANGE: f32 = 60.0;
-/// Number of catalog samples (updated as definitive blocks join the catalog).
-const ENTRY_COUNT: usize = 41;
+/// Number of catalog samples: every official block plus the two optical
+/// diagnostics (control and mirror cubes).
+const ENTRY_COUNT: usize = OFFICIAL_BLOCK_COUNT + 2;
 
 fn cell(x: i32, y: i32, z: i32) -> IVec3 {
     IVec3::new(x, y, z)

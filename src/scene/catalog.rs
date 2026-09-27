@@ -10,7 +10,7 @@ use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::core::material::MaterialId;
 use crate::core::math::{IVec3, Vec3};
 use crate::scene::block::BlockInstance;
-use crate::scene::block_type::BlockType;
+use crate::scene::block_type::{BlockType, OFFICIAL_BLOCK_COUNT};
 use crate::scene::material_gallery::{
     BACK_Z, BRICKS_X, FRONT_Z, GALLERY_WIDTH, GALLERY_Z_MIN, GLASS_X, GalleryTextures, LAMP_X,
     LEAVES_X, MATTE_X, MIRROR_X, PORTAL_X, WATER_X, advanced_materials_library,
@@ -50,10 +50,7 @@ use crate::scene::overworld_blocks::{
     insert_overworld_materials, log_material_id, sand_material_id, stone_block_material_id,
 };
 use crate::scene::overworld_blocks::{wood_door_bottom_material_id, wood_door_top_material_id};
-use crate::scene::scene::{
-    PartialSceneTextures, amethyst_material_id, diagnostic_partial_materials, grass_material_id,
-    wood_material_id,
-};
+use crate::scene::scene::{PartialSceneTextures, diagnostic_partial_materials, grass_material_id};
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 use crate::scene::voxel_world::VoxelWorld;
 
@@ -74,39 +71,43 @@ pub const LOG_X: i32 = 2;
 pub const WOOD_PLANKS_X: i32 = 4;
 pub const DOUBLE_SLAB_X: i32 = 6;
 pub const PORTAL_FRAME_X: i32 = 8;
-pub const BUDDING_AMETHYST_X: i32 = 10;
-/// Row of the first Red-Black catalog blocks, behind the Overworld II row.
-pub const RED_BLACK_I_Z: i32 = -8;
-/// Second Red-Black row (the Purple family), behind the first one. Its
-/// samples sit on the even columns, in the gaps of the first row, so a
-/// focused view from the front is never blocked.
-pub const RED_BLACK_I_BACK_Z: i32 = -10;
-/// Crimson family row (card suits, crying obsidian, nether wart).
-pub const CRIMSON_ROW_Z: i32 = -12;
-pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
-pub const NETHER_WART_X: i32 = 7;
-/// Orange family row (card suits, crying obsidian).
-pub const ORANGE_ROW_Z: i32 = -14;
-pub const CRYING_OBSIDIAN_ORANGE_X: i32 = 6;
-pub const CRYING_OBSIDIAN_VIOLET_X: i32 = 2;
-/// Structural Red-Black row (deepslate bricks, polished blackstone).
-pub const STRUCTURAL_ROW_Z: i32 = -16;
-pub const RED_BLACK_BRICKS_CRIMSON_X: i32 = 1;
-pub const RED_BLACK_BRICKS_VIOLET_X: i32 = 5;
-pub const POLISHED_BLACKSTONE_X: i32 = 7;
-pub const RED_BLACK_BRICKS_ORANGE_X: i32 = 3;
-/// The farthest catalog row; the checker floor reaches two cells past it.
-pub const CATALOG_BACK_ROW_Z: i32 = STRUCTURAL_ROW_Z;
+
+// Red-Black rows, one per family, behind the Overworld II row. Consecutive
+// rows alternate odd and even columns, so no sample has another one directly
+// in front of it in its own column (an orbit clears any diagonal overlap).
+
+/// Red-Black Base row (the cluster keeps its Gate 06 slot in the shapes row).
+pub const RED_BLACK_BASE_ROW_Z: i32 = -8;
 pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
-pub const CRIMSON_HEART_X: i32 = 5;
-pub const CRIMSON_DIAMOND_X: i32 = 7;
-pub const ORANGE_CLUB_X: i32 = 9;
-pub const ORANGE_SPADE_X: i32 = 11;
+pub const BUDDING_AMETHYST_X: i32 = 5;
+/// Purple/Violet row.
+pub const PURPLE_ROW_Z: i32 = -10;
+pub const CRYING_OBSIDIAN_VIOLET_X: i32 = 2;
 pub const PURPLE_HEART_X: i32 = 4;
 pub const PURPLE_DIAMOND_X: i32 = 6;
 pub const PURPLE_CLUB_X: i32 = 8;
 pub const PURPLE_SPADE_X: i32 = 10;
+/// Crimson row.
+pub const CRIMSON_ROW_Z: i32 = -12;
+pub const CRIMSON_HEART_X: i32 = 1;
+pub const CRIMSON_DIAMOND_X: i32 = 3;
+pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
+pub const NETHER_WART_X: i32 = 7;
+/// Orange row.
+pub const ORANGE_ROW_Z: i32 = -14;
+pub const ORANGE_CLUB_X: i32 = 2;
+pub const ORANGE_SPADE_X: i32 = 4;
+pub const CRYING_OBSIDIAN_ORANGE_X: i32 = 6;
+/// Structural Red-Black row.
+pub const STRUCTURAL_ROW_Z: i32 = -16;
+pub const RED_BLACK_BRICKS_CRIMSON_X: i32 = 1;
+pub const RED_BLACK_BRICKS_ORANGE_X: i32 = 3;
+pub const RED_BLACK_BRICKS_VIOLET_X: i32 = 5;
+pub const POLISHED_BLACKSTONE_X: i32 = 7;
+/// The farthest catalog row; the checker floor reaches two cells past it.
+pub const CATALOG_BACK_ROW_Z: i32 = STRUCTURAL_ROW_Z;
+
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
 pub const STONE_X: i32 = 5;
@@ -180,6 +181,23 @@ impl CatalogEntry {
     pub fn block(&self) -> BlockInstance {
         BlockInstance::new(self.block_type, self.material_id, self.orientation)
     }
+
+    /// `true` for the one sample of an official block; `false` for the two
+    /// optical diagnostics (the control and mirror cubes), which reuse the
+    /// Stone block type with gallery-only materials.
+    pub fn is_official(&self) -> bool {
+        !matches!(self.kind, SampleKind::Control | SampleKind::Reflective)
+    }
+
+    /// Sort key of the catalog: official blocks in registry order (grouped by
+    /// family), then the optical diagnostics.
+    fn catalog_rank(&self) -> usize {
+        if self.is_official() {
+            self.block_type.catalog_rank()
+        } else {
+            OFFICIAL_BLOCK_COUNT
+        }
+    }
 }
 
 fn cell_center(cell: IVec3) -> Vec3 {
@@ -190,16 +208,12 @@ fn cell_center(cell: IVec3) -> Vec3 {
     )
 }
 
-/// The catalog samples in inspection order, three rows of four:
-///
-/// ```text
-/// control  | reflective | glass     | water
-/// leaves   | redstone   | portal    | normal-map
-/// stairs   | fence      | door      | amethyst
-/// ```
-///
-/// (Physically the gallery's back row is `z = -1`, the shapes row `z = 2`
-/// and the front row `z = 5`; the order is the reading order above.)
+/// The catalog samples in inspection order: one sample per official block,
+/// grouped by family exactly as `BlockType::ALL` lists them (Overworld
+/// Terrain, Overworld Architecture, Portal, Red-Black Base, Crimson, Orange,
+/// Purple/Violet, Structural Red-Black), followed by the two optical
+/// diagnostics (control and mirror cubes). Physical rows keep the Gate 06/07
+/// gallery slots and give each Red-Black family its own row.
 pub fn catalog_entries() -> Vec<CatalogEntry> {
     let at = |x: i32, z: i32| IVec3::new(x, 1, z);
     let up = Orientation::Up;
@@ -221,7 +235,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
     ));
     door.focus_point = Vec3::new(DOOR_X as f32 + 0.5, 2.0, SHAPES_Z as f32 + 0.5);
 
-    vec![
+    let mut entries = vec![
         CatalogEntry::new(
             "Grass",
             SampleKind::PlainBlock,
@@ -307,7 +321,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::BuddingAmethyst,
             budding_amethyst_material_id(),
-            at(BUDDING_AMETHYST_X, OVERWORLD_II_Z),
+            at(BUDDING_AMETHYST_X, RED_BLACK_BASE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -315,7 +329,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::Mycelium,
             mycelium_material_id(),
-            at(MYCELIUM_X, RED_BLACK_I_Z),
+            at(MYCELIUM_X, RED_BLACK_BASE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -323,7 +337,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::SmoothBasalt,
             smooth_basalt_material_id(),
-            at(SMOOTH_BASALT_X, RED_BLACK_I_Z),
+            at(SMOOTH_BASALT_X, RED_BLACK_BASE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -331,7 +345,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::CrimsonHeart,
             crimson_heart_material_id(),
-            at(CRIMSON_HEART_X, RED_BLACK_I_Z),
+            at(CRIMSON_HEART_X, CRIMSON_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -339,7 +353,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::CrimsonDiamond,
             crimson_diamond_material_id(),
-            at(CRIMSON_DIAMOND_X, RED_BLACK_I_Z),
+            at(CRIMSON_DIAMOND_X, CRIMSON_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -347,7 +361,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::OrangeClub,
             orange_club_material_id(),
-            at(ORANGE_CLUB_X, RED_BLACK_I_Z),
+            at(ORANGE_CLUB_X, ORANGE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -355,7 +369,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::OrangeSpade,
             orange_spade_material_id(),
-            at(ORANGE_SPADE_X, RED_BLACK_I_Z),
+            at(ORANGE_SPADE_X, ORANGE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -363,7 +377,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::PurpleHeart,
             purple_heart_material_id(),
-            at(PURPLE_HEART_X, RED_BLACK_I_BACK_Z),
+            at(PURPLE_HEART_X, PURPLE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -371,7 +385,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::PurpleDiamond,
             purple_diamond_material_id(),
-            at(PURPLE_DIAMOND_X, RED_BLACK_I_BACK_Z),
+            at(PURPLE_DIAMOND_X, PURPLE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -379,7 +393,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::PurpleClub,
             purple_club_material_id(),
-            at(PURPLE_CLUB_X, RED_BLACK_I_BACK_Z),
+            at(PURPLE_CLUB_X, PURPLE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -403,7 +417,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::Emissive,
             BlockType::CryingObsidianViolet,
             crying_obsidian_violet_material_id(),
-            at(CRYING_OBSIDIAN_VIOLET_X, RED_BLACK_I_BACK_Z),
+            at(CRYING_OBSIDIAN_VIOLET_X, PURPLE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -451,7 +465,7 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             SampleKind::PlainBlock,
             BlockType::PurpleSpade,
             purple_spade_material_id(),
-            at(PURPLE_SPADE_X, RED_BLACK_I_BACK_Z),
+            at(PURPLE_SPADE_X, PURPLE_ROW_Z),
             up,
         ),
         CatalogEntry::new(
@@ -543,7 +557,18 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             at(AMETHYST_X, SHAPES_Z),
             up,
         ),
-    ]
+    ];
+    // Stable: the two diagnostics keep their relative order at the end.
+    entries.sort_by_key(CatalogEntry::catalog_rank);
+    entries
+}
+
+/// The official samples only, one per `BlockType::ALL` entry, in order.
+pub fn official_entries() -> Vec<CatalogEntry> {
+    catalog_entries()
+        .into_iter()
+        .filter(CatalogEntry::is_official)
+        .collect()
 }
 
 /// Every texture the catalog needs, loaded once through the shared manager.
@@ -569,23 +594,19 @@ impl CatalogTextures {
     }
 }
 
-/// The materials of every sample: the optical gallery's library plus the
-/// existing Gate 06 wood, door and amethyst materials, copied unchanged.
+/// The materials of every sample: the optical gallery's library, the Gate 04
+/// grass material and the definitive block materials. (The Gate 06 wood and
+/// amethyst diagnostics are no longer copied: every catalog block now uses
+/// its own definitive material.)
 pub fn catalog_materials(textures: &CatalogTextures) -> MaterialLibrary {
     let mut library = advanced_materials_library(&textures.gallery);
     let shapes = diagnostic_partial_materials(&textures.shapes);
 
-    for id in [
-        grass_material_id(),
-        wood_material_id(),
-        amethyst_material_id(),
-    ] {
-        let material = shapes
-            .get(id)
-            .expect("the Gate 06 shape materials are always defined")
-            .clone();
-        library.insert(id, material);
-    }
+    let grass = shapes
+        .get(grass_material_id())
+        .expect("the Gate 04 grass material is always defined")
+        .clone();
+    library.insert(grass_material_id(), grass);
 
     insert_overworld_materials(&mut library, &textures.blocks);
 
@@ -696,11 +717,19 @@ impl CatalogScene {
         view.set_distance(FOCUS_DISTANCE);
     }
 
-    /// One-line on-screen label, e.g. `Selected: Fence | 10 / 12`.
+    /// One-line on-screen label with the block's family, e.g.
+    /// `Selected: Fence (Overworld Architecture) | 14 / 41`.
     pub fn label(&self) -> String {
+        let entry = self.selected();
+        let family = if entry.is_official() {
+            entry.block_type.family().label()
+        } else {
+            "optical diagnostic"
+        };
         format!(
-            "Selected: {} | {} / {}",
-            self.selected().display_name,
+            "Selected: {} ({}) | {} / {}",
+            entry.display_name,
+            family,
             self.selected + 1,
             self.entries.len()
         )

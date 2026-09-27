@@ -1,7 +1,7 @@
 #[path = "../src/scene/block_type.rs"]
 mod block_type;
 
-use block_type::BlockType;
+use block_type::{BlockType, OFFICIAL_BLOCK_COUNT};
 use std::collections::{HashMap, HashSet};
 
 #[test]
@@ -107,14 +107,14 @@ fn catalog_contains_representative_blocks_of_all_three_families() {
     assert_eq!(portal.len(), 2);
     assert_eq!(red_black.len(), 20);
 
-    // The whole catalog (39 entries) is pairwise distinct.
+    // The whole official catalog is pairwise distinct.
     let all: HashSet<BlockType> = overworld
         .iter()
         .chain(portal.iter())
         .chain(red_black.iter())
         .copied()
         .collect();
-    assert_eq!(all.len(), 39);
+    assert_eq!(all.len(), OFFICIAL_BLOCK_COUNT);
 }
 
 #[test]
