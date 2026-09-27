@@ -36,6 +36,7 @@ use crate::scene::overworld_blocks::portal_frame_material_id;
 use crate::scene::overworld_blocks::purple_club_material_id;
 use crate::scene::overworld_blocks::purple_diamond_material_id;
 use crate::scene::overworld_blocks::purple_heart_material_id;
+use crate::scene::overworld_blocks::red_black_deepslate_bricks_crimson_material_id;
 use crate::scene::overworld_blocks::smooth_basalt_material_id;
 use crate::scene::overworld_blocks::wood_planks_material_id;
 use crate::scene::overworld_blocks::wood_stairs_material_id;
@@ -82,8 +83,11 @@ pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
 pub const ORANGE_ROW_Z: i32 = -14;
 pub const CRYING_OBSIDIAN_ORANGE_X: i32 = 6;
 pub const CRYING_OBSIDIAN_VIOLET_X: i32 = 2;
+/// Structural Red-Black row (deepslate bricks, polished blackstone).
+pub const STRUCTURAL_ROW_Z: i32 = -16;
+pub const RED_BLACK_BRICKS_CRIMSON_X: i32 = 1;
 /// The farthest catalog row; the checker floor reaches two cells past it.
-pub const CATALOG_BACK_ROW_Z: i32 = ORANGE_ROW_Z;
+pub const CATALOG_BACK_ROW_Z: i32 = STRUCTURAL_ROW_Z;
 pub const MYCELIUM_X: i32 = 1;
 pub const SMOOTH_BASALT_X: i32 = 3;
 pub const CRIMSON_HEART_X: i32 = 5;
@@ -390,6 +394,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::CryingObsidianViolet,
             crying_obsidian_violet_material_id(),
             at(CRYING_OBSIDIAN_VIOLET_X, RED_BLACK_I_BACK_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Red-Black deepslate bricks (crimson)",
+            SampleKind::NormalMapped,
+            BlockType::RedBlackDeepslateBricksCrimson,
+            red_black_deepslate_bricks_crimson_material_id(),
+            at(RED_BLACK_BRICKS_CRIMSON_X, STRUCTURAL_ROW_Z),
             up,
         ),
         CatalogEntry::new(

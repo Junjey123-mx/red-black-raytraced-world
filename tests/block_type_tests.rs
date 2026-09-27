@@ -96,7 +96,7 @@ fn catalog_contains_representative_blocks_of_all_three_families() {
         BlockType::CryingObsidianCrimson,
         BlockType::CryingObsidianOrange,
         BlockType::CryingObsidianViolet,
-        BlockType::RedBlackDeepslateBricks,
+        BlockType::RedBlackDeepslateBricksCrimson,
         BlockType::PolishedBlackstoneBricks,
         BlockType::NetherWartBlock,
     ];

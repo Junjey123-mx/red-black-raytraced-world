@@ -107,6 +107,10 @@ pub fn crying_obsidian_violet_material_id() -> MaterialId {
     MaterialId::new(57)
 }
 
+pub fn red_black_deepslate_bricks_crimson_material_id() -> MaterialId {
+    MaterialId::new(58)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -154,6 +158,11 @@ pub struct OverworldBlockTextures {
     pub crying_obsidian_orange_glow: TextureId,
     pub crying_obsidian_violet: FaceTextures,
     pub crying_obsidian_violet_glow: TextureId,
+    /// Red-Black deepslate bricks: the DeepslateBricks masonry with a few
+    /// recoloured joints, edges and fragments, sharing its normal map.
+    pub red_black_bricks_crimson: FaceTextures,
+    pub red_black_bricks_crimson_glow: TextureId,
+    pub deepslate_bricks_normal: TextureId,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -241,6 +250,16 @@ impl OverworldBlockTextures {
         let crying_violet_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/violet_emissive.png"
         ))?;
+        // Same path as the gallery's DeepslateBricks normal map, so the
+        // manager hands back the very same texture.
+        let deepslate_bricks_normal =
+            manager.load(format!("{overworld_dir}/deepslate_bricks/normal.png"))?;
+        let rb_bricks_crimson = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/crimson_albedo.png"
+        ))?;
+        let rb_bricks_crimson_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/redblack_deepslate_bricks/crimson_emissive.png"
+        ))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -283,6 +302,9 @@ impl OverworldBlockTextures {
             crying_obsidian_orange_glow: crying_orange_glow,
             crying_obsidian_violet: FaceTextures::uniform(crying_violet),
             crying_obsidian_violet_glow: crying_violet_glow,
+            red_black_bricks_crimson: FaceTextures::uniform(rb_bricks_crimson),
+            red_black_bricks_crimson_glow: rb_bricks_crimson_glow,
+            deepslate_bricks_normal,
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -394,6 +416,10 @@ pub struct SymbolGlow {
 
 /// Emission strength of the crying-obsidian cracks (every colour family).
 pub const CRYING_OBSIDIAN_GLOW_STRENGTH: f32 = 1.4;
+
+/// Emission strength of the Red-Black deepslate-brick joint accents: barely
+/// there, so the bricks stay structural rather than a light source.
+pub const RED_BLACK_BRICKS_GLOW_STRENGTH: f32 = 0.25;
 
 /// Emission strength of the Crimson symbols (heart, diamond).
 pub const CRIMSON_GLOW_STRENGTH: f32 = 1.8;
@@ -643,5 +669,21 @@ pub fn insert_overworld_materials(
                 CRYING_OBSIDIAN_GLOW_STRENGTH,
             ),
         ),
+    );
+    // Red-Black deepslate bricks: the DeepslateBricks relief (same normal
+    // map) with the structural profile of the spec.
+    let bricks = (0.10, 18.0, 0.025);
+    library.insert(
+        red_black_deepslate_bricks_crimson_material_id(),
+        symbol_block_material(
+            Color::new(0.25, 0.22, 0.22, 1.0),
+            bricks,
+            textures.red_black_bricks_crimson,
+            glow(
+                textures.red_black_bricks_crimson_glow,
+                RED_BLACK_BRICKS_GLOW_STRENGTH,
+            ),
+        )
+        .with_normal_texture(textures.deepslate_bricks_normal),
     );
 }

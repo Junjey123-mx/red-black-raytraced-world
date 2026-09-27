@@ -47,7 +47,7 @@ pub enum BlockType {
     CryingObsidianCrimson,
     CryingObsidianOrange,
     CryingObsidianViolet,
-    RedBlackDeepslateBricks,
+    RedBlackDeepslateBricksCrimson,
     PolishedBlackstoneBricks,
     NetherWartBlock,
 }
