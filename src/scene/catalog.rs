@@ -30,6 +30,7 @@ use crate::scene::overworld_blocks::crying_obsidian_violet_material_id;
 use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::fence_material_id;
 use crate::scene::overworld_blocks::mycelium_material_id;
+use crate::scene::overworld_blocks::nether_wart_block_material_id;
 use crate::scene::overworld_blocks::orange_club_material_id;
 use crate::scene::overworld_blocks::orange_spade_material_id;
 use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
@@ -82,6 +83,7 @@ pub const RED_BLACK_I_BACK_Z: i32 = -10;
 /// Crimson family row (card suits, crying obsidian, nether wart).
 pub const CRIMSON_ROW_Z: i32 = -12;
 pub const CRYING_OBSIDIAN_CRIMSON_X: i32 = 5;
+pub const NETHER_WART_X: i32 = 7;
 /// Orange family row (card suits, crying obsidian).
 pub const ORANGE_ROW_Z: i32 = -14;
 pub const CRYING_OBSIDIAN_ORANGE_X: i32 = 6;
@@ -432,6 +434,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             BlockType::PolishedBlackstoneBricks,
             polished_blackstone_bricks_material_id(),
             at(POLISHED_BLACKSTONE_X, STRUCTURAL_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Nether wart block",
+            SampleKind::PlainBlock,
+            BlockType::NetherWartBlock,
+            nether_wart_block_material_id(),
+            at(NETHER_WART_X, CRIMSON_ROW_Z),
             up,
         ),
         CatalogEntry::new(
