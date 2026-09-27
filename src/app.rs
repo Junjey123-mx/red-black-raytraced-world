@@ -155,7 +155,11 @@ fn trace_to_texture(
         .expect("failed to upload the CPU framebuffer to a Raylib texture")
 }
 
-pub fn run() {
+/// The catalog application bootstrap: opens the window, loads every texture
+/// once, builds the `CatalogScene` with its material library and lights, and
+/// runs the interactive orbit/selection loop that traces each frame on the
+/// CPU and presents it through Raylib.
+pub fn run_catalog_app() {
     let (mut rl, thread) = raylib::init()
         .size(config::WINDOW_WIDTH, config::WINDOW_HEIGHT)
         .title(config::WINDOW_TITLE)

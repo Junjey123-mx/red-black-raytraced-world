@@ -1,10 +1,3 @@
-mod app;
-mod camera;
-mod config;
-mod core;
-mod renderer;
-mod scene;
-
 fn main() {
-    app::run();
+    red_black_raytraced_world::run_catalog_app();
 }
