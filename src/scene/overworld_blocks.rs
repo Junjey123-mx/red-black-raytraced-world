@@ -103,6 +103,10 @@ pub fn crying_obsidian_orange_material_id() -> MaterialId {
     MaterialId::new(56)
 }
 
+pub fn crying_obsidian_violet_material_id() -> MaterialId {
+    MaterialId::new(57)
+}
+
 pub fn cobblestone_material_id() -> MaterialId {
     MaterialId::new(33)
 }
@@ -148,6 +152,8 @@ pub struct OverworldBlockTextures {
     pub crying_obsidian_crimson_glow: TextureId,
     pub crying_obsidian_orange: FaceTextures,
     pub crying_obsidian_orange_glow: TextureId,
+    pub crying_obsidian_violet: FaceTextures,
+    pub crying_obsidian_violet_glow: TextureId,
     pub portal_frame: FaceTextures,
     /// Lower and upper halves of the two-cell-tall door (broad faces on
     /// +/-Z, narrow dark-wood edges elsewhere).
@@ -229,6 +235,12 @@ impl OverworldBlockTextures {
         let crying_orange_glow = manager.load(format!(
             "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/orange_emissive.png"
         ))?;
+        let crying_violet = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/violet_albedo.png"
+        ))?;
+        let crying_violet_glow = manager.load(format!(
+            "{RED_BLACK_TEXTURES_DIR}/crying_obsidian/violet_emissive.png"
+        ))?;
         let cobblestone = manager.load(format!("{overworld_dir}/cobblestone/albedo.png"))?;
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
@@ -269,6 +281,8 @@ impl OverworldBlockTextures {
             crying_obsidian_crimson_glow: crying_crimson_glow,
             crying_obsidian_orange: FaceTextures::uniform(crying_orange),
             crying_obsidian_orange_glow: crying_orange_glow,
+            crying_obsidian_violet: FaceTextures::uniform(crying_violet),
+            crying_obsidian_violet_glow: crying_violet_glow,
             portal_frame: FaceTextures::uniform(portal_frame),
             wood_door_bottom: thin(door_bottom, edge_bottom),
             wood_door_top: thin(door_top, edge_top),
@@ -614,6 +628,18 @@ pub fn insert_overworld_materials(
             textures.crying_obsidian_orange,
             glow(
                 textures.crying_obsidian_orange_glow,
+                CRYING_OBSIDIAN_GLOW_STRENGTH,
+            ),
+        ),
+    );
+    library.insert(
+        crying_obsidian_violet_material_id(),
+        symbol_block_material(
+            Color::new(0.30, 0.03, 0.07, 1.0),
+            crying,
+            textures.crying_obsidian_violet,
+            glow(
+                textures.crying_obsidian_violet_glow,
                 CRYING_OBSIDIAN_GLOW_STRENGTH,
             ),
         ),
