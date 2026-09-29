@@ -161,9 +161,22 @@ fn the_opening_is_empty_and_the_frame_is_continuous() {
         scene.portal().opening.len(),
         ((p.width() - 2) * (p.height() - 2)) as usize
     );
+    // The frame stage leaves the opening empty; the core stage fills it
+    // with the membrane, never with frame or rock.
     for cell in &scene.portal().opening {
         assert!(p.is_opening(cell.x, cell.y));
-        assert_eq!(block_type(&scene, *cell), None, "{cell:?} should be open");
+        assert!(
+            matches!(
+                block_type(&scene, *cell),
+                None | Some(BlockType::PortalCoreDarkCrimson)
+            ),
+            "{cell:?} should be open"
+        );
+    }
+    let mut fresh = scene::voxel_world::VoxelWorld::new();
+    let stage = scene::portal::build_portal_frame(scene.rhombus(), &mut fresh);
+    for cell in &stage.opening {
+        assert!(!fresh.contains(*cell));
     }
     // Every frame cell touches another frame cell: one closed ring.
     let cells: HashSet<(i32, i32)> = scene.portal().frame.iter().map(|c| (c.x, c.y)).collect();
@@ -256,19 +269,10 @@ fn the_frame_material_is_the_opaque_non_emissive_catalog_one() {
 }
 
 #[test]
-fn no_core_yet_and_the_build_is_deterministic() {
+fn the_frame_build_is_deterministic() {
     let a = WorldScene::new();
     let b = WorldScene::new();
-    assert_eq!(a.portal(), b.portal());
-    let c = *a.config();
-    for z in -4..c.depth + 4 {
-        for x in -4..c.width + 4 {
-            for y in a.rhombus().lower_tip_y..=c.max_surface_height() + 12 {
-                assert_ne!(
-                    block_type(&a, IVec3::new(x, y, z)),
-                    Some(BlockType::PortalCoreDarkCrimson)
-                );
-            }
-        }
-    }
+    assert_eq!(a.portal().frame, b.portal().frame);
+    assert_eq!(a.portal().opening, b.portal().opening);
+    assert_eq!(a.portal().frame.len(), 18);
 }

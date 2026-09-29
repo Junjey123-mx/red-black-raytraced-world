@@ -15,7 +15,7 @@ use crate::scene::descent::{UpperDescent, build_upper_descent};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
-    leaves_material_id, redstone_lamp_material_id, water_material_id,
+    leaves_material_id, portal_core_material_id, redstone_lamp_material_id, water_material_id,
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::overworld::{
@@ -23,7 +23,7 @@ use crate::scene::overworld::{
     furnish_house, lay_path, plant_trees,
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
-use crate::scene::portal::{PortalBuild, build_portal_frame};
+use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -79,7 +79,8 @@ impl WorldScene {
         let taper = build_upper_taper(&config, &rhombus, &mut world);
         let cutaway = carve_cutaway(&config, &rhombus, &mut world);
         let upper_descent = build_upper_descent(&config, &rhombus, &mut world);
-        let portal = build_portal_frame(&rhombus, &mut world);
+        let mut portal = build_portal_frame(&rhombus, &mut world);
+        build_portal_core(&rhombus, &mut world, &mut portal);
         Self {
             config,
             field,
@@ -235,6 +236,7 @@ pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
         glass_material_id(),
         redstone_lamp_material_id(),
         deepslate_bricks_material_id(),
+        portal_core_material_id(),
     ] {
         let material = gallery
             .get(id)
@@ -265,13 +267,13 @@ pub fn sun_color() -> Color {
     Color::new(1.0, 0.97, 0.90, 1.0)
 }
 
-/// The Overworld's lights: the sun alone (block lamps arrive with the house).
+/// The world's lights: the sun, and the portal's crimson point light at the
+/// waist (the block lamps of the house stay emissive-only).
 pub fn world_lights() -> Vec<Light> {
-    vec![Light::Directional(DirectionalLight::new(
-        sun_direction(),
-        sun_color(),
-        1.0,
-    ))]
+    vec![
+        Light::Directional(DirectionalLight::new(sun_direction(), sun_color(), 1.0)),
+        portal_light(&RhombusConfig::official()),
+    ]
 }
 
 /// The clear daytime sky: a medium celeste-blue zenith, a pale luminous

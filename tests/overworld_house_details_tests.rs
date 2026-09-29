@@ -308,10 +308,23 @@ fn two_lit_redstone_lamps_flank_the_entrance() {
         assert_eq!((cell.x - HOUSE_DOOR_X).abs(), 1);
         assert_eq!(cell.z, HOUSE_FOOTPRINT.max_z);
     }
-    // Daylight stays dominant: the world's only light is still the sun.
+    // Daylight stays dominant: the lamps add no light of their own; the
+    // only point light in the world is the portal's, far below the house.
     let lights = world_lights();
-    assert_eq!(lights.len(), 1);
-    assert!(matches!(lights[0], Light::Directional(_)));
+    let suns = lights
+        .iter()
+        .filter(|l| matches!(l, Light::Directional(_)))
+        .count();
+    assert_eq!(suns, 1);
+    for light in &lights {
+        if let Light::Point(p) = light {
+            assert!(
+                p.position.y < 0.0,
+                "a point light near the house: {:?}",
+                p.position
+            );
+        }
+    }
 }
 
 #[test]
