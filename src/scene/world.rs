@@ -11,7 +11,11 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::light::{DirectionalLight, Light};
+use crate::scene::material_gallery::{
+    GalleryTextures, advanced_materials_library, water_material_id,
+};
 use crate::scene::material_library::MaterialLibrary;
+use crate::scene::overworld::{PondLayout, carve_pond, column_top};
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -33,6 +37,7 @@ pub struct WorldScene {
     config: TerrainConfig,
     field: HeightField,
     bounds: TerrainBounds,
+    pond: PondLayout,
     world: VoxelWorld,
 }
 
@@ -47,12 +52,25 @@ impl WorldScene {
         let mut world = VoxelWorld::new();
         let field = generate_terrain(&config, &mut world);
         let bounds = terrain_bounds(&config, &field);
+        let pond = carve_pond(&config, &mut world);
         Self {
             config,
             field,
             bounds,
+            pond,
             world,
         }
+    }
+
+    /// The pond dug into the terrain.
+    pub fn pond(&self) -> &PondLayout {
+        &self.pond
+    }
+
+    /// Highest occupied cell of column `(x, z)` (terrain or feature), or
+    /// `None` for an empty column.
+    pub fn column_top(&self, x: i32, z: i32) -> Option<i32> {
+        column_top(&self.world, x, z, self.bounds.max.y + 16, self.bounds.min.y)
     }
 
     pub fn world(&self) -> &VoxelWorld {
@@ -95,6 +113,9 @@ pub struct WorldTextures {
     pub blocks: OverworldBlockTextures,
     /// Grass Block faces (`top/side/bottom.png`).
     pub grass: FaceTextures,
+    /// The optical specimens the world reuses (water, and later glass,
+    /// leaves and the redstone lamp), loaded exactly as the catalog does.
+    pub gallery: GalleryTextures,
 }
 
 impl WorldTextures {
@@ -102,24 +123,38 @@ impl WorldTextures {
         manager: &mut TextureManager,
         overworld_dir: &str,
         grass_dir: &str,
+        portal_dir: &str,
     ) -> Result<Self, TextureLoadError> {
         let blocks = OverworldBlockTextures::load(manager, overworld_dir)?;
+        let gallery = GalleryTextures::load(manager, overworld_dir, portal_dir)?;
         let top = manager.load(format!("{grass_dir}/top.png"))?;
         let side = manager.load(format!("{grass_dir}/side.png"))?;
         let bottom = manager.load(format!("{grass_dir}/bottom.png"))?;
         Ok(Self {
             blocks,
             grass: FaceTextures::new(side, side, top, bottom, side, side),
+            gallery,
         })
     }
 }
 
 /// The world's materials: the same definitive block materials the catalog
-/// uses, registered through the shared `insert_overworld_materials`, plus
-/// the Grass Block exactly as the catalog presents it.
+/// uses, registered through the shared `insert_overworld_materials`, the
+/// Grass Block exactly as the catalog presents it, and the optical
+/// specimens the scene needs copied from the catalog's gallery library
+/// (same ids, same profiles).
 pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
     let mut library = MaterialLibrary::new();
     insert_overworld_materials(&mut library, &textures.blocks);
+
+    let gallery = advanced_materials_library(&textures.gallery);
+    for id in [water_material_id()] {
+        let material = gallery
+            .get(id)
+            .expect("the gallery defines every optical specimen")
+            .clone();
+        library.insert(id, material);
+    }
 
     let grass = diagnostic_materials(textures.grass)
         .get(grass_material_id())

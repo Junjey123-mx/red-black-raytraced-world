@@ -157,8 +157,13 @@ impl WorldMode {
     /// Loads the world's textures once through the shared `TextureManager`
     /// and builds the Overworld.
     fn new(manager: &mut TextureManager) -> Self {
-        let textures = WorldTextures::load(manager, OVERWORLD_TEXTURES_DIR, GRASS_TEXTURES_DIR)
-            .expect("missing world texture");
+        let textures = WorldTextures::load(
+            manager,
+            OVERWORLD_TEXTURES_DIR,
+            GRASS_TEXTURES_DIR,
+            PORTAL_TEXTURES_DIR,
+        )
+        .expect("missing world texture");
         Self {
             scene: WorldScene::new(),
             materials: world_materials(&textures),

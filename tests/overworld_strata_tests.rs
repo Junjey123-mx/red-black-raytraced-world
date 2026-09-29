@@ -70,6 +70,8 @@ mod scene {
     pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
+    #[path = "../src/scene/overworld.rs"]
+    pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
     #[path = "../src/scene/scene.rs"]
@@ -111,17 +113,59 @@ use scene::block_type::BlockType;
 use scene::overworld_blocks::{deepslate_material_id, dirt_material_id, stone_block_material_id};
 use scene::scene::grass_material_id;
 use scene::terrain::TerrainConfig;
+use scene::terrain::fbm::HeightField;
 use scene::terrain::generator::{
     MIN_DIRT_DEPTH, column_bottom, column_surface, dirt_depth, footprint_contains, stratum,
 };
-use scene::world::WorldScene;
+use scene::terrain::generator::{TerrainBounds, generate_terrain, terrain_bounds};
+use scene::voxel_world::VoxelWorld;
 use std::collections::{BTreeMap, HashMap};
 
 fn official() -> TerrainConfig {
     TerrainConfig::official()
 }
 
-fn columns(scene: &WorldScene) -> Vec<(i32, i32, i32, i32)> {
+/// The raw generated terrain (before the micro-scene features are built on
+/// it), exposed with the same accessors the scene offers.
+struct Terrain {
+    config: TerrainConfig,
+    field: HeightField,
+    bounds: TerrainBounds,
+    world: VoxelWorld,
+}
+
+impl Terrain {
+    fn new() -> Self {
+        let config = TerrainConfig::official();
+        let mut world = VoxelWorld::new();
+        let field = generate_terrain(&config, &mut world);
+        let bounds = terrain_bounds(&config, &field);
+        Self {
+            config,
+            field,
+            bounds,
+            world,
+        }
+    }
+
+    fn config(&self) -> &TerrainConfig {
+        &self.config
+    }
+
+    fn height_field(&self) -> &HeightField {
+        &self.field
+    }
+
+    fn bounds(&self) -> TerrainBounds {
+        self.bounds
+    }
+
+    fn world(&self) -> &VoxelWorld {
+        &self.world
+    }
+}
+
+fn columns(scene: &Terrain) -> Vec<(i32, i32, i32, i32)> {
     let c = *scene.config();
     let mut out = Vec::new();
     for z in 0..c.depth {
@@ -135,13 +179,13 @@ fn columns(scene: &WorldScene) -> Vec<(i32, i32, i32, i32)> {
     out
 }
 
-fn block_at(scene: &WorldScene, x: i32, y: i32, z: i32) -> BlockType {
+fn block_at(scene: &Terrain, x: i32, y: i32, z: i32) -> BlockType {
     scene.world().get(IVec3::new(x, y, z)).unwrap().block_type()
 }
 
 #[test]
 fn grass_is_only_ever_the_surface_block() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     for (x, z, bottom, surface) in columns(&scene) {
         assert_eq!(block_at(&scene, x, surface, z), BlockType::Grass);
         for y in bottom..surface {
@@ -156,7 +200,7 @@ fn grass_is_only_ever_the_surface_block() {
 
 #[test]
 fn dirt_lies_directly_under_the_grass_with_a_valid_thickness() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     let c = official();
     for (x, z, bottom, surface) in columns(&scene) {
         let depth = dirt_depth(&c, x, z);
@@ -191,7 +235,7 @@ fn the_soil_thickness_varies_deterministically_between_two_and_three() {
 
 #[test]
 fn stone_lies_under_the_dirt_and_deepslate_lies_at_depth() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     let c = official();
     let mut stone_columns = 0;
     for (x, z, bottom, surface) in columns(&scene) {
@@ -225,7 +269,7 @@ fn stone_lies_under_the_dirt_and_deepslate_lies_at_depth() {
 
 #[test]
 fn deepslate_never_sits_above_dirt_or_grass() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     for (x, z, bottom, surface) in columns(&scene) {
         let column: Vec<BlockType> = (bottom..=surface)
             .map(|y| block_at(&scene, x, y, z))
@@ -250,7 +294,7 @@ fn deepslate_never_sits_above_dirt_or_grass() {
 
 #[test]
 fn all_four_strata_are_present_with_their_definitive_materials() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     let mut counts: HashMap<BlockType, usize> = HashMap::new();
     for (x, z, bottom, surface) in columns(&scene) {
         for y in bottom..=surface {
@@ -281,7 +325,7 @@ fn all_four_strata_are_present_with_their_definitive_materials() {
 
 #[test]
 fn columns_stay_solid_without_accidental_holes() {
-    let scene = WorldScene::new();
+    let scene = Terrain::new();
     let mut total = 0;
     for (x, z, bottom, surface) in columns(&scene) {
         for y in bottom..=surface {
@@ -297,8 +341,8 @@ fn columns_stay_solid_without_accidental_holes() {
 
 #[test]
 fn the_strata_are_deterministic() {
-    let a = WorldScene::new();
-    let b = WorldScene::new();
+    let a = Terrain::new();
+    let b = Terrain::new();
     for (x, z, bottom, surface) in columns(&a) {
         for y in bottom..=surface {
             assert_eq!(block_at(&a, x, y, z), block_at(&b, x, y, z));

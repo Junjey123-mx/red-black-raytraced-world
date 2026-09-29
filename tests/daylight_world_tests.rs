@@ -70,6 +70,8 @@ mod scene {
     pub mod material_library;
     #[path = "../src/scene/orientation.rs"]
     pub mod orientation;
+    #[path = "../src/scene/overworld.rs"]
+    pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
     #[path = "../src/scene/scene.rs"]
