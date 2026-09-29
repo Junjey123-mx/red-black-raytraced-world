@@ -46,6 +46,8 @@ mod camera {
     pub mod diagnostic;
     #[path = "../src/camera/projection.rs"]
     pub mod projection;
+    #[path = "../src/camera/world_free_fly.rs"]
+    pub mod world_free_fly;
 }
 
 #[path = "."]

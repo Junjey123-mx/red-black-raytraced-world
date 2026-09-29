@@ -6,6 +6,7 @@ pub mod camera;
 pub mod controls;
 pub mod diagnostic;
 pub mod projection;
+pub mod world_free_fly;
 
 pub use camera::Camera;
 pub use projection::primary_ray;

@@ -4,6 +4,7 @@ use crate::camera::camera::Camera;
 use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::projection::primary_ray;
+use crate::camera::world_free_fly::WorldFreeFlyCameraState;
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::{VoxelScene, cast_ray_voxel};
@@ -19,7 +20,7 @@ use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
     WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background,
-    world_camera, world_lights, world_materials,
+    world_camera, world_free_fly_camera, world_lights, world_materials,
 };
 
 /// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
@@ -151,6 +152,8 @@ struct WorldMode {
     scene: WorldScene,
     materials: MaterialLibrary,
     lights: Vec<Light>,
+    /// The World's own free-fly camera (the catalog keeps the orbit camera).
+    free_fly: WorldFreeFlyCameraState,
 }
 
 impl WorldMode {
@@ -168,6 +171,7 @@ impl WorldMode {
             scene: WorldScene::new(),
             materials: world_materials(&textures),
             lights: world_lights(),
+            free_fly: world_free_fly_camera(),
         }
     }
 }
@@ -207,7 +211,11 @@ impl ViewerMode for WorldMode {
     }
 
     fn label(&self) -> String {
-        format!("Overworld | {} blocks", self.scene.world().len())
+        format!(
+            "{} | {} blocks",
+            self.free_fly.realm.label(),
+            self.scene.world().len()
+        )
     }
 
     fn help(&self) -> &'static str {

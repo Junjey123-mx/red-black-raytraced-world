@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 
 use crate::camera::camera::Camera;
+use crate::camera::world_free_fly::WorldFreeFlyCameraState;
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
@@ -382,6 +383,12 @@ pub const WORLD_CAMERA_OFFSET: Vec3 = Vec3 {
     y: 19.0,
     z: 35.0,
 };
+
+/// The World's free-fly camera at the official framing: the presentation
+/// pose the diorama is first seen from and what `R` resets to.
+pub fn world_free_fly_camera() -> WorldFreeFlyCameraState {
+    WorldFreeFlyCameraState::looking_at(world_focus() + WORLD_CAMERA_OFFSET, world_focus())
+}
 
 /// The official diorama framing: the orbit camera's starting pose and
 /// what `R` resets to.
