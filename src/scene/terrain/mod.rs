@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 pub mod hash;
+pub mod noise;
 
 /// Seed of the definitive Overworld. Every generated feature (relief and,
 /// later, strata, pond, trees, house and path) derives from it, so the same
