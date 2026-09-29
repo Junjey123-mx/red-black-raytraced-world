@@ -274,3 +274,115 @@ pub fn build_red_black_surface(
     }
     surface
 }
+
+// ---------------------------------------------------------------------
+// Families
+// ---------------------------------------------------------------------
+
+use crate::scene::overworld_blocks::{
+    crimson_diamond_material_id, crimson_heart_material_id, crying_obsidian_crimson_material_id,
+    nether_wart_block_material_id,
+};
+
+/// Seed salt of the family composition rolls.
+const FAMILY_ROLL_SALT: u32 = 0xFA31_0002;
+
+/// One composed family: what it placed on and under the shared surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyLayout {
+    pub family: Family,
+    /// Suit-symbol blocks set into the surface.
+    pub symbols: Vec<IVec3>,
+    /// Crying-obsidian accents set into the surface.
+    pub accents: Vec<IVec3>,
+    /// Family ground blocks set into the surface (wart, blackstone, mycelium).
+    pub ground: Vec<IVec3>,
+    /// Family bricks hung one block under the surface (terrace steps).
+    pub terraces: Vec<IVec3>,
+    /// Structural extras hung under the surface (basalt columns, crystals).
+    pub structures: Vec<IVec3>,
+}
+
+impl FamilyLayout {
+    fn new(family: Family) -> Self {
+        Self {
+            family,
+            symbols: Vec::new(),
+            accents: Vec::new(),
+            ground: Vec::new(),
+            terraces: Vec::new(),
+            structures: Vec::new(),
+        }
+    }
+
+    /// Every cell the family placed.
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.symbols
+            .iter()
+            .chain(self.accents.iter())
+            .chain(self.ground.iter())
+            .chain(self.terraces.iter())
+            .chain(self.structures.iter())
+            .copied()
+            .collect()
+    }
+}
+
+fn down(block_type: BlockType, material: MaterialId) -> BlockInstance {
+    BlockInstance::new(block_type, material, Orientation::Down)
+}
+
+/// Lays the Crimson family over its sector of the shared surface: hearts
+/// and diamonds as emblems set into the ground, nether wart as organic
+/// ground, a few crimson crying-obsidian accents, and crimson-accented
+/// brick steps hung one block under the surface as small terraces. Every
+/// block replaces or hangs from an existing surface cell, so the family
+/// stays part of the one connected lower world.
+pub fn compose_crimson(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    surface: &RedBlackSurface,
+    world: &mut VoxelWorld,
+) -> FamilyLayout {
+    let mut layout = FamilyLayout::new(Family::Crimson);
+    for cell in &surface.cells {
+        if family_zone(terrain, rhombus, cell.x, cell.z) != Family::Crimson {
+            continue;
+        }
+        let roll = hash01(terrain.seed ^ FAMILY_ROLL_SALT, cell.x, cell.z);
+        let under = IVec3::new(cell.x, cell.y - 1, cell.z);
+        if roll < 0.12 {
+            world.insert(
+                *cell,
+                down(BlockType::CrimsonHeart, crimson_heart_material_id()),
+            );
+            layout.symbols.push(*cell);
+        } else if roll < 0.22 {
+            world.insert(
+                *cell,
+                down(BlockType::CrimsonDiamond, crimson_diamond_material_id()),
+            );
+            layout.symbols.push(*cell);
+        } else if roll < 0.40 {
+            world.insert(
+                *cell,
+                down(BlockType::NetherWartBlock, nether_wart_block_material_id()),
+            );
+            layout.ground.push(*cell);
+        } else if roll < 0.46 {
+            world.insert(
+                *cell,
+                down(
+                    BlockType::CryingObsidianCrimson,
+                    crying_obsidian_crimson_material_id(),
+                ),
+            );
+            layout.accents.push(*cell);
+        } else if roll < 0.60 && !world.contains(under) {
+            let (block_type, material) = Family::Crimson.bricks();
+            world.insert(under, down(block_type, material));
+            layout.terraces.push(under);
+        }
+    }
+    layout
+}

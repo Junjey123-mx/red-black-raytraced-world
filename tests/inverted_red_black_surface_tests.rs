@@ -125,13 +125,79 @@ use renderer::raytracer::{VoxelScene, cast_ray_voxel, nearest_visible_hit};
 use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_type::{BlockFamily, BlockType};
+use scene::cutaway::carve_cutaway;
+use scene::descent::{build_inverted_descent, build_upper_descent};
 use scene::orientation::Orientation;
+use scene::overworld::{build_house, carve_pond, furnish_house, lay_path, plant_trees};
 use scene::overworld_blocks::mycelium_material_id;
-use scene::red_black_maze::{Family, family_zone};
+use scene::portal::{build_portal_core, build_portal_frame};
+use scene::red_black_maze::{
+    Family, RedBlackSurface, build_lower_mass, build_red_black_surface, family_zone,
+};
+use scene::rhombus::{RhombusConfig, build_upper_taper};
+use scene::terrain::TerrainConfig;
+use scene::terrain::generator::generate_terrain;
 use scene::texture_manager::TextureManager;
 use scene::voxel_world::VoxelWorld;
 use scene::world::{WorldScene, WorldTextures, world_materials};
 use std::collections::{BTreeSet, HashMap};
+
+/// The surface stage: everything up to `build_red_black_surface`, before
+/// the families decorate it.
+struct Stage {
+    config: TerrainConfig,
+    rhombus: RhombusConfig,
+    surface: RedBlackSurface,
+    world: VoxelWorld,
+}
+
+impl Stage {
+    fn new() -> Self {
+        let config = TerrainConfig::official();
+        let rhombus = RhombusConfig::derive(&config);
+        let mut world = VoxelWorld::new();
+        generate_terrain(&config, &mut world);
+        let pond = carve_pond(&config, &mut world);
+        build_house(&config, &mut world);
+        furnish_house(&config, &mut world);
+        let trees = plant_trees(&config, &mut world, &pond);
+        lay_path(&config, &mut world, &pond, &trees);
+        build_upper_taper(&config, &rhombus, &mut world);
+        carve_cutaway(&config, &rhombus, &mut world);
+        build_upper_descent(&config, &rhombus, &mut world);
+        let mut portal = build_portal_frame(&rhombus, &mut world);
+        build_portal_core(&rhombus, &mut world, &mut portal);
+        let lower = build_lower_mass(&config, &rhombus, &mut world);
+        build_inverted_descent(&rhombus, &lower, &mut world);
+        let surface = build_red_black_surface(&config, &rhombus, &lower, &mut world);
+        Self {
+            config,
+            rhombus,
+            surface,
+            world,
+        }
+    }
+
+    fn world(&self) -> &VoxelWorld {
+        &self.world
+    }
+
+    fn rhombus(&self) -> &RhombusConfig {
+        &self.rhombus
+    }
+
+    fn config(&self) -> &TerrainConfig {
+        &self.config
+    }
+
+    fn lower_surface(&self) -> &RedBlackSurface {
+        &self.surface
+    }
+}
+
+fn stage_block(stage: &Stage, cell: IVec3) -> Option<BlockType> {
+    stage.world().get(cell).map(|b| b.block_type())
+}
 
 fn block_type(scene: &WorldScene, cell: IVec3) -> Option<BlockType> {
     scene.world().get(cell).map(|b| b.block_type())
@@ -139,7 +205,7 @@ fn block_type(scene: &WorldScene, cell: IVec3) -> Option<BlockType> {
 
 #[test]
 fn every_surface_cell_is_the_lowest_of_its_column_and_faces_down() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let r = scene.rhombus();
     let s = scene.lower_surface();
     assert!(s.cells.len() > 150, "{} surface cells", s.cells.len());
@@ -169,13 +235,13 @@ fn every_surface_cell_is_the_lowest_of_its_column_and_faces_down() {
 
 #[test]
 fn mycelium_shows_its_top_toward_negative_y() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let mycelium: Vec<IVec3> = scene
         .lower_surface()
         .cells
         .iter()
         .copied()
-        .filter(|c| block_type(&scene, *c) == Some(BlockType::Mycelium))
+        .filter(|c| stage_block(&scene, *c) == Some(BlockType::Mycelium))
         .collect();
     assert!(mycelium.len() > 20, "{} mycelium cells", mycelium.len());
     let mut manager = TextureManager::new();
@@ -251,7 +317,7 @@ fn the_inverted_stairs_reach_the_surface() {
 
 #[test]
 fn the_surface_has_modest_relief() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let s = scene.lower_surface();
     let levels: BTreeSet<i32> = s.cells.iter().map(|c| c.y).collect();
     assert!(levels.len() >= 4, "{levels:?}");
@@ -274,10 +340,10 @@ fn the_surface_has_modest_relief() {
 
 #[test]
 fn the_surface_uses_authorized_dark_materials_without_symbols_yet() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let mut counts: HashMap<BlockType, usize> = HashMap::new();
     for cell in &scene.lower_surface().cells {
-        let t = block_type(&scene, *cell).unwrap();
+        let t = stage_block(&scene, *cell).unwrap();
         *counts.entry(t).or_insert(0) += 1;
         assert!(
             matches!(
@@ -309,7 +375,7 @@ fn the_surface_uses_authorized_dark_materials_without_symbols_yet() {
     for z in -4..28 {
         for x in -4..28 {
             for y in r.lower_tip_y..r.shelf_y {
-                if let Some(t) = block_type(&scene, IVec3::new(x, y, z)) {
+                if let Some(t) = stage_block(&scene, IVec3::new(x, y, z)) {
                     assert!(!matches!(
                         t,
                         BlockType::CrimsonHeart
@@ -336,7 +402,7 @@ fn the_surface_uses_authorized_dark_materials_without_symbols_yet() {
 
 #[test]
 fn the_family_zones_cover_the_surface_in_three_connected_sectors() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let mut counts: HashMap<Family, usize> = HashMap::new();
     for cell in &scene.lower_surface().cells {
         *counts
