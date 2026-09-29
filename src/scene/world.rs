@@ -15,7 +15,9 @@ use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, leaves_material_id, water_material_id,
 };
 use crate::scene::material_library::MaterialLibrary;
-use crate::scene::overworld::{PondLayout, Tree, carve_pond, column_top, plant_trees};
+use crate::scene::overworld::{
+    HouseLayout, PondLayout, Tree, build_house, carve_pond, column_top, plant_trees,
+};
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -38,6 +40,7 @@ pub struct WorldScene {
     field: HeightField,
     bounds: TerrainBounds,
     pond: PondLayout,
+    house: HouseLayout,
     trees: Vec<Tree>,
     world: VoxelWorld,
 }
@@ -54,15 +57,22 @@ impl WorldScene {
         let field = generate_terrain(&config, &mut world);
         let bounds = terrain_bounds(&config, &field);
         let pond = carve_pond(&config, &mut world);
+        let house = build_house(&config, &mut world);
         let trees = plant_trees(&config, &mut world, &pond);
         Self {
             config,
             field,
             bounds,
             pond,
+            house,
             trees,
             world,
         }
+    }
+
+    /// The house built on the plateau.
+    pub fn house(&self) -> &HouseLayout {
+        &self.house
     }
 
     /// The trees planted on the terrain.

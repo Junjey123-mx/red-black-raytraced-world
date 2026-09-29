@@ -1,5 +1,5 @@
 // The Overworld micro-scene: the deliberate features built on top of the
-// generated terrain (pond and sandy shore, trees; house and path follow). Each feature is a deterministic edit of the `VoxelWorld` driven
+// generated terrain (pond and sandy shore, house, trees; the path follows). Each feature is a deterministic edit of the `VoxelWorld` driven
 // by the terrain seed, never by a random-number crate.
 #![allow(dead_code)]
 
@@ -8,7 +8,10 @@ use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::material_gallery::{leaves_material_id, water_material_id};
 use crate::scene::orientation::Orientation;
-use crate::scene::overworld_blocks::{log_material_id, sand_material_id, stone_block_material_id};
+use crate::scene::overworld_blocks::{
+    dirt_material_id, double_wood_slab_material_id, log_material_id, sand_material_id,
+    stone_block_material_id, wood_planks_material_id,
+};
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::{footprint_contains, footprint_radius};
 use crate::scene::terrain::hash::hash01;
@@ -370,4 +373,128 @@ pub fn plant_trees(config: &TerrainConfig, world: &mut VoxelWorld, pond: &PondLa
         });
     }
     trees
+}
+
+// ---------------------------------------------------------------------
+// House
+// ---------------------------------------------------------------------
+
+/// `y` of the house floor: the plateau under `HOUSE_FOOTPRINT` is leveled
+/// to this height (its most common surface height), never the whole island.
+pub const HOUSE_FLOOR_LEVEL: i32 = 6;
+
+/// Courses of wall above the floor.
+pub const HOUSE_WALL_HEIGHT: i32 = 3;
+
+/// Column of the door in the south wall (`z = HOUSE_FOOTPRINT.max_z`).
+pub const HOUSE_DOOR_X: i32 = 8;
+
+/// Window openings `(x, z)` in the walls, one course above the floor.
+pub const HOUSE_WINDOWS: [(i32, i32); 6] = [(6, 12), (10, 12), (6, 8), (10, 8), (5, 10), (11, 10)];
+
+/// Where the house structure ended up.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HouseLayout {
+    pub floor: Vec<IVec3>,
+    /// Plank and double-slab wall cells (corners excluded).
+    pub walls: Vec<IVec3>,
+    /// Log corner posts.
+    pub corners: Vec<IVec3>,
+    /// The two empty cells of the entrance.
+    pub door_opening: Vec<IVec3>,
+    /// The empty window cells.
+    pub window_openings: Vec<IVec3>,
+}
+
+impl HouseLayout {
+    pub fn footprint(&self) -> ColumnRect {
+        HOUSE_FOOTPRINT
+    }
+
+    pub fn floor_level(&self) -> i32 {
+        HOUSE_FLOOR_LEVEL
+    }
+}
+
+fn is_house_perimeter(x: i32, z: i32) -> bool {
+    let r = HOUSE_FOOTPRINT;
+    x == r.min_x || x == r.max_x || z == r.min_z || z == r.max_z
+}
+
+fn is_house_corner(x: i32, z: i32) -> bool {
+    let r = HOUSE_FOOTPRINT;
+    (x == r.min_x || x == r.max_x) && (z == r.min_z || z == r.max_z)
+}
+
+/// Levels the house footprint to `HOUSE_FLOOR_LEVEL` and raises the house
+/// structure on it: a plank floor at floor level, three courses of wall on
+/// the perimeter (a double-slab sill course under two plank courses) with
+/// log posts at the four corners, a two-cell door opening in the south
+/// wall and one-cell window openings. The roof and the fittings (door,
+/// glass, fence, lamps) come separately.
+pub fn build_house(config: &TerrainConfig, world: &mut VoxelWorld) -> HouseLayout {
+    let r = HOUSE_FOOTPRINT;
+    let top = config.max_surface_height() + 2;
+    let bottom = config.deepslate_level - 8;
+    let mut layout = HouseLayout::default();
+
+    for z in r.min_z..=r.max_z {
+        for x in r.min_x..=r.max_x {
+            debug_assert!(footprint_contains(config, x, z));
+            // Level: cut anything above the floor level, fill up to it.
+            let Some(surface) = column_top(world, x, z, top, bottom) else {
+                continue;
+            };
+            for y in (HOUSE_FLOOR_LEVEL + 1)..=surface {
+                world.remove(IVec3::new(x, y, z));
+            }
+            for y in (surface + 1)..HOUSE_FLOOR_LEVEL {
+                world.insert(
+                    IVec3::new(x, y, z),
+                    full(BlockType::Dirt, dirt_material_id()),
+                );
+            }
+            // Buried grass under the floor reads as soil.
+            let under = IVec3::new(x, HOUSE_FLOOR_LEVEL - 1, z);
+            if world.get(under).map(|b| b.block_type()) == Some(BlockType::Grass) {
+                world.insert(under, full(BlockType::Dirt, dirt_material_id()));
+            }
+
+            let floor = IVec3::new(x, HOUSE_FLOOR_LEVEL, z);
+            world.insert(
+                floor,
+                full(BlockType::WoodPlanks, wood_planks_material_id()),
+            );
+            layout.floor.push(floor);
+
+            if !is_house_perimeter(x, z) {
+                continue;
+            }
+            for course in 1..=HOUSE_WALL_HEIGHT {
+                let cell = IVec3::new(x, HOUSE_FLOOR_LEVEL + course, z);
+                let is_door = z == r.max_z && x == HOUSE_DOOR_X && course <= 2;
+                let is_window = course == 2 && HOUSE_WINDOWS.contains(&(x, z));
+                if is_door {
+                    world.remove(cell);
+                    layout.door_opening.push(cell);
+                } else if is_window {
+                    world.remove(cell);
+                    layout.window_openings.push(cell);
+                } else if is_house_corner(x, z) {
+                    world.insert(cell, full(BlockType::Log, log_material_id()));
+                    layout.corners.push(cell);
+                } else if course == 1 {
+                    world.insert(
+                        cell,
+                        full(BlockType::DoubleWoodSlab, double_wood_slab_material_id()),
+                    );
+                    layout.walls.push(cell);
+                } else {
+                    world.insert(cell, full(BlockType::WoodPlanks, wood_planks_material_id()));
+                    layout.walls.push(cell);
+                }
+            }
+        }
+    }
+    layout
 }
