@@ -286,6 +286,8 @@ use crate::scene::overworld_blocks::{
 
 /// Seed salt of the family composition rolls.
 const FAMILY_ROLL_SALT: u32 = 0xFA31_0002;
+/// Seed salt of the violet suit choice.
+const SUIT_SALT: u32 = 0xFA31_0003;
 
 /// One composed family: what it placed on and under the shared surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -450,6 +452,75 @@ pub fn compose_orange(
             }
         } else if roll < 0.59 && !world.contains(under) {
             let (block_type, material) = Family::Orange.bricks();
+            world.insert(under, down(block_type, material));
+            layout.terraces.push(under);
+        }
+    }
+    layout
+}
+
+use crate::scene::overworld_blocks::{
+    amethyst_cluster_material_id, budding_amethyst_material_id, crying_obsidian_violet_material_id,
+    purple_club_material_id, purple_diamond_material_id, purple_heart_material_id,
+    purple_spade_material_id,
+};
+
+/// Lays the Violet / House of Cards family over its sector: the four
+/// violet suits as emblems, mycelium as the dominant organic ground,
+/// budding amethyst set into the ground with amethyst clusters growing
+/// down from it (`Down` growth: base on the block above, tips toward -Y),
+/// a few violet crying-obsidian accents, and violet-accented brick steps.
+pub fn compose_violet(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    surface: &RedBlackSurface,
+    world: &mut VoxelWorld,
+) -> FamilyLayout {
+    let mut layout = FamilyLayout::new(Family::Violet);
+    for cell in &surface.cells {
+        if family_zone(terrain, rhombus, cell.x, cell.z) != Family::Violet {
+            continue;
+        }
+        let roll = hash01(terrain.seed ^ FAMILY_ROLL_SALT, cell.x, cell.z);
+        let under = IVec3::new(cell.x, cell.y - 1, cell.z);
+        let suit = [
+            (BlockType::PurpleHeart, purple_heart_material_id()),
+            (BlockType::PurpleDiamond, purple_diamond_material_id()),
+            (BlockType::PurpleClub, purple_club_material_id()),
+            (BlockType::PurpleSpade, purple_spade_material_id()),
+        ];
+        if roll < 0.16 {
+            let pick = (hash01(terrain.seed ^ SUIT_SALT, cell.x, cell.z) * 4.0) as usize % 4;
+            let (block_type, material) = suit[pick];
+            world.insert(*cell, down(block_type, material));
+            layout.symbols.push(*cell);
+        } else if roll < 0.34 {
+            world.insert(*cell, down(BlockType::Mycelium, mycelium_material_id()));
+            layout.ground.push(*cell);
+        } else if roll < 0.42 {
+            world.insert(
+                *cell,
+                down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
+            );
+            layout.ground.push(*cell);
+            if roll < 0.39 && !world.contains(under) {
+                world.insert(
+                    under,
+                    down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
+                );
+                layout.structures.push(under);
+            }
+        } else if roll < 0.47 {
+            world.insert(
+                *cell,
+                down(
+                    BlockType::CryingObsidianViolet,
+                    crying_obsidian_violet_material_id(),
+                ),
+            );
+            layout.accents.push(*cell);
+        } else if roll < 0.58 && !world.contains(under) {
+            let (block_type, material) = Family::Violet.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
         }
