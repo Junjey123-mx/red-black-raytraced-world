@@ -291,6 +291,7 @@ fn the_catalog_camera_is_untouched() {
     assert_eq!(camera.position, Vec3::new(6.0, 5.6, 14.0));
     assert_eq!(camera.target, Vec3::new(6.0, 0.6, 1.8));
     let app = std::fs::read_to_string("src/app.rs").unwrap();
-    assert!(app.contains("gallery_camera(aspect_ratio)"));
-    assert!(app.contains("world_camera(aspect_ratio)"));
+    assert!(app.contains("gallery_camera("));
+    // The World starts its own camera on the same official framing.
+    assert!(app.contains("world_free_fly_camera()"));
 }

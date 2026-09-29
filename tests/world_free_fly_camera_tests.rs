@@ -245,3 +245,294 @@ fn the_catalog_keeps_its_diagnostic_camera_and_the_world_builds_its_own() {
     assert_eq!(before.world().len(), after.world().len());
     assert_eq!(after.world().len(), 6784);
 }
+
+// ---------------------------------------------------------------------
+// Navigation (C156)
+// ---------------------------------------------------------------------
+
+use camera::world_free_fly::{FREE_FLY_SPEED, FreeFlyInput, apply_free_fly_input};
+
+fn fresh() -> WorldFreeFlyCameraState {
+    world_free_fly_camera()
+}
+
+fn moved(input: FreeFlyInput) -> (WorldFreeFlyCameraState, Vec3) {
+    let mut state = fresh();
+    let before = state.position;
+    apply_free_fly_input(&mut state, &input);
+    (state, state.position - before)
+}
+
+#[test]
+fn w_and_s_move_along_forward() {
+    let base = fresh();
+    let (_, w) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: 0.2,
+        ..Default::default()
+    });
+    let (_, s) = moved(FreeFlyInput {
+        move_forward: -1.0,
+        delta_time: 0.2,
+        ..Default::default()
+    });
+    let expected = base.forward() * (FREE_FLY_SPEED * 0.2);
+    assert!((w - expected).length() < 1e-4, "{w:?} vs {expected:?}");
+    assert!((s + expected).length() < 1e-4);
+}
+
+#[test]
+fn a_and_d_strafe_along_the_local_right() {
+    let base = fresh();
+    let (_, d) = moved(FreeFlyInput {
+        move_right: 1.0,
+        delta_time: 0.25,
+        ..Default::default()
+    });
+    let (_, a) = moved(FreeFlyInput {
+        move_right: -1.0,
+        delta_time: 0.25,
+        ..Default::default()
+    });
+    let expected = base.right() * (FREE_FLY_SPEED * 0.25);
+    assert!((d - expected).length() < 1e-4);
+    assert!((a + expected).length() < 1e-4);
+    assert!(d.dot(base.forward()).abs() < 1e-3);
+}
+
+#[test]
+fn space_and_shift_use_the_local_up_in_both_realms() {
+    let (_, up) = moved(FreeFlyInput {
+        move_up: 1.0,
+        delta_time: 0.25,
+        ..Default::default()
+    });
+    let (_, down) = moved(FreeFlyInput {
+        move_up: -1.0,
+        delta_time: 0.25,
+        ..Default::default()
+    });
+    let base = fresh();
+    assert!((up - base.up() * (FREE_FLY_SPEED * 0.25)).length() < 1e-4);
+    assert!((down + base.up() * (FREE_FLY_SPEED * 0.25)).length() < 1e-4);
+    assert!(up.y > 0.0);
+    // In the Red-Black realm the local up is -Y: Space goes down in world Y.
+    let mut inverted = fresh();
+    inverted.pitch = 0.0;
+    inverted.realm = WorldRealm::RedBlack;
+    inverted.local_up = WorldRealm::RedBlack.up();
+    let before = inverted.position;
+    apply_free_fly_input(
+        &mut inverted,
+        &FreeFlyInput {
+            move_up: 1.0,
+            delta_time: 0.25,
+            ..Default::default()
+        },
+    );
+    let delta = inverted.position - before;
+    assert!(delta.y < -0.9 * FREE_FLY_SPEED * 0.25, "{delta:?}");
+}
+
+#[test]
+fn movement_scales_with_delta_time_and_never_teleports() {
+    let (_, once) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: 0.1,
+        ..Default::default()
+    });
+    let (_, twice) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: 0.2,
+        ..Default::default()
+    });
+    assert!((twice - once * 2.0).length() < 1e-4);
+    let (_, none) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: 0.0,
+        ..Default::default()
+    });
+    assert_eq!(none.length(), 0.0);
+    let (_, stall) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: 30.0,
+        ..Default::default()
+    });
+    assert!(stall.length() <= FREE_FLY_SPEED * 0.25 + 1e-4);
+    let (state, nan) = moved(FreeFlyInput {
+        move_forward: 1.0,
+        delta_time: f32::NAN,
+        ..Default::default()
+    });
+    assert_eq!(nan.length(), 0.0);
+    assert!(finite(state.position));
+}
+
+#[test]
+fn mouse_yaw_turns_the_view_and_pitch_is_clamped() {
+    let mut state = fresh();
+    let before = state.forward();
+    apply_free_fly_input(
+        &mut state,
+        &FreeFlyInput {
+            look_dx: 120.0,
+            ..Default::default()
+        },
+    );
+    let after = state.forward();
+    assert!((after - before).length() > 0.05);
+    assert!(unit(after));
+    // Turning right lowers the dot with the original right-hand side? No:
+    // turning right moves forward toward the old right.
+    assert!(after.dot(fresh().right()) > before.dot(fresh().right()));
+    // Pitch clamps below the vertical in both directions.
+    let mut state = fresh();
+    apply_free_fly_input(
+        &mut state,
+        &FreeFlyInput {
+            look_dy: -100_000.0,
+            ..Default::default()
+        },
+    );
+    for _ in 0..50 {
+        apply_free_fly_input(
+            &mut state,
+            &FreeFlyInput {
+                look_dy: -200.0,
+                ..Default::default()
+            },
+        );
+    }
+    assert!(state.pitch <= FREE_FLY_MAX_PITCH && state.pitch > 1.5);
+    assert!(state.forward().dot(state.local_up) < 0.9999);
+    assert!(unit(state.right()) && unit(state.up()));
+    for _ in 0..200 {
+        apply_free_fly_input(
+            &mut state,
+            &FreeFlyInput {
+                look_dy: 200.0,
+                ..Default::default()
+            },
+        );
+    }
+    assert!(state.pitch >= -FREE_FLY_MAX_PITCH && state.pitch < -1.5);
+    assert!(unit(state.right()) && unit(state.up()));
+    // Non-finite mouse input is ignored.
+    let yaw = state.yaw;
+    apply_free_fly_input(
+        &mut state,
+        &FreeFlyInput {
+            look_dx: f32::INFINITY,
+            look_dy: f32::NAN,
+            ..Default::default()
+        },
+    );
+    assert_eq!(state.yaw, yaw);
+}
+
+#[test]
+fn the_basis_stays_valid_along_a_long_flight() {
+    let mut state = fresh();
+    for i in 0..500 {
+        let input = FreeFlyInput {
+            move_forward: if i % 3 == 0 { 1.0 } else { -0.5 },
+            move_right: if i % 5 == 0 { 1.0 } else { 0.0 },
+            move_up: if i % 7 == 0 { -1.0 } else { 0.2 },
+            look_dx: ((i as f32) * 0.37).sin() * 60.0,
+            look_dy: ((i as f32) * 0.11).cos() * 40.0,
+            delta_time: 1.0 / 60.0,
+            reset: false,
+        };
+        apply_free_fly_input(&mut state, &input);
+        assert!(finite(state.position));
+        assert!(unit(state.forward()) && unit(state.right()) && unit(state.up()));
+        assert!(state.yaw.abs() <= std::f32::consts::PI + 1e-4);
+    }
+}
+
+#[test]
+fn r_resets_the_flight_and_ignores_the_rest_of_the_frame() {
+    let mut state = fresh();
+    let home = state.home();
+    apply_free_fly_input(
+        &mut state,
+        &FreeFlyInput {
+            move_forward: 1.0,
+            look_dx: 300.0,
+            delta_time: 0.2,
+            ..Default::default()
+        },
+    );
+    assert_ne!(state.position, home.position);
+    apply_free_fly_input(
+        &mut state,
+        &FreeFlyInput {
+            reset: true,
+            move_forward: 1.0,
+            look_dx: 50.0,
+            delta_time: 0.2,
+            ..Default::default()
+        },
+    );
+    assert_eq!(state.position, home.position);
+    assert_eq!((state.yaw, state.pitch), (home.yaw, home.pitch));
+    assert!(
+        FreeFlyInput {
+            reset: true,
+            ..Default::default()
+        }
+        .is_active()
+    );
+    assert!(!FreeFlyInput::default().is_active());
+    assert!(
+        !FreeFlyInput {
+            move_forward: 1.0,
+            delta_time: 0.0,
+            ..Default::default()
+        }
+        .is_active()
+    );
+}
+
+#[test]
+fn the_catalog_controls_are_unchanged_and_the_world_hud_is_free_fly() {
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    let catalog =
+        &app[app.find("struct CatalogMode").unwrap()..app.find("struct WorldMode").unwrap()];
+    for needed in [
+        "poll_orbit_input",
+        "apply_orbit_input",
+        "select_previous",
+        "select_next",
+        "focus_camera",
+        "KEY_LEFT_BRACKET",
+        "KEY_F",
+    ] {
+        assert!(
+            catalog.contains(needed),
+            "{needed} missing from the catalog mode"
+        );
+    }
+    assert!(
+        catalog.contains("Drag: orbit | Wheel: zoom | [ ] or Q E: select | F: focus | R: reset")
+    );
+    assert!(!catalog.contains("free_fly"));
+    let world =
+        &app[app.find("struct WorldMode").unwrap()..app.find("/// Casts one primary ray").unwrap()];
+    assert!(world.contains("poll_free_fly_input") && world.contains("apply_free_fly_input"));
+    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | R reset"));
+    assert!(!world.contains("apply_orbit_input"));
+    for key in [
+        "KEY_W",
+        "KEY_S",
+        "KEY_A",
+        "KEY_D",
+        "KEY_SPACE",
+        "KEY_LEFT_SHIFT",
+        "KEY_R",
+        "get_mouse_delta",
+        "get_frame_time",
+    ] {
+        assert!(app.contains(key), "{key}");
+    }
+}

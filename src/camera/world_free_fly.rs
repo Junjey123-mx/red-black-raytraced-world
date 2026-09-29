@@ -175,3 +175,103 @@ impl WorldFreeFlyCameraState {
         self.local_up = WorldRealm::Overworld.up();
     }
 }
+
+// ---------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------
+
+/// Largest mouse delta honored per frame (pixels), so a focus spike cannot
+/// whip the view around.
+pub const FREE_FLY_MAX_LOOK_PIXELS: f32 = 240.0;
+
+/// Largest frame time honored (seconds): a stall never teleports the camera.
+pub const FREE_FLY_MAX_DELTA_TIME: f32 = 0.25;
+
+/// One frame of polled free-fly input. Axes are in `[-1, 1]`; everything
+/// defaults to "nothing happened".
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FreeFlyInput {
+    /// W (+1) / S (-1): along `forward`.
+    pub move_forward: f32,
+    /// D (+1) / A (-1): along `right`.
+    pub move_right: f32,
+    /// Space (+1) / Left Shift (-1): along the local `up`.
+    pub move_up: f32,
+    /// Mouse motion this frame, in pixels (right and down positive).
+    pub look_dx: f32,
+    pub look_dy: f32,
+    /// Seconds since the previous frame.
+    pub delta_time: f32,
+    /// `R`: restore everything.
+    pub reset: bool,
+}
+
+fn sane(value: f32, limit: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(-limit, limit)
+    } else {
+        0.0
+    }
+}
+
+impl FreeFlyInput {
+    /// `true` when this frame moves or turns the camera (or resets it).
+    pub fn is_active(&self) -> bool {
+        let moves = |v: f32| v.is_finite() && v != 0.0;
+        let dt = self.delta_time.is_finite() && self.delta_time > 0.0;
+        self.reset
+            || moves(self.look_dx)
+            || moves(self.look_dy)
+            || (dt && (moves(self.move_forward) || moves(self.move_right) || moves(self.move_up)))
+    }
+}
+
+fn wrap_yaw(yaw: f32) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    let wrapped = yaw.rem_euclid(TAU);
+    if wrapped > PI { wrapped - TAU } else { wrapped }
+}
+
+impl WorldFreeFlyCameraState {
+    /// Turns the view: `dx` pixels to the right yaw right, `dy` pixels down
+    /// pitch down. Pitch is clamped so `forward` never reaches `local_up`.
+    pub fn look(&mut self, dx: f32, dy: f32) {
+        let dx = sane(dx, FREE_FLY_MAX_LOOK_PIXELS);
+        let dy = sane(dy, FREE_FLY_MAX_LOOK_PIXELS);
+        self.yaw = wrap_yaw(self.yaw + dx * self.mouse_sensitivity);
+        self.pitch = (self.pitch - dy * self.mouse_sensitivity)
+            .clamp(-FREE_FLY_MAX_PITCH, FREE_FLY_MAX_PITCH);
+    }
+
+    /// Flies along the current frame: `forward`, `right` and `up` axes in
+    /// `[-1, 1]`, scaled by `movement_speed` blocks per second and
+    /// `delta_time` seconds. Frame-rate independent by construction.
+    pub fn fly(&mut self, forward: f32, right: f32, up: f32, delta_time: f32) {
+        let dt = if delta_time.is_finite() {
+            delta_time.clamp(0.0, FREE_FLY_MAX_DELTA_TIME)
+        } else {
+            0.0
+        };
+        let velocity = self.forward() * sane(forward, 1.0)
+            + self.right() * sane(right, 1.0)
+            + self.up() * sane(up, 1.0);
+        self.position = self.position + velocity * (self.movement_speed * dt);
+    }
+}
+
+/// Applies one frame of input: `reset` restores everything and ignores the
+/// rest of the frame; otherwise the look comes first (so the movement uses
+/// the direction the user is now facing) and then the flight.
+pub fn apply_free_fly_input(state: &mut WorldFreeFlyCameraState, input: &FreeFlyInput) {
+    if input.reset {
+        state.reset();
+        return;
+    }
+    state.look(input.look_dx, input.look_dy);
+    state.fly(
+        input.move_forward,
+        input.move_right,
+        input.move_up,
+        input.delta_time,
+    );
+}

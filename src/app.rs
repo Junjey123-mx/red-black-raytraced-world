@@ -4,7 +4,7 @@ use crate::camera::camera::Camera;
 use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::projection::primary_ray;
-use crate::camera::world_free_fly::WorldFreeFlyCameraState;
+use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::raytracer::{VoxelScene, cast_ray_voxel};
@@ -20,7 +20,7 @@ use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
     WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background,
-    world_camera, world_free_fly_camera, world_lights, world_materials,
+    world_free_fly_camera, world_lights, world_materials,
 };
 
 /// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
@@ -35,9 +35,10 @@ const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
 const SHAPE_TEXTURES_DIR: &str = "assets/textures/diagnostic/partial";
 
 /// Everything that differs between the project's executables: which scene is
-/// traced and its mode-specific camera, controls and label. The window,
-/// texture loading, CPU tracing, orbit/zoom/reset input and presentation are
-/// the shared runtime (`run_viewer`), identical for every mode.
+/// traced, and its own camera, controls and label. The window, texture
+/// loading, CPU tracing and presentation are the shared runtime
+/// (`run_viewer`), identical for every mode. The catalog keeps the orbit
+/// (diagnostic) camera; the world flies free.
 trait ViewerMode {
     fn world(&self) -> &VoxelWorld;
     fn materials(&self) -> &MaterialLibrary;
@@ -48,11 +49,13 @@ trait ViewerMode {
     fn ambient_factor(&self) -> f32;
     /// Scene range: bounds primary traversal and directional shadow rays.
     fn max_distance(&self) -> f32;
-    /// The orbit camera's starting (and `R` reset) pose.
-    fn home_camera(&self, aspect_ratio: f32) -> Camera;
-    /// Mode-specific keys, polled once per frame. Returns `true` when they
-    /// changed the view, so a new frame must be traced.
-    fn handle_keys(&mut self, rl: &RaylibHandle, view: &mut DiagnosticCameraState) -> bool;
+    /// One-time window setup (e.g. capturing the cursor for mouse look).
+    fn setup(&self, _rl: &mut RaylibHandle) {}
+    /// Polls this frame's input and advances the mode's camera. Returns
+    /// `true` when the view changed, so a new frame must be traced.
+    fn update(&mut self, rl: &RaylibHandle) -> bool;
+    /// The raytracer camera for the current view.
+    fn camera(&self, aspect_ratio: f32) -> Camera;
     /// One-line status text drawn in the top-left corner.
     fn label(&self) -> String;
     /// Controls hint drawn along the bottom edge.
@@ -65,6 +68,8 @@ struct CatalogMode {
     catalog: CatalogScene,
     materials: MaterialLibrary,
     lights: Vec<Light>,
+    /// The diagnostic orbit camera, starting on the gallery framing.
+    view: DiagnosticCameraState,
 }
 
 impl CatalogMode {
@@ -83,10 +88,12 @@ impl CatalogMode {
         // The visible scene is the persistent block catalog (`CatalogScene`).
         // Blocks reference their material by `MaterialId`, resolved through
         // the `MaterialLibrary`.
+        let home = gallery_camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
         Self {
             catalog: CatalogScene::new(),
             materials: catalog_materials(&textures),
             lights: gallery_lights(),
+            view: DiagnosticCameraState::from_pose(home.position, home.target),
         }
     }
 }
@@ -116,12 +123,10 @@ impl ViewerMode for CatalogMode {
         GALLERY_MAX_DISTANCE
     }
 
-    fn home_camera(&self, aspect_ratio: f32) -> Camera {
-        gallery_camera(aspect_ratio)
-    }
-
-    /// Catalog selection: [ / Q previous, ] / E next (wrapping), F focus.
-    fn handle_keys(&mut self, rl: &RaylibHandle, view: &mut DiagnosticCameraState) -> bool {
+    /// Orbit/zoom/reset input plus the catalog keys: [ / Q previous,
+    /// ] / E next (wrapping), F focus. Unchanged catalog behavior.
+    fn update(&mut self, rl: &RaylibHandle) -> bool {
+        let input = poll_orbit_input(rl);
         if rl.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) || rl.is_key_pressed(KeyboardKey::KEY_Q)
         {
             self.catalog.select_previous();
@@ -133,9 +138,16 @@ impl ViewerMode for CatalogMode {
         }
         let focus = rl.is_key_pressed(KeyboardKey::KEY_F);
         if focus {
-            self.catalog.focus_camera(view);
+            self.catalog.focus_camera(&mut self.view);
         }
-        focus
+        if input.is_active() {
+            apply_orbit_input(&mut self.view, &input);
+        }
+        input.is_active() || focus
+    }
+
+    fn camera(&self, aspect_ratio: f32) -> Camera {
+        self.view.build_camera(aspect_ratio)
     }
 
     fn label(&self) -> String {
@@ -201,13 +213,23 @@ impl ViewerMode for WorldMode {
         WORLD_MAX_DISTANCE
     }
 
-    fn home_camera(&self, aspect_ratio: f32) -> Camera {
-        world_camera(aspect_ratio)
+    /// Mouse look needs a captured cursor: relative motion, no edges.
+    fn setup(&self, rl: &mut RaylibHandle) {
+        rl.disable_cursor();
     }
 
-    /// The world has no mode-specific keys yet.
-    fn handle_keys(&mut self, _rl: &RaylibHandle, _view: &mut DiagnosticCameraState) -> bool {
-        false
+    /// WASD / Space / Shift flight, mouse look and R, all through the
+    /// free-fly state (never the orbit camera).
+    fn update(&mut self, rl: &RaylibHandle) -> bool {
+        let input = poll_free_fly_input(rl);
+        if input.is_active() {
+            apply_free_fly_input(&mut self.free_fly, &input);
+        }
+        input.is_active()
+    }
+
+    fn camera(&self, aspect_ratio: f32) -> Camera {
+        self.free_fly.camera(aspect_ratio)
     }
 
     fn label(&self) -> String {
@@ -219,7 +241,7 @@ impl ViewerMode for WorldMode {
     }
 
     fn help(&self) -> &'static str {
-        "Drag: orbit | Wheel: zoom | R: reset | Block catalog: cargo run --bin catalog"
+        "WASD move | Mouse look | Space/Shift up/down | R reset"
     }
 }
 
@@ -296,19 +318,37 @@ fn poll_orbit_input(rl: &RaylibHandle) -> OrbitInput {
     }
 }
 
-/// Traces the scene from `view` into a framebuffer of `width x height` and
-/// uploads it to a Raylib texture for presentation.
+/// Polls the keyboard and mouse into one frame of `FreeFlyInput`: WASD
+/// along the view frame, Space / Left Shift along the local up, the mouse
+/// delta for looking, `R` to reset.
+fn poll_free_fly_input(rl: &RaylibHandle) -> FreeFlyInput {
+    let axis = |positive: KeyboardKey, negative: KeyboardKey| {
+        (rl.is_key_down(positive) as i32 - rl.is_key_down(negative) as i32) as f32
+    };
+    let delta = rl.get_mouse_delta();
+    FreeFlyInput {
+        move_forward: axis(KeyboardKey::KEY_W, KeyboardKey::KEY_S),
+        move_right: axis(KeyboardKey::KEY_D, KeyboardKey::KEY_A),
+        move_up: axis(KeyboardKey::KEY_SPACE, KeyboardKey::KEY_LEFT_SHIFT),
+        look_dx: delta.x,
+        look_dy: delta.y,
+        delta_time: rl.get_frame_time(),
+        reset: rl.is_key_pressed(KeyboardKey::KEY_R),
+    }
+}
+
+/// Traces the scene from the mode's camera into a framebuffer of
+/// `width x height` and uploads it to a Raylib texture for presentation.
 fn trace_to_texture(
     rl: &mut RaylibHandle,
     thread: &RaylibThread,
-    view: &DiagnosticCameraState,
     width: usize,
     height: usize,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
 ) -> Texture2D {
     let mut framebuffer = Framebuffer::new(width, height);
-    let camera = view.build_camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
+    let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
 
     render(&mut framebuffer, &camera, mode, texture_manager);
 
@@ -335,18 +375,12 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     // reference, so no texture can be loaded mid-render.
     let mut texture_manager = TextureManager::new();
     let mut mode = build_mode(&mut texture_manager);
-
-    // The orbit camera starts on the mode's framing, and `R` restores
-    // exactly that view.
-    let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
-    let home = mode.home_camera(aspect_ratio);
-    let mut view = DiagnosticCameraState::from_pose(home.position, home.target);
+    mode.setup(&mut rl);
 
     let mut texture_scale = 1;
     let mut texture = trace_to_texture(
         &mut rl,
         &thread,
-        &view,
         full_width,
         full_height,
         &mode,
@@ -356,16 +390,12 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     let mut needs_full_frame = false;
 
     while !rl.window_should_close() {
-        let input = poll_orbit_input(&rl);
-        let mode_changed_view = mode.handle_keys(&rl, &mut view);
-
-        if input.is_active() || mode_changed_view {
-            apply_orbit_input(&mut view, &input);
+        // Each mode owns and advances its own camera.
+        if mode.update(&rl) {
             texture_scale = PREVIEW_DOWNSCALE;
             texture = trace_to_texture(
                 &mut rl,
                 &thread,
-                &view,
                 full_width / PREVIEW_DOWNSCALE,
                 full_height / PREVIEW_DOWNSCALE,
                 &mode,
@@ -377,7 +407,6 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
             texture = trace_to_texture(
                 &mut rl,
                 &thread,
-                &view,
                 full_width,
                 full_height,
                 &mode,
