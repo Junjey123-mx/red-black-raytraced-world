@@ -20,8 +20,8 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
-    WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background,
-    world_free_fly_camera, world_lights, world_materials,
+    WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_free_fly_camera,
+    world_lights, world_materials,
 };
 
 /// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
@@ -208,12 +208,14 @@ impl ViewerMode for WorldMode {
         &self.lights
     }
 
+    /// The realm's sky (blended through the portal transition), hung
+    /// along the camera's current vertical.
     fn background(&self) -> Background {
-        world_background()
+        self.free_fly.background()
     }
 
     fn ambient_factor(&self) -> f32 {
-        WORLD_AMBIENT_FACTOR
+        WORLD_AMBIENT_FACTOR * self.free_fly.environment().ambient_scale
     }
 
     fn max_distance(&self) -> f32 {

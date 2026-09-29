@@ -27,6 +27,9 @@ pub struct SkyGradient {
     pub zenith: Color,
     pub horizon: Color,
     pub ground: Color,
+    /// The sky's vertical: the zenith lies along it. +Y for the Overworld;
+    /// the inverted realm hangs its sky along -Y.
+    pub up: Vec3,
 }
 
 impl SkyGradient {
@@ -34,7 +37,8 @@ impl SkyGradient {
     /// as the horizon).
     pub fn color(&self, direction: Vec3) -> Color {
         let d = direction.normalize();
-        let elevation = d.y.clamp(-1.0, 1.0);
+        let up = self.up.normalize();
+        let elevation = d.dot(up).clamp(-1.0, 1.0);
         if elevation >= 0.0 {
             // Ease-out: most of the sky dome keeps the horizon's luminosity
             // and only the top deepens toward the zenith.

@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use crate::camera::camera::Camera;
-use crate::camera::world_free_fly::WorldFreeFlyCameraState;
+use crate::camera::world_free_fly::{WorldFreeFlyCameraState, WorldRealm};
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
@@ -15,6 +15,7 @@ use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
     InvertedDescent, UpperDescent, build_inverted_descent, build_upper_descent,
 };
+use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -344,14 +345,10 @@ pub fn world_lights() -> Vec<Light> {
     lights
 }
 
-/// The clear daytime sky: a medium celeste-blue zenith, a pale luminous
-/// horizon and a very pale haze below it.
+/// The clear daytime sky of the Overworld (the `Day` environment profile,
+/// hung along +Y).
 pub fn world_sky() -> SkyGradient {
-    SkyGradient {
-        zenith: Color::new(0.33, 0.56, 0.92, 1.0),
-        horizon: Color::new(0.72, 0.85, 0.97, 1.0),
-        ground: Color::new(0.80, 0.88, 0.95, 1.0),
-    }
+    WorldEnvironmentProfile::DAY.sky(WorldRealm::Overworld.up())
 }
 
 /// What World rays see on a miss: the daytime sky.

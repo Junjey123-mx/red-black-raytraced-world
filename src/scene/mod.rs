@@ -5,6 +5,7 @@ pub mod block_type;
 pub mod catalog;
 pub mod cutaway;
 pub mod descent;
+pub mod environment;
 pub mod geometry_orientation;
 pub mod light;
 pub mod material_gallery;

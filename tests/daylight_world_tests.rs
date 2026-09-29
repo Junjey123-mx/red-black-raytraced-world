@@ -68,6 +68,8 @@ mod scene {
     pub mod cutaway;
     #[path = "../src/scene/descent.rs"]
     pub mod descent;
+    #[path = "../src/scene/environment.rs"]
+    pub mod environment;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
@@ -223,7 +225,8 @@ fn the_catalog_keeps_its_flat_studio_background() {
     assert!(luminance(gallery_background()) < 0.1);
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     assert!(app.contains("Background::Solid(gallery_background())"));
-    assert!(app.contains("world_background()"));
+    // The World takes its (realm-dependent) sky from the free-fly camera.
+    assert!(app.contains("self.free_fly.background()"));
 }
 
 #[test]

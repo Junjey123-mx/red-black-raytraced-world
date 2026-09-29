@@ -403,3 +403,58 @@ impl WorldFreeFlyCameraState {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Environment seen by the camera
+// ---------------------------------------------------------------------
+
+use crate::scene::environment::WorldEnvironmentProfile;
+
+impl WorldRealm {
+    /// The realm's environment profile.
+    pub fn environment(self) -> WorldEnvironmentProfile {
+        match self {
+            WorldRealm::Overworld => WorldEnvironmentProfile::DAY,
+            WorldRealm::RedBlack => WorldEnvironmentProfile::RED_BLACK,
+        }
+    }
+}
+
+impl WorldFreeFlyCameraState {
+    /// The environment the camera currently sees: its realm's profile, or,
+    /// during a transition, the blend of the realm being left toward the
+    /// one being entered at the roll's eased progress.
+    pub fn environment(&self) -> WorldEnvironmentProfile {
+        match &self.transition {
+            Some(t) => t
+                .from_realm
+                .environment()
+                .blend(&t.to_realm.environment(), t.eased()),
+            None => self.realm.environment(),
+        }
+    }
+
+    /// The vertical the sky is hung along: the realm's up, blended toward
+    /// the destination realm's up during a transition (through the rolled
+    /// view up at the midpoint, where the two cancel out).
+    pub fn sky_up(&self) -> Vec3 {
+        match &self.transition {
+            Some(t) => {
+                let from = t.from_realm.up();
+                let to = t.to_realm.up();
+                let mixed = from * (1.0 - t.eased()) + to * t.eased();
+                if mixed.length_squared() > 0.05 {
+                    mixed.normalize()
+                } else {
+                    self.rolled_up()
+                }
+            }
+            None => self.local_up,
+        }
+    }
+
+    /// The background the World traces against this frame.
+    pub fn background(&self) -> crate::renderer::skybox::Background {
+        self.environment().background(self.sky_up())
+    }
+}
