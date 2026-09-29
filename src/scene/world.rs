@@ -359,27 +359,31 @@ pub fn world_background() -> Background {
 }
 
 /// World-space point the official framing looks at: the volumetric center
-/// of the micro-scene (middle of the footprint, just above the typical
-/// surface so the house and the tree crowns balance the geological sides).
+/// of the whole diamond (middle of the footprint, halfway between the
+/// Overworld surface and the lower tip), so the upper micro-scene, the
+/// cutaway, the portal waist and the inverted half balance in the frame.
 pub fn world_focus() -> Vec3 {
     let config = TerrainConfig::official();
+    let rhombus = RhombusConfig::derive(&config);
     Vec3::new(
         config.width as f32 / 2.0,
-        config.base_height as f32 + 1.0,
+        (rhombus.upper_surface_reference + rhombus.lower_tip_y) as f32 / 2.0 + 1.0,
         config.depth as f32 / 2.0,
     )
 }
 
 /// Eye offset of the official framing: a raised three-quarter view from the
-/// south-south-east (the door side), high enough to read the relief, the
-/// pond and the path, low enough to keep the layered sides in view.
+/// south-south-east, looking into the cutaway quadrant with the pond still
+/// in view on the west, far enough to hold the
+/// complete floating diamond from the tree crowns to the lower tip, and
+/// low enough that the exposed layers, portal and underside all read.
 pub const WORLD_CAMERA_OFFSET: Vec3 = Vec3 {
-    x: 7.0,
-    y: 14.0,
-    z: 24.0,
+    x: 11.0,
+    y: 19.0,
+    z: 35.0,
 };
 
-/// The official Overworld framing: the orbit camera's starting pose and
+/// The official diorama framing: the orbit camera's starting pose and
 /// what `R` resets to.
 pub fn world_camera(aspect_ratio: f32) -> Camera {
     let focus = world_focus();

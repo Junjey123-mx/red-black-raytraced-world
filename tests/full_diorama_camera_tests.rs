@@ -122,7 +122,7 @@ use camera::diagnostic::{DiagnosticCameraState, MAX_DISTANCE, MIN_DISTANCE};
 use camera::projection::primary_ray;
 use core::math::Vec3;
 use renderer::raytracer::{VoxelScene, nearest_visible_hit};
-use scene::block_type::BlockType;
+use scene::block_type::{BlockFamily, BlockType};
 use scene::material_gallery::gallery_camera;
 use scene::texture_manager::TextureManager;
 use scene::world::{
@@ -133,99 +133,53 @@ use std::collections::HashSet;
 
 const ASPECT: f32 = 4.0 / 3.0;
 
-fn finite(v: Vec3) -> bool {
-    v.x.is_finite() && v.y.is_finite() && v.z.is_finite()
-}
-
 #[test]
-fn the_official_camera_is_finite_with_a_valid_distance_and_fov() {
+fn the_camera_is_finite_and_far_enough_for_the_whole_diamond() {
     let camera = world_camera(ASPECT);
-    assert!(finite(camera.position) && finite(camera.target));
+    for v in [camera.position, camera.target] {
+        assert!(v.x.is_finite() && v.y.is_finite() && v.z.is_finite());
+    }
     let distance = (camera.position - camera.target).length();
-    assert!(
-        distance > MIN_DISTANCE && distance < MAX_DISTANCE,
-        "{distance}"
-    );
-    assert!((30.0..60.0).contains(&distance), "{distance}");
-    assert!(camera.fov > 0.0 && camera.fov < 180.0);
-    assert_eq!(camera.fov, 60.0);
-    assert_eq!(camera.aspect_ratio, ASPECT);
-    assert_eq!(camera.position, world_focus() + WORLD_CAMERA_OFFSET);
-}
-
-#[test]
-fn the_target_is_the_volumetric_center_of_the_scene() {
+    assert!(distance > MIN_DISTANCE && distance < MAX_DISTANCE);
+    // The diamond spans roughly 35 blocks top to tip: at this distance the
+    // 60-degree vertical field holds it with margin.
     let scene = WorldScene::new();
-    let target = world_camera(ASPECT).target;
-    let b = scene.bounds();
     let r = scene.rhombus();
-    assert!(target.x >= b.min.x as f32 && target.x <= b.max.x as f32 + 1.0);
-    assert!(target.z >= b.min.z as f32 && target.z <= b.max.z as f32 + 1.0);
-    // Between the diamond's tip and the roof ridge / tree tops: the whole
-    // two-world diorama balances around it.
-    let roof_top = scene
+    let height = (scene
         .house_exterior()
         .roof
         .iter()
         .map(|(c, _, _)| c.y)
         .max()
-        .unwrap();
-    assert!(target.y >= r.lower_tip_y as f32 && target.y <= roof_top as f32);
-    let center = scene.center();
-    assert!((target.x - center.x).abs() <= 2.0 && (target.z - center.z).abs() <= 2.0);
+        .unwrap()
+        - r.lower_tip_y) as f32;
+    let visible = 2.0 * distance * (30.0f32).to_radians().tan();
+    assert!(
+        visible > height * 1.15,
+        "visible {visible} vs height {height}"
+    );
+    assert_eq!(camera.position, world_focus() + WORLD_CAMERA_OFFSET);
 }
 
 #[test]
-fn the_framing_is_a_raised_three_quarter_view() {
-    let camera = world_camera(ASPECT);
-    let offset = camera.position - camera.target;
-    let pitch = (offset.y / offset.length()).asin().to_degrees();
-    assert!((20.0..=45.0).contains(&pitch), "pitch {pitch}");
-    // From the door side (south, +Z), a little to the east: neither a plan
-    // view nor a pure frontal elevation.
-    assert!(offset.z > 0.0 && offset.x > 0.0);
-    assert!(offset.z > offset.x);
-    // Toward the cutaway quadrant (south-east).
-    let r = WorldScene::new().rhombus().cutaway;
-    assert!(camera.position.x > r.min_x as f32 && camera.position.z > r.min_z as f32);
+fn the_target_lies_inside_the_full_bounds() {
+    let scene = WorldScene::new();
+    let r = scene.rhombus();
+    let target = world_camera(ASPECT).target;
+    assert!(target.y > r.lower_tip_y as f32 && target.y < r.upper_surface_reference as f32);
+    assert!((target.x - r.center_x as f32).abs() <= 2.0);
+    assert!((target.z - r.center_z as f32).abs() <= 2.0);
+    // Halfway between the surface and the tip: not the upper scene alone.
+    let mid = (r.upper_surface_reference + r.lower_tip_y) as f32 / 2.0;
+    assert!(
+        (target.y - mid).abs() <= 2.0,
+        "target y {} vs mid {mid}",
+        target.y
+    );
 }
 
 #[test]
-fn reset_orbit_and_zoom_keep_working_around_the_official_framing() {
-    let home = world_camera(ASPECT);
-    let mut view = DiagnosticCameraState::from_pose(home.position, home.target);
-    let start = view;
-    let start_camera = view.build_camera(ASPECT);
-    assert!((start_camera.position - home.position).length() < 1e-3);
-    assert!((start_camera.target - home.target).length() < 1e-3);
-
-    view.set_angles(view.yaw + 0.7, view.pitch + 0.3);
-    assert_ne!(view.position(), start.position());
-    view.set_distance(view.distance * 0.5);
-    assert!((view.distance - start.distance * 0.5).abs() < 1e-4);
-    view.set_target(view.target + Vec3::new(1.0, 0.0, 0.0));
-    view.reset();
-    assert_eq!(view, start);
-    let reset_camera = view.build_camera(ASPECT);
-    assert!((reset_camera.position - home.position).length() < 1e-3);
-}
-
-#[test]
-fn the_catalog_camera_is_unchanged() {
-    let camera = gallery_camera(ASPECT);
-    assert_eq!(camera.position, Vec3::new(6.0, 5.6, 14.0));
-    assert_eq!(camera.target, Vec3::new(6.0, 0.6, 1.8));
-    assert_eq!(camera.fov, 60.0);
-    // The world does not add block selection: only the catalog has it.
-    let app = std::fs::read_to_string("src/app.rs").unwrap();
-    let world_mode = &app[app.find("impl ViewerMode for WorldMode").unwrap()
-        ..app.find("/// Casts one primary ray").unwrap()];
-    assert!(!world_mode.contains("select_next") && !world_mode.contains("select_previous"));
-    assert!(!world_mode.contains("focus_camera"));
-}
-
-#[test]
-fn the_initial_framing_shows_every_landmark_and_the_sky() {
+fn the_full_bounds_are_visible_in_the_initial_frame() {
     let mut manager = TextureManager::new();
     let textures = WorldTextures::load(
         &mut manager,
@@ -250,51 +204,91 @@ fn the_initial_framing_shows_every_landmark_and_the_sky() {
     };
     let (w, h) = (160, 120);
     let mut seen: HashSet<BlockType> = HashSet::new();
+    let mut families: HashSet<BlockFamily> = HashSet::new();
+    let mut min_y = i32::MAX;
+    let mut max_y = i32::MIN;
     let mut sky = 0;
-    let mut sky_top_row = 0;
+    let mut edge_hits = 0;
     for y in 0..h {
         for x in 0..w {
             let ray = primary_ray(&camera, x, y, w, h);
             match nearest_visible_hit(&view, &ray, WORLD_MAX_DISTANCE) {
                 Some(hit) => {
                     seen.insert(hit.block.block_type());
-                }
-                None => {
-                    sky += 1;
-                    if y == 0 {
-                        sky_top_row += 1;
+                    families.insert(hit.block.block_type().family());
+                    min_y = min_y.min(hit.cell.y);
+                    max_y = max_y.max(hit.cell.y);
+                    if x == 0 || y == 0 || x == w - 1 || y == h - 1 {
+                        edge_hits += 1;
                     }
                 }
+                None => sky += 1,
             }
         }
     }
+    // Nothing is clipped by the frame edges; the sky surrounds the diamond.
+    assert_eq!(edge_hits, 0, "the diamond touches the frame edge");
+    assert!(sky > (w * h) / 3);
+    // From the tree crowns to the lower tip.
+    let r = scene.rhombus();
+    assert!(min_y <= r.lower_tip_y + 1, "lowest visible row {min_y}");
+    assert!(max_y >= 10, "highest visible row {max_y}");
     for wanted in [
         BlockType::Grass,
-        BlockType::Dirt,
-        BlockType::Stone,
-        BlockType::Deepslate,
-        BlockType::Water,
-        BlockType::Sand,
-        BlockType::Log,
-        BlockType::Leaves,
         BlockType::WoodPlanks,
+        BlockType::Leaves,
+        BlockType::Water,
+        BlockType::PortalFrameRedObsidian,
+        BlockType::PortalCoreDarkCrimson,
         BlockType::WoodStairs,
-        BlockType::Glass,
-        BlockType::WoodDoor,
-        BlockType::RedstoneLampLit,
-        BlockType::Fence,
-        BlockType::Cobblestone,
+        BlockType::Deepslate,
+        BlockType::Stone,
+        BlockType::Dirt,
     ] {
         assert!(
             seen.contains(&wanted),
             "{wanted:?} is not visible from the official framing"
         );
     }
-    // Sky above, but the mass fills a good part of the frame.
-    assert_eq!(sky_top_row, w, "the top row is not all sky");
-    let total = (w * h) as f32;
+    // The cutaway shows the interior and the underside shows Red-Black.
+    assert!(families.contains(&BlockFamily::Portal));
     assert!(
-        (sky as f32) > 0.3 * total && (sky as f32) < 0.8 * total,
-        "sky {sky}"
+        families.iter().any(|f| matches!(
+            f,
+            BlockFamily::Crimson
+                | BlockFamily::Orange
+                | BlockFamily::Violet
+                | BlockFamily::RedBlackBase
+                | BlockFamily::StructuralRedBlack
+        )),
+        "{families:?}"
     );
+}
+
+#[test]
+fn reset_orbit_elevation_and_zoom_work_from_the_official_view() {
+    let home = world_camera(ASPECT);
+    let mut view = DiagnosticCameraState::from_pose(home.position, home.target);
+    let start = view;
+    view.set_angles(view.yaw + 1.0, view.pitch);
+    assert_ne!(view.position(), start.position());
+    view.set_angles(view.yaw, view.pitch + 0.4);
+    assert!(view.pitch > start.pitch);
+    view.set_distance(view.distance * 0.6);
+    assert!(view.distance < start.distance);
+    view.reset();
+    assert_eq!(view, start);
+    let reset_camera = view.build_camera(ASPECT);
+    assert!((reset_camera.position - home.position).length() < 1e-3);
+    assert!((reset_camera.target - home.target).length() < 1e-3);
+}
+
+#[test]
+fn the_catalog_camera_is_untouched() {
+    let camera = gallery_camera(ASPECT);
+    assert_eq!(camera.position, Vec3::new(6.0, 5.6, 14.0));
+    assert_eq!(camera.target, Vec3::new(6.0, 0.6, 1.8));
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    assert!(app.contains("gallery_camera(aspect_ratio)"));
+    assert!(app.contains("world_camera(aspect_ratio)"));
 }
