@@ -89,6 +89,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -616,7 +618,9 @@ fn no_raylib_3d_api_is_used_by_the_render_sources() {
 fn the_app_renders_through_the_voxel_world_instead_of_a_manual_cube_list() {
     let app = code_of(include_str!("../src/app.rs"));
 
-    assert!(has_token(&app, "cast_ray_voxel_lit"));
+    // The app traces every pixel through the shared `VoxelScene` path.
+    assert!(has_token(&app, "cast_ray_voxel"));
+    assert!(has_token(&app, "VoxelScene"));
     // Gate 07: the visible scene is the advanced-materials gallery VoxelWorld
     // (it replaced the Gate 06 partial-geometry gallery as the visible scene).
     // Gate 07.5: the persistent CatalogScene (built on that gallery) is now

@@ -84,6 +84,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -98,6 +100,7 @@ use renderer::raytracer::{
     VoxelScene, is_voxel_occluded, light_visibility, nearest_visible_hit, nearest_voxel_hit,
     trace_ray,
 };
+use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_type::BlockType;
 use scene::light::{DirectionalLight, Light};
@@ -197,7 +200,7 @@ impl Fixture {
             camera_position: Vec3::new(0.5, 0.5, 9.0),
             lights,
             ambient_factor: ambient,
-            background: Color::new(0.0, 0.0, 1.0, 1.0),
+            background: Background::Solid(Color::new(0.0, 0.0, 1.0, 1.0)),
             texture_manager: &self.manager,
             max_distance: RANGE,
         };

@@ -86,6 +86,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -104,6 +106,7 @@ use renderer::raytracer::{
     MAX_RAY_DEPTH, MISSING_MATERIAL_COLOR, VoxelScene, cast_ray_voxel_lit, light_visibility,
     nearest_visible_hit, nearest_voxel_hit, trace_ray,
 };
+use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_type::BlockType;
 use scene::light::{DirectionalLight, Light};
@@ -182,7 +185,7 @@ impl Gallery {
             camera_position: r.origin,
             lights,
             ambient_factor: ambient,
-            background,
+            background: Background::Solid(background),
             texture_manager: &self.manager,
             max_distance: RANGE,
         };
@@ -354,7 +357,7 @@ fn alpha_cutout_lets_a_ray_reach_the_block_behind_the_leaves() {
             camera_position: r.origin,
             lights: &[],
             ambient_factor: 1.0,
-            background: black(),
+            background: Background::Solid(black()),
             texture_manager: &g.manager,
             max_distance: RANGE,
         },
@@ -393,7 +396,7 @@ fn alpha_cutout_also_governs_shadow_rays() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 1.0,
-        background: black(),
+        background: Background::Solid(black()),
         texture_manager: &g.manager,
         max_distance: RANGE,
     };
@@ -582,7 +585,10 @@ fn the_dda_is_still_the_primary_traversal_of_every_ray_kind() {
     assert!(source.contains("nearest_voxel_hit_where(scene.world"));
     let app =
         std::fs::read_to_string(format!("{}/src/app.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
-    assert!(app.contains("cast_ray_voxel_lit"));
+    // The app assembles one `VoxelScene` per frame and traces every pixel
+    // through the same `trace_ray` path (`cast_ray_voxel`).
+    assert!(app.contains("cast_ray_voxel(&scene, &ray)"));
+    assert!(source.contains("pub fn cast_ray_voxel(scene: &VoxelScene, ray: &Ray) -> Color"));
     // Gate 07.5: the visible scene is the CatalogScene, which is built on the
     // advanced-materials gallery world.
     assert!(app.contains("CatalogScene"));
@@ -765,7 +771,7 @@ fn the_specimens_are_not_hidden_from_the_gallery_camera() {
             camera_position: camera.position,
             lights: &[],
             ambient_factor: 1.0,
-            background: black(),
+            background: Background::Solid(black()),
             texture_manager: &g.manager,
             max_distance: RANGE,
         };

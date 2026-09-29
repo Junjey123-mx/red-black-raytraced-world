@@ -14,6 +14,7 @@ use crate::renderer::emission::sample_emissive;
 use crate::renderer::normal_mapping::sample_shading_normal;
 use crate::renderer::shading;
 use crate::renderer::shadows;
+use crate::renderer::skybox::Background;
 use crate::renderer::texture_sampling::sample_nearest;
 use crate::renderer::voxel_traversal::DdaState;
 use crate::scene::block::BlockInstance;
@@ -469,7 +470,7 @@ pub struct VoxelScene<'a> {
     pub camera_position: Vec3,
     pub lights: &'a [Light],
     pub ambient_factor: f32,
-    pub background: Color,
+    pub background: Background,
     pub texture_manager: &'a TextureManager,
     pub max_distance: f32,
 }
@@ -632,7 +633,7 @@ pub fn light_visibility(scene: &VoxelScene, ray: &Ray, max_distance: f32) -> f32
 /// `MaterialId` is unknown returns `MISSING_MATERIAL_COLOR`.
 pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
     let Some(voxel) = nearest_visible_hit(scene, ray, scene.max_distance) else {
-        return scene.background;
+        return scene.background.color(ray.direction);
     };
 
     let Some(material) = scene.materials.get(voxel.block.material_id()) else {
@@ -764,10 +765,17 @@ pub fn cast_ray_voxel_lit(
         camera_position,
         lights,
         ambient_factor,
-        background,
+        background: Background::Solid(background),
         texture_manager,
         max_distance,
     };
 
     trace_ray(&scene, ray, 0)
+}
+
+/// Traces one primary ray through an already assembled `VoxelScene` (built
+/// once per frame, not per pixel). Same tracing as `cast_ray_voxel_lit`,
+/// with the scene's `Background` (flat or directional sky) on a miss.
+pub fn cast_ray_voxel(scene: &VoxelScene, ray: &Ray) -> Color {
+    trace_ray(scene, ray, 0)
 }

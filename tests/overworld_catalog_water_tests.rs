@@ -94,6 +94,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -106,6 +108,7 @@ use core::material::{Material, MaterialId};
 use core::math::{IVec3, Vec2, Vec3};
 use core::ray::Ray;
 use renderer::raytracer::{VoxelScene, light_visibility, nearest_visible_hit, trace_ray};
+use renderer::skybox::Background;
 use renderer::texture_sampling::sample_nearest;
 use scene::block::BlockInstance;
 use scene::block_geometry::BlockGeometry;
@@ -172,7 +175,7 @@ impl Env {
             camera_position: r.origin,
             lights: &[],
             ambient_factor: ambient,
-            background: Color::new(0.0, 0.0, 0.0, 1.0),
+            background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
             texture_manager: &self.manager,
             max_distance: RANGE,
         };
@@ -326,7 +329,7 @@ fn two_contiguous_water_cells_have_no_false_internal_interface() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::new(0.0, 0.0, 0.0, 1.0),
+        background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };
@@ -390,7 +393,7 @@ fn only_faces_toward_a_same_medium_neighbor_are_removed() {
             camera_position: Vec3::zero(),
             lights: &[],
             ambient_factor: 1.0,
-            background: Color::new(0.0, 0.0, 0.0, 1.0),
+            background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
             texture_manager: &e.manager,
             max_distance: RANGE,
         };
@@ -414,7 +417,7 @@ fn only_faces_toward_a_same_medium_neighbor_are_removed() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::new(0.0, 0.0, 0.0, 1.0),
+        background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };
@@ -437,7 +440,7 @@ fn water_still_reflects_partially_and_never_emits() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 0.0,
-        background: Color::new(0.0, 0.0, 1.0, 1.0),
+        background: Background::Solid(Color::new(0.0, 0.0, 1.0, 1.0)),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };
@@ -460,7 +463,7 @@ fn shadows_through_water_are_attenuated_not_solid_black() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::new(0.0, 0.0, 0.0, 1.0),
+        background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };
@@ -486,7 +489,7 @@ fn contiguous_water_shadows_count_only_the_real_boundaries() {
             camera_position: Vec3::zero(),
             lights: &[],
             ambient_factor: 1.0,
-            background: Color::new(0.0, 0.0, 0.0, 1.0),
+            background: Background::Solid(Color::new(0.0, 0.0, 0.0, 1.0)),
             texture_manager: &e.manager,
             max_distance: RANGE,
         };

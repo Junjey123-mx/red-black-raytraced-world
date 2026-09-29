@@ -94,6 +94,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -106,6 +108,7 @@ use core::math::{IVec3, Vec2, Vec3};
 use core::ray::Ray;
 use renderer::normal_mapping::{decode_normal, perturb_normal, sample_shading_normal};
 use renderer::raytracer::{VoxelScene, nearest_voxel_hit, trace_ray};
+use renderer::skybox::Background;
 use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
 use scene::block_type::BlockType;
@@ -306,7 +309,7 @@ fn the_normal_map_changes_lit_pixels_without_changing_geometry() {
             camera_position: r.origin,
             lights: &lights,
             ambient_factor: 0.1,
-            background: Color::black(),
+            background: Background::Solid(Color::black()),
             texture_manager: &e.manager,
             max_distance: RANGE,
         };

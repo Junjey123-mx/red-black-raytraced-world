@@ -98,6 +98,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -306,23 +308,29 @@ fn the_world_mode_never_builds_the_catalog_scene() {
     let materials = scene::material_library::MaterialLibrary::new();
     let manager = TextureManager::new();
     let lights = world_lights();
+    let scene_view = renderer::raytracer::VoxelScene {
+        world: scene.world(),
+        materials: &materials,
+        camera_position: camera.position,
+        lights: &lights,
+        ambient_factor: renderer::shading::DEFAULT_AMBIENT_FACTOR,
+        background: world_background(),
+        texture_manager: &manager,
+        max_distance: WORLD_MAX_DISTANCE,
+    };
     let trace = |x, y| {
         let ray = camera::projection::primary_ray(&camera, x, y, 80, 60);
-        renderer::raytracer::cast_ray_voxel_lit(
-            scene.world(),
-            &materials,
-            &ray,
-            camera.position,
-            &lights,
-            renderer::shading::DEFAULT_AMBIENT_FACTOR,
-            world_background(),
-            &manager,
-            WORLD_MAX_DISTANCE,
+        (
+            renderer::raytracer::cast_ray_voxel(&scene_view, &ray),
+            world_background().color(ray.direction),
         )
     };
-    assert_eq!(trace(0, 0), world_background());
-    assert_eq!(trace(79, 0), world_background());
-    assert_ne!(trace(40, 30), world_background());
+    let (sky, expected) = trace(0, 0);
+    assert_eq!(sky, expected);
+    let (sky, expected) = trace(79, 0);
+    assert_eq!(sky, expected);
+    let (ground, expected) = trace(40, 30);
+    assert_ne!(ground, expected);
 }
 
 #[test]

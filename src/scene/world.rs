@@ -9,6 +9,7 @@ use crate::camera::camera::Camera;
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
+use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
@@ -21,6 +22,11 @@ use crate::scene::voxel_world::VoxelWorld;
 
 /// Scene range of the world: primary traversal and directional shadow rays.
 pub const WORLD_MAX_DISTANCE: f32 = 96.0;
+
+/// Ambient term of the daytime Overworld: enough to keep shadowed faces and
+/// the undersides readable under the bright sky, low enough that the sun's
+/// shadows stay clearly visible.
+pub const WORLD_AMBIENT_FACTOR: f32 = 0.30;
 
 /// The main world scene: the Overworld terrain and everything built on it.
 pub struct WorldScene {
@@ -125,18 +131,40 @@ pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
     library
 }
 
-/// A single white sun from above.
+/// Direction from any surface toward the sun: high and diagonal (from the
+/// south-east and above), so every block shows one lit top, one lit side and
+/// one shaded side, with legible cast shadows.
+pub fn sun_direction() -> Vec3 {
+    Vec3::new(0.45, 1.0, 0.35)
+}
+
+/// The sun's color: white with a faint warm tint.
+pub fn sun_color() -> Color {
+    Color::new(1.0, 0.97, 0.90, 1.0)
+}
+
+/// The Overworld's lights: the sun alone (block lamps arrive with the house).
 pub fn world_lights() -> Vec<Light> {
     vec![Light::Directional(DirectionalLight::new(
-        Vec3::new(0.3, 1.0, 0.4),
-        Color::white(),
+        sun_direction(),
+        sun_color(),
         1.0,
     ))]
 }
 
-/// Neutral dark sky until the daytime sky lands.
-pub fn world_background() -> Color {
-    Color::new(0.10, 0.12, 0.16, 1.0)
+/// The clear daytime sky: a medium celeste-blue zenith, a pale luminous
+/// horizon and a very pale haze below it.
+pub fn world_sky() -> SkyGradient {
+    SkyGradient {
+        zenith: Color::new(0.33, 0.56, 0.92, 1.0),
+        horizon: Color::new(0.72, 0.85, 0.97, 1.0),
+        ground: Color::new(0.80, 0.88, 0.95, 1.0),
+    }
+}
+
+/// What World rays see on a miss: the daytime sky.
+pub fn world_background() -> Background {
+    Background::Sky(world_sky())
 }
 
 /// Orbit camera looking at the terrain from the front, elevated.

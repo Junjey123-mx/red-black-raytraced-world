@@ -94,6 +94,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -106,6 +108,7 @@ use core::material::{AlphaMode, Material, MaterialId};
 use core::math::{IVec3, Vec3};
 use core::ray::Ray;
 use renderer::raytracer::{VoxelScene, nearest_visible_hit, nearest_voxel_hit};
+use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_geometry::{BlockGeometry, GeometryKind};
 use scene::block_shape_factory::block_geometry;
@@ -260,7 +263,7 @@ fn a_ray_hits_the_leaf_at_the_cell_edge() {
         camera_position: r.origin,
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::black(),
+        background: Background::Solid(Color::black()),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };
@@ -293,7 +296,7 @@ fn a_ray_through_a_window_pane_reaches_the_block_behind() {
         camera_position: Vec3::zero(),
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::black(),
+        background: Background::Solid(Color::black()),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };

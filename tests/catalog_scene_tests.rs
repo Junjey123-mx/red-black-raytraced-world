@@ -94,6 +94,8 @@ mod renderer {
     pub mod shading;
     #[path = "../src/renderer/shadows.rs"]
     pub mod shadows;
+    #[path = "../src/renderer/skybox.rs"]
+    pub mod skybox;
     #[path = "../src/renderer/texture_sampling.rs"]
     pub mod texture_sampling;
     #[path = "../src/renderer/voxel_traversal.rs"]
@@ -111,6 +113,7 @@ use renderer::framebuffer::Framebuffer;
 use renderer::raytracer::{
     MISSING_MATERIAL_COLOR, VoxelScene, cast_ray_voxel_lit, nearest_visible_hit, nearest_voxel_hit,
 };
+use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_geometry::BlockGeometry;
 use scene::block_shape_factory::block_geometry;
@@ -614,7 +617,7 @@ fn a_leaves_cutout_texel_lets_the_ray_continue() {
         camera_position: r.origin,
         lights: &[],
         ambient_factor: 1.0,
-        background: Color::black(),
+        background: Background::Solid(Color::black()),
         texture_manager: &e.manager,
         max_distance: RANGE,
     };

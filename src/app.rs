@@ -5,10 +5,10 @@ use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::projection::primary_ray;
 use crate::config;
-use crate::core::color::Color as CpuColor;
 use crate::renderer::framebuffer::Framebuffer;
-use crate::renderer::raytracer::cast_ray_voxel_lit;
+use crate::renderer::raytracer::{VoxelScene, cast_ray_voxel};
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
+use crate::renderer::skybox::Background;
 use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
 use crate::scene::light::Light;
 use crate::scene::material_gallery::{
@@ -18,8 +18,8 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
-    WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background, world_camera, world_lights,
-    world_materials,
+    WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background,
+    world_camera, world_lights, world_materials,
 };
 
 /// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
@@ -41,7 +41,10 @@ trait ViewerMode {
     fn world(&self) -> &VoxelWorld;
     fn materials(&self) -> &MaterialLibrary;
     fn lights(&self) -> &[Light];
-    fn background(&self) -> CpuColor;
+    /// What a ray sees on a miss: a flat backdrop or a directional sky.
+    fn background(&self) -> Background;
+    /// Ambient term of the local shading.
+    fn ambient_factor(&self) -> f32;
     /// Scene range: bounds primary traversal and directional shadow rays.
     fn max_distance(&self) -> f32;
     /// The orbit camera's starting (and `R` reset) pose.
@@ -100,8 +103,12 @@ impl ViewerMode for CatalogMode {
         &self.lights
     }
 
-    fn background(&self) -> CpuColor {
-        gallery_background()
+    fn background(&self) -> Background {
+        Background::Solid(gallery_background())
+    }
+
+    fn ambient_factor(&self) -> f32 {
+        DEFAULT_AMBIENT_FACTOR
     }
 
     fn max_distance(&self) -> f32 {
@@ -173,8 +180,12 @@ impl ViewerMode for WorldMode {
         &self.lights
     }
 
-    fn background(&self) -> CpuColor {
+    fn background(&self) -> Background {
         world_background()
+    }
+
+    fn ambient_factor(&self) -> f32 {
+        WORLD_AMBIENT_FACTOR
     }
 
     fn max_distance(&self) -> f32 {
@@ -211,22 +222,22 @@ fn render(
 ) {
     let width = framebuffer.width();
     let height = framebuffer.height();
+    // Assembled once per frame; every pixel traces through the same scene.
+    let scene = VoxelScene {
+        world: mode.world(),
+        materials: mode.materials(),
+        camera_position: camera.position,
+        lights: mode.lights(),
+        ambient_factor: mode.ambient_factor(),
+        background: mode.background(),
+        texture_manager,
+        max_distance: mode.max_distance(),
+    };
 
     for y in 0..height {
         for x in 0..width {
             let ray = primary_ray(camera, x, y, width, height);
-            let color = cast_ray_voxel_lit(
-                mode.world(),
-                mode.materials(),
-                &ray,
-                camera.position,
-                mode.lights(),
-                DEFAULT_AMBIENT_FACTOR,
-                mode.background(),
-                texture_manager,
-                mode.max_distance(),
-            );
-            framebuffer.set_pixel(x, y, color);
+            framebuffer.set_pixel(x, y, cast_ray_voxel(&scene, &ray));
         }
     }
 }
