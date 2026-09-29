@@ -1,8 +1,7 @@
 // Turns the fBM height field into real voxel columns: the bounded, softly
 // edged Overworld mass that `WorldScene` presents. Every column is solid
-// from its bottom to its grass top; the material of each depth comes from
-// the stratification rules (provisional grass-over-dirt until the geological
-// strata land).
+// from its bottom to its grass top and stratified like Minecraft ground:
+// grass, a shallow band of dirt, stone, and deepslate at depth.
 #![allow(dead_code)]
 
 use crate::core::material::MaterialId;
@@ -10,10 +9,13 @@ use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::orientation::Orientation;
-use crate::scene::overworld_blocks::dirt_material_id;
+use crate::scene::overworld_blocks::{
+    deepslate_material_id, dirt_material_id, stone_block_material_id,
+};
 use crate::scene::scene::grass_material_id;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::fbm::HeightField;
+use crate::scene::terrain::hash::hash01;
 use crate::scene::voxel_world::VoxelWorld;
 
 /// Exponent of the footprint's superellipse: `1` would be a pure diamond,
@@ -78,15 +80,66 @@ pub fn column_surface(config: &TerrainConfig, field: &HeightField, x: i32, z: i3
     Some((height - rim).max(config.min_surface_height()))
 }
 
-/// The block filling cell `y` of a column whose grass sits at `surface`:
-/// grass on top, dirt everywhere below (the stone and deepslate strata
-/// replace the deep part of this rule in the next step).
-pub fn column_block(_config: &TerrainConfig, y: i32, surface: i32) -> (BlockType, MaterialId) {
+/// Thinnest soil band under the grass; `config.dirt_depth` is the thickest.
+pub const MIN_DIRT_DEPTH: i32 = 2;
+
+/// Seed salt of the soil-thickness choice, so it is independent of the
+/// relief noise of the same column.
+const DIRT_DEPTH_SALT: u32 = 0x0D12_7000;
+
+/// Thickness of the dirt band under the grass of column `(x, z)`: varies
+/// deterministically between `MIN_DIRT_DEPTH` and `config.dirt_depth`.
+pub fn dirt_depth(config: &TerrainConfig, x: i32, z: i32) -> i32 {
+    let max = config.dirt_depth.max(MIN_DIRT_DEPTH);
+    let span = (max - MIN_DIRT_DEPTH + 1) as f32;
+    MIN_DIRT_DEPTH + (hash01(config.seed ^ DIRT_DEPTH_SALT, x, z) * span) as i32
+}
+
+/// Geological stratum of cell `y` in column `(x, z)` whose grass sits at
+/// `surface`:
+///
+/// ```text
+/// y == surface                      -> Grass
+/// surface - dirt_depth <= y < surface -> Dirt
+/// y <= deepslate_level              -> Deepslate
+/// otherwise                         -> Stone
+/// ```
+///
+/// The soil band always follows the grass, so a low column may run out of
+/// stone before reaching the deepslate; deepslate never sits above dirt.
+pub fn stratum(config: &TerrainConfig, x: i32, z: i32, y: i32, surface: i32) -> BlockType {
     if y == surface {
-        (BlockType::Grass, grass_material_id())
+        BlockType::Grass
+    } else if y >= surface - dirt_depth(config, x, z) {
+        BlockType::Dirt
+    } else if y <= config.deepslate_level {
+        BlockType::Deepslate
     } else {
-        (BlockType::Dirt, dirt_material_id())
+        BlockType::Stone
     }
+}
+
+/// The material of a terrain stratum block.
+pub fn stratum_material(block_type: BlockType) -> MaterialId {
+    match block_type {
+        BlockType::Grass => grass_material_id(),
+        BlockType::Dirt => dirt_material_id(),
+        BlockType::Deepslate => deepslate_material_id(),
+        _ => stone_block_material_id(),
+    }
+}
+
+/// The block filling cell `y` of column `(x, z)` whose grass sits at
+/// `surface`: its stratum and that stratum's material.
+pub fn column_block(
+    config: &TerrainConfig,
+    x: i32,
+    z: i32,
+    y: i32,
+    surface: i32,
+) -> (BlockType, MaterialId) {
+    let block_type = stratum(config, x, z, y, surface);
+    (block_type, stratum_material(block_type))
 }
 
 /// Bounds of the generated mass, for tests and for framing.
@@ -112,7 +165,7 @@ pub fn generate_terrain(config: &TerrainConfig, world: &mut VoxelWorld) -> Heigh
             };
             let bottom = column_bottom(config, x, z);
             for y in bottom..=surface {
-                let (block_type, material) = column_block(config, y, surface);
+                let (block_type, material) = column_block(config, x, z, y, surface);
                 world.insert(
                     IVec3::new(x, y, z),
                     BlockInstance::new(block_type, material, Orientation::Up),
