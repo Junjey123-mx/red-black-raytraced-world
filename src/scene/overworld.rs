@@ -6,11 +6,14 @@
 use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
-use crate::scene::material_gallery::{leaves_material_id, water_material_id};
+use crate::scene::material_gallery::{
+    glass_material_id, leaves_material_id, redstone_lamp_material_id, water_material_id,
+};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::{
-    dirt_material_id, double_wood_slab_material_id, log_material_id, sand_material_id,
-    stone_block_material_id, wood_planks_material_id,
+    dirt_material_id, double_wood_slab_material_id, fence_material_id, log_material_id,
+    sand_material_id, stone_block_material_id, wood_door_bottom_material_id,
+    wood_door_top_material_id, wood_planks_material_id, wood_stairs_material_id,
 };
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::{footprint_contains, footprint_radius};
@@ -497,4 +500,159 @@ pub fn build_house(config: &TerrainConfig, world: &mut VoxelWorld) -> HouseLayou
         }
     }
     layout
+}
+
+// ---------------------------------------------------------------------
+// House exterior: roof, door, glass, fence, lamps
+// ---------------------------------------------------------------------
+
+/// Row of the roof ridge (the middle row of the footprint).
+pub const HOUSE_RIDGE_Z: i32 = 10;
+
+/// The roof overhangs the east and west walls by this many blocks.
+pub const HOUSE_ROOF_OVERHANG: i32 = 1;
+
+/// Row of the porch in front of the door (just south of the house).
+pub const HOUSE_PORCH_Z: i32 = 13;
+
+/// Lamp cells: in the south wall, one course up, flanking the door.
+pub const HOUSE_LAMPS: [(i32, i32); 2] = [(HOUSE_DOOR_X - 1, 12), (HOUSE_DOOR_X + 1, 12)];
+
+/// One roof block: its cell, block type and orientation.
+pub type RoofBlock = (IVec3, BlockType, Orientation);
+
+/// The fittings of the finished house exterior.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HouseExterior {
+    pub roof: Vec<RoofBlock>,
+    /// Lower and upper door cells.
+    pub door: Vec<IVec3>,
+    pub glass: Vec<IVec3>,
+    pub fence: Vec<IVec3>,
+    pub lamps: Vec<IVec3>,
+}
+
+/// The stair orientation of an eave row: a stair's raised half faces away
+/// from its orientation (canonical `South` stairs are high on the north),
+/// so rows south of the ridge face `South` and rows north of it `North`.
+pub fn roof_stair_orientation(z: i32) -> Orientation {
+    if z > HOUSE_RIDGE_Z {
+        Orientation::South
+    } else {
+        Orientation::North
+    }
+}
+
+/// Finishes the house exterior on top of `build_house`'s structure:
+///
+/// - a gabled stair roof rising row by row toward the ridge (planks fill
+///   the body under the slope, a double slab caps the ridge), one block of
+///   overhang east and west and a small stair awning over the door;
+/// - the two-cell `WoodDoor` in the entrance, closed, facing south;
+/// - `Glass` in every window opening;
+/// - a short `Fence` line along the porch, open in front of the door;
+/// - two lit `RedstoneLamp` blocks in the wall flanking the door.
+pub fn furnish_house(config: &TerrainConfig, world: &mut VoxelWorld) -> HouseExterior {
+    let r = HOUSE_FOOTPRINT;
+    let top = config.max_surface_height() + 2;
+    let bottom = config.deepslate_level - 8;
+    let wall_top = HOUSE_FLOOR_LEVEL + HOUSE_WALL_HEIGHT;
+    let mut ext = HouseExterior::default();
+
+    // Roof: layer k (k = 0, 1, 2) covers rows |z - ridge| <= 2 - k, with
+    // stairs on its two outermost rows and planks inside; the ridge is a
+    // double slab.
+    let x_range = (r.min_x - HOUSE_ROOF_OVERHANG)..=(r.max_x + HOUSE_ROOF_OVERHANG);
+    for layer in 0..=2 {
+        let half = 2 - layer;
+        let y = wall_top + 1 + layer;
+        for z in (HOUSE_RIDGE_Z - half)..=(HOUSE_RIDGE_Z + half) {
+            for x in x_range.clone() {
+                let cell = IVec3::new(x, y, z);
+                let (block_type, material, orientation) = if half == 0 {
+                    (
+                        BlockType::DoubleWoodSlab,
+                        double_wood_slab_material_id(),
+                        Orientation::Up,
+                    )
+                } else if (z - HOUSE_RIDGE_Z).abs() == half {
+                    (
+                        BlockType::WoodStairs,
+                        wood_stairs_material_id(),
+                        roof_stair_orientation(z),
+                    )
+                } else {
+                    (
+                        BlockType::WoodPlanks,
+                        wood_planks_material_id(),
+                        Orientation::Up,
+                    )
+                };
+                world.insert(cell, BlockInstance::new(block_type, material, orientation));
+                ext.roof.push((cell, block_type, orientation));
+            }
+        }
+    }
+    // Awning over the door.
+    for x in (HOUSE_DOOR_X - 1)..=(HOUSE_DOOR_X + 1) {
+        let cell = IVec3::new(x, wall_top + 1, HOUSE_PORCH_Z);
+        world.insert(
+            cell,
+            BlockInstance::new(
+                BlockType::WoodStairs,
+                wood_stairs_material_id(),
+                Orientation::South,
+            ),
+        );
+        ext.roof
+            .push((cell, BlockType::WoodStairs, Orientation::South));
+    }
+
+    // Door.
+    for (dy, material) in [
+        (1, wood_door_bottom_material_id()),
+        (2, wood_door_top_material_id()),
+    ] {
+        let cell = IVec3::new(HOUSE_DOOR_X, HOUSE_FLOOR_LEVEL + dy, r.max_z);
+        world.insert(
+            cell,
+            BlockInstance::new(BlockType::WoodDoor, material, Orientation::South),
+        );
+        ext.door.push(cell);
+    }
+
+    // Glass.
+    for (x, z) in HOUSE_WINDOWS {
+        let cell = IVec3::new(x, HOUSE_FLOOR_LEVEL + 2, z);
+        world.insert(cell, full(BlockType::Glass, glass_material_id()));
+        ext.glass.push(cell);
+    }
+
+    // Porch fence, standing on the ground, open in front of the door.
+    for x in r.min_x..=r.max_x {
+        if x == HOUSE_DOOR_X {
+            continue;
+        }
+        let Some(ground) = column_top(world, x, HOUSE_PORCH_Z, top, bottom) else {
+            continue;
+        };
+        let cell = IVec3::new(x, ground + 1, HOUSE_PORCH_Z);
+        world.insert(
+            cell,
+            BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::South),
+        );
+        ext.fence.push(cell);
+    }
+
+    // Lamps.
+    for (x, z) in HOUSE_LAMPS {
+        let cell = IVec3::new(x, HOUSE_FLOOR_LEVEL + 2, z);
+        world.insert(
+            cell,
+            full(BlockType::RedstoneLampLit, redstone_lamp_material_id()),
+        );
+        ext.lamps.push(cell);
+    }
+
+    ext
 }

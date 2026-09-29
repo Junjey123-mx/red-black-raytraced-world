@@ -112,19 +112,66 @@ use core::math::IVec3;
 use scene::block_type::BlockType;
 use scene::overworld::{
     HOUSE_DOOR_X, HOUSE_FLOOR_LEVEL, HOUSE_FOOTPRINT, HOUSE_WALL_HEIGHT, HOUSE_WINDOWS,
-    pond_basin_columns,
+    HouseLayout, build_house, carve_pond, column_top, pond_basin_columns,
 };
 use scene::overworld_blocks::{
     double_wood_slab_material_id, log_material_id, wood_planks_material_id,
 };
-use scene::terrain::generator::{column_bottom, footprint_contains};
+use scene::terrain::TerrainConfig;
+use scene::terrain::generator::{column_bottom, footprint_contains, generate_terrain};
+use scene::voxel_world::VoxelWorld;
 use scene::world::WorldScene;
 
-fn block_type(scene: &WorldScene, cell: IVec3) -> Option<BlockType> {
+/// The house structure stage: terrain, pond and `build_house`, before the
+/// exterior (roof, door, glass, fence, lamps) is added.
+struct Structure {
+    config: TerrainConfig,
+    house: HouseLayout,
+    world: VoxelWorld,
+}
+
+impl Structure {
+    fn new() -> Self {
+        let config = TerrainConfig::official();
+        let mut world = VoxelWorld::new();
+        generate_terrain(&config, &mut world);
+        carve_pond(&config, &mut world);
+        let house = build_house(&config, &mut world);
+        Self {
+            config,
+            house,
+            world,
+        }
+    }
+
+    fn config(&self) -> &TerrainConfig {
+        &self.config
+    }
+
+    fn house(&self) -> &HouseLayout {
+        &self.house
+    }
+
+    fn world(&self) -> &VoxelWorld {
+        &self.world
+    }
+
+    fn column_top(&self, x: i32, z: i32) -> Option<i32> {
+        column_top(
+            &self.world,
+            x,
+            z,
+            self.config.max_surface_height() + 16,
+            self.config.deepslate_level - 8,
+        )
+    }
+}
+
+fn block_type(scene: &Structure, cell: IVec3) -> Option<BlockType> {
     scene.world().get(cell).map(|b| b.block_type())
 }
 
-fn house_volume(scene: &WorldScene) -> Vec<(IVec3, BlockType)> {
+fn house_volume(scene: &Structure) -> Vec<(IVec3, BlockType)> {
     let r = HOUSE_FOOTPRINT;
     let mut out = Vec::new();
     for z in r.min_z..=r.max_z {
@@ -142,7 +189,7 @@ fn house_volume(scene: &WorldScene) -> Vec<(IVec3, BlockType)> {
 
 #[test]
 fn the_house_stands_inside_the_terrain_on_an_allowed_footprint() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     let r = HOUSE_FOOTPRINT;
     assert!(
         matches!((r.width(), r.depth()), (6, 5) | (7, 5)),
@@ -161,7 +208,7 @@ fn the_house_stands_inside_the_terrain_on_an_allowed_footprint() {
 
 #[test]
 fn the_floor_is_planks_supported_by_solid_ground() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     let r = HOUSE_FOOTPRINT;
     assert_eq!(scene.house().floor.len(), (r.width() * r.depth()) as usize);
     for cell in &scene.house().floor {
@@ -192,7 +239,7 @@ fn the_floor_is_planks_supported_by_solid_ground() {
 
 #[test]
 fn the_leveling_stays_local_to_the_footprint() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     let r = HOUSE_FOOTPRINT;
     // Outside the house the relief is untouched: several heights around.
     let mut heights = std::collections::BTreeSet::new();
@@ -211,7 +258,7 @@ fn the_leveling_stays_local_to_the_footprint() {
 
 #[test]
 fn the_walls_are_three_courses_of_approved_wood_with_log_corners() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     let r = HOUSE_FOOTPRINT;
     let house = scene.house();
     assert_eq!(HOUSE_WALL_HEIGHT, 3);
@@ -257,7 +304,7 @@ fn the_walls_are_three_courses_of_approved_wood_with_log_corners() {
 
 #[test]
 fn the_entrance_and_windows_are_open() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     let house = scene.house();
     let door = [
         IVec3::new(HOUSE_DOOR_X, HOUSE_FLOOR_LEVEL + 1, HOUSE_FOOTPRINT.max_z),
@@ -312,7 +359,7 @@ fn the_house_does_not_touch_the_pond_or_the_trees() {
 
 #[test]
 fn only_authorized_materials_make_up_the_structure() {
-    let scene = WorldScene::new();
+    let scene = Structure::new();
     for (cell, b) in house_volume(&scene) {
         assert!(
             matches!(
@@ -326,8 +373,8 @@ fn only_authorized_materials_make_up_the_structure() {
 
 #[test]
 fn the_house_is_deterministic() {
-    let a = WorldScene::new();
-    let b = WorldScene::new();
+    let a = Structure::new();
+    let b = Structure::new();
     assert_eq!(a.house(), b.house());
     assert_eq!(house_volume(&a), house_volume(&b));
 }

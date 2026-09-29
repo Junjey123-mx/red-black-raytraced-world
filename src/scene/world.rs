@@ -12,11 +12,13 @@ use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
-    GalleryTextures, advanced_materials_library, leaves_material_id, water_material_id,
+    GalleryTextures, advanced_materials_library, glass_material_id, leaves_material_id,
+    redstone_lamp_material_id, water_material_id,
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::overworld::{
-    HouseLayout, PondLayout, Tree, build_house, carve_pond, column_top, plant_trees,
+    HouseExterior, HouseLayout, PondLayout, Tree, build_house, carve_pond, column_top,
+    furnish_house, plant_trees,
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
@@ -41,6 +43,7 @@ pub struct WorldScene {
     bounds: TerrainBounds,
     pond: PondLayout,
     house: HouseLayout,
+    exterior: HouseExterior,
     trees: Vec<Tree>,
     world: VoxelWorld,
 }
@@ -58,6 +61,7 @@ impl WorldScene {
         let bounds = terrain_bounds(&config, &field);
         let pond = carve_pond(&config, &mut world);
         let house = build_house(&config, &mut world);
+        let exterior = furnish_house(&config, &mut world);
         let trees = plant_trees(&config, &mut world, &pond);
         Self {
             config,
@@ -65,9 +69,15 @@ impl WorldScene {
             bounds,
             pond,
             house,
+            exterior,
             trees,
             world,
         }
+    }
+
+    /// The roof, door, glass, fence and lamps of the house.
+    pub fn house_exterior(&self) -> &HouseExterior {
+        &self.exterior
     }
 
     /// The house built on the plateau.
@@ -166,7 +176,12 @@ pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
     insert_overworld_materials(&mut library, &textures.blocks);
 
     let gallery = advanced_materials_library(&textures.gallery);
-    for id in [water_material_id(), leaves_material_id()] {
+    for id in [
+        water_material_id(),
+        leaves_material_id(),
+        glass_material_id(),
+        redstone_lamp_material_id(),
+    ] {
         let material = gallery
             .get(id)
             .expect("the gallery defines every optical specimen")
