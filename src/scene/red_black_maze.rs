@@ -386,3 +386,73 @@ pub fn compose_crimson(
     }
     layout
 }
+
+use crate::scene::overworld_blocks::{
+    crying_obsidian_orange_material_id, orange_club_material_id, orange_spade_material_id,
+};
+
+/// Lays the Orange / Black Club family over its sector: clubs and spades
+/// as emblems, polished blackstone as paved ground, short smooth-basalt
+/// columns hanging under the surface, a few orange crying-obsidian
+/// accents, and orange-accented brick steps as terraces. The darker,
+/// stonier counterpart of Crimson, blended into the same ground.
+pub fn compose_orange(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    surface: &RedBlackSurface,
+    world: &mut VoxelWorld,
+) -> FamilyLayout {
+    let mut layout = FamilyLayout::new(Family::Orange);
+    for cell in &surface.cells {
+        if family_zone(terrain, rhombus, cell.x, cell.z) != Family::Orange {
+            continue;
+        }
+        let roll = hash01(terrain.seed ^ FAMILY_ROLL_SALT, cell.x, cell.z);
+        let under = IVec3::new(cell.x, cell.y - 1, cell.z);
+        let under2 = IVec3::new(cell.x, cell.y - 2, cell.z);
+        if roll < 0.10 {
+            world.insert(
+                *cell,
+                down(BlockType::OrangeClub, orange_club_material_id()),
+            );
+            layout.symbols.push(*cell);
+        } else if roll < 0.19 {
+            world.insert(
+                *cell,
+                down(BlockType::OrangeSpade, orange_spade_material_id()),
+            );
+            layout.symbols.push(*cell);
+        } else if roll < 0.34 {
+            world.insert(
+                *cell,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+            layout.ground.push(*cell);
+        } else if roll < 0.39 {
+            world.insert(
+                *cell,
+                down(
+                    BlockType::CryingObsidianOrange,
+                    crying_obsidian_orange_material_id(),
+                ),
+            );
+            layout.accents.push(*cell);
+        } else if roll < 0.47 && !world.contains(under) && !world.contains(under2) {
+            for c in [under, under2] {
+                world.insert(
+                    c,
+                    down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+                );
+                layout.structures.push(c);
+            }
+        } else if roll < 0.59 && !world.contains(under) {
+            let (block_type, material) = Family::Orange.bricks();
+            world.insert(under, down(block_type, material));
+            layout.terraces.push(under);
+        }
+    }
+    layout
+}

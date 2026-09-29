@@ -28,7 +28,7 @@ use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_ma
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
 use crate::scene::red_black_maze::{
     FamilyLayout, LowerMass, RedBlackSurface, build_lower_mass, build_red_black_surface,
-    compose_crimson,
+    compose_crimson, compose_orange,
 };
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
@@ -94,12 +94,10 @@ impl WorldScene {
         let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
         let inverted_descent = build_inverted_descent(&rhombus, &lower_mass, &mut world);
         let lower_surface = build_red_black_surface(&config, &rhombus, &lower_mass, &mut world);
-        let families = vec![compose_crimson(
-            &config,
-            &rhombus,
-            &lower_surface,
-            &mut world,
-        )];
+        let families = vec![
+            compose_crimson(&config, &rhombus, &lower_surface, &mut world),
+            compose_orange(&config, &rhombus, &lower_surface, &mut world),
+        ];
         Self {
             config,
             field,
