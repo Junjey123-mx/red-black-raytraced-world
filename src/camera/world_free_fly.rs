@@ -303,6 +303,13 @@ pub fn rotate_around(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
     v * cos + axis.cross(v) * sin
 }
 
+/// Rotates any `v` by `angle` radians around the unit `axis` (full
+/// Rodrigues formula).
+pub fn rotate_general(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
+    let (sin, cos) = angle.sin_cos();
+    v * cos + axis.cross(v) * sin + axis * (axis.dot(v) * (1.0 - cos))
+}
+
 /// An in-progress traversal: which realm the camera leaves and enters and
 /// how far the roll has come.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -434,20 +441,19 @@ impl WorldFreeFlyCameraState {
         }
     }
 
-    /// The vertical the sky is hung along: the realm's up, blended toward
-    /// the destination realm's up during a transition (through the rolled
-    /// view up at the midpoint, where the two cancel out).
+    /// The vertical the sky is hung along: the realm's up, or, during a
+    /// transition, the realm-of-origin's up rotated continuously around the
+    /// camera's horizontal axis by the roll angle, so the sky turns over
+    /// with the view and arrives exactly at the destination realm's up.
     pub fn sky_up(&self) -> Vec3 {
         match &self.transition {
             Some(t) => {
                 let from = t.from_realm.up();
-                let to = t.to_realm.up();
-                let mixed = from * (1.0 - t.eased()) + to * t.eased();
-                if mixed.length_squared() > 0.05 {
-                    mixed.normalize()
-                } else {
-                    self.rolled_up()
+                let mut axis = self.forward().cross(from);
+                if axis.length_squared() < 1e-6 {
+                    axis = Vec3::new(1.0, 0.0, 0.0);
                 }
+                rotate_general(from, axis.normalize(), t.roll_angle()).normalize()
             }
             None => self.local_up,
         }
