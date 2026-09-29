@@ -74,6 +74,8 @@ mod scene {
     pub mod overworld_blocks;
     #[path = "../src/scene/scene.rs"]
     pub mod scene;
+    #[path = "../src/scene/terrain/mod.rs"]
+    pub mod terrain;
     #[path = "../src/scene/texture_manager.rs"]
     pub mod texture_manager;
     #[path = "../src/scene/voxel_world.rs"]
@@ -296,16 +298,17 @@ fn the_world_mode_never_builds_the_catalog_scene() {
     let world_rs = std::fs::read_to_string("src/scene/world.rs").unwrap();
     assert!(!world_rs.contains("CatalogScene::new") && !world_rs.contains("catalog::"));
 
-    // Before Gate 12 the world is empty and every ray sees the sky.
+    // The world is the generated Overworld terrain, never the catalog: the
+    // sky corners of the initial framing miss, the center ray hits terrain.
     let scene = WorldScene::new();
-    assert!(scene.world().is_empty());
+    assert!(!scene.world().is_empty());
     let camera = world_camera(4.0 / 3.0);
     let materials = scene::material_library::MaterialLibrary::new();
     let manager = TextureManager::new();
     let lights = world_lights();
-    for (x, y) in [(0, 0), (40, 30), (79, 59)] {
+    let trace = |x, y| {
         let ray = camera::projection::primary_ray(&camera, x, y, 80, 60);
-        let c = renderer::raytracer::cast_ray_voxel_lit(
+        renderer::raytracer::cast_ray_voxel_lit(
             scene.world(),
             &materials,
             &ray,
@@ -315,9 +318,11 @@ fn the_world_mode_never_builds_the_catalog_scene() {
             world_background(),
             &manager,
             WORLD_MAX_DISTANCE,
-        );
-        assert_eq!(c, world_background());
-    }
+        )
+    };
+    assert_eq!(trace(0, 0), world_background());
+    assert_eq!(trace(79, 0), world_background());
+    assert_ne!(trace(40, 30), world_background());
 }
 
 #[test]

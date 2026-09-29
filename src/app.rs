@@ -15,11 +15,11 @@ use crate::scene::material_gallery::{
     GALLERY_MAX_DISTANCE, gallery_background, gallery_camera, gallery_lights,
 };
 use crate::scene::material_library::MaterialLibrary;
-use crate::scene::overworld_blocks::OverworldBlockTextures;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
-    WORLD_MAX_DISTANCE, WorldScene, world_background, world_camera, world_lights, world_materials,
+    WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_background, world_camera, world_lights,
+    world_materials,
 };
 
 /// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
@@ -139,8 +139,7 @@ impl ViewerMode for CatalogMode {
     }
 }
 
-/// The main world. Gate 11.5 only reserves it: `WorldScene` is still empty
-/// and Gate 12 builds the Overworld into it. It never builds `CatalogScene`.
+/// The main world: the Overworld `WorldScene`. It never builds `CatalogScene`.
 struct WorldMode {
     scene: WorldScene,
     materials: MaterialLibrary,
@@ -148,12 +147,11 @@ struct WorldMode {
 }
 
 impl WorldMode {
-    /// Loads the definitive block textures once through the shared
-    /// `TextureManager`, so the world's material library is ready for the
-    /// blocks Gate 12 will place.
+    /// Loads the world's textures once through the shared `TextureManager`
+    /// and builds the Overworld.
     fn new(manager: &mut TextureManager) -> Self {
-        let textures = OverworldBlockTextures::load(manager, OVERWORLD_TEXTURES_DIR)
-            .expect("missing block texture");
+        let textures = WorldTextures::load(manager, OVERWORLD_TEXTURES_DIR, GRASS_TEXTURES_DIR)
+            .expect("missing world texture");
         Self {
             scene: WorldScene::new(),
             materials: world_materials(&textures),
@@ -193,10 +191,7 @@ impl ViewerMode for WorldMode {
     }
 
     fn label(&self) -> String {
-        format!(
-            "World | {} blocks (the Overworld arrives in Gate 12)",
-            self.scene.world().len()
-        )
+        format!("Overworld | {} blocks", self.scene.world().len())
     }
 
     fn help(&self) -> &'static str {

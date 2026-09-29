@@ -1,7 +1,19 @@
 #[path = "."]
 mod scene {
-    #[path = "../src/scene/terrain/mod.rs"]
-    pub mod terrain;
+    #[path = "."]
+    pub mod terrain {
+        #[path = "../src/scene/terrain/config.rs"]
+        pub mod config;
+        #[path = "../src/scene/terrain/fbm.rs"]
+        pub mod fbm;
+        #[path = "../src/scene/terrain/hash.rs"]
+        pub mod hash;
+        #[path = "../src/scene/terrain/noise.rs"]
+        pub mod noise;
+
+        #[allow(unused_imports)]
+        pub use config::{MIN_TERRAIN_SIDE, OFFICIAL_SEED, TerrainConfig};
+    }
 }
 
 use scene::terrain::hash::{HASH01_STEPS, hash_2d, hash01};
