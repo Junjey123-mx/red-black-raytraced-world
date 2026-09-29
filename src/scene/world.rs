@@ -21,6 +21,7 @@ use crate::scene::overworld::{
     furnish_house, lay_path, plant_trees,
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
+use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::fbm::HeightField;
@@ -46,6 +47,8 @@ pub struct WorldScene {
     exterior: HouseExterior,
     trees: Vec<Tree>,
     path: PathLayout,
+    rhombus: RhombusConfig,
+    taper: UpperTaper,
     world: VoxelWorld,
 }
 
@@ -65,6 +68,9 @@ impl WorldScene {
         let exterior = furnish_house(&config, &mut world);
         let trees = plant_trees(&config, &mut world, &pond);
         let path = lay_path(&config, &mut world, &pond, &trees);
+        // The diamond below the Overworld.
+        let rhombus = RhombusConfig::derive(&config);
+        let taper = build_upper_taper(&config, &rhombus, &mut world);
         Self {
             config,
             field,
@@ -74,8 +80,20 @@ impl WorldScene {
             exterior,
             trees,
             path,
+            rhombus,
+            taper,
             world,
         }
+    }
+
+    /// The spatial contract of the diamond.
+    pub fn rhombus(&self) -> &RhombusConfig {
+        &self.rhombus
+    }
+
+    /// The mass added under the terrain down to the shelf.
+    pub fn upper_taper(&self) -> &UpperTaper {
+        &self.taper
     }
 
     /// The cobblestone path from the door to the descent point.

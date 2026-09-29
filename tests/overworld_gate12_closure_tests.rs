@@ -74,6 +74,8 @@ mod scene {
     pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/rhombus.rs"]
+    pub mod rhombus;
     #[path = "../src/scene/scene.rs"]
     pub mod scene;
     #[path = "../src/scene/terrain/mod.rs"]
@@ -253,12 +255,16 @@ fn nothing_of_the_later_gates_is_built() {
     }
     assert_eq!(count(&counts, BlockType::PortalFrameRedObsidian), 0);
     assert_eq!(count(&counts, BlockType::PortalCoreDarkCrimson), 0);
-    // No inverted geometry: nothing hangs under the terrain bottom.
+    // Whatever continues under the terrain bottom (the diamond's geological
+    // taper of Gate 13) is Overworld terrain, checked above; no inverted
+    // Red-Black geometry exists in the Overworld half.
     let b = scene.bounds();
     let c = *scene.config();
     for z in 0..c.depth {
         for x in 0..c.width {
-            assert!(!scene.world().contains(IVec3::new(x, b.min.y - 1, z)));
+            if let Some(block) = scene.world().get(IVec3::new(x, b.min.y - 1, z)) {
+                assert_eq!(block.block_type().family(), BlockFamily::OverworldTerrain);
+            }
         }
     }
 }

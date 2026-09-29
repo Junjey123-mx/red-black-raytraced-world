@@ -153,6 +153,7 @@ fn the_waist_lies_under_the_surface_and_the_tip_under_the_waist() {
     assert!(r.lower_tip_y < r.waist_y);
     // The section narrows to the waist, widens below it and closes at the tip.
     let w = |y| r.section_width(&terrain, y);
+    assert!(w(r.upper_taper_top) > w(r.upper_mass_bottom));
     assert!(w(r.upper_mass_bottom) > w(r.waist_y));
     assert!(w(r.waist_y) < w(r.lower_widest_y));
     assert!(w(r.lower_widest_y) > w(r.lower_tip_y));
@@ -264,23 +265,14 @@ fn invalid_layouts_are_rejected() {
 }
 
 #[test]
-fn no_new_voxels_are_placed_by_the_contract() {
-    // The contract only names coordinates: the scene is still exactly the
-    // Gate 12 Overworld (3261 voxels, nothing under the terrain bottom).
-    let scene = WorldScene::new();
-    let r = RhombusConfig::official();
-    assert_eq!(scene.world().len(), 3261);
-    let c = *scene.config();
-    for z in 0..c.depth {
-        for x in 0..c.width {
-            for y in r.lower_tip_y..r.upper_mass_bottom {
-                assert!(!scene.world().contains(IVec3::new(x, y, z)));
-            }
-        }
-    }
-    assert!(
-        !scene
-            .world()
-            .contains(IVec3::new(r.portal.center_x(), r.waist_y, r.portal.wall_z))
-    );
+fn the_contract_itself_places_no_voxels() {
+    // Deriving and validating the layout is pure: a world stays empty.
+    let terrain = TerrainConfig::official();
+    let r = RhombusConfig::derive(&terrain);
+    assert_eq!(r.validate(&terrain), Ok(()));
+    let world = scene::voxel_world::VoxelWorld::new();
+    assert!(world.is_empty());
+    assert_eq!(r.upper_taper_top, r.upper_mass_bottom + 2);
+    assert!(r.section_radius(r.upper_taper_top) == Some(1.0));
+    assert!(r.section_radius(r.upper_taper_top - 1).unwrap() < 1.0);
 }

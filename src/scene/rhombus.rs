@@ -79,9 +79,12 @@ pub struct RhombusConfig {
     pub center_z: i32,
     /// Highest Overworld surface cell (the grass on the tallest hill).
     pub upper_surface_reference: i32,
-    /// Lowest cell of the Gate 12 terrain at the center of the footprint;
-    /// the upper taper starts one row under it.
+    /// Lowest cell of the Gate 12 terrain at the center of the footprint.
     pub upper_mass_bottom: i32,
+    /// Row where the section starts narrowing: the terrain's rim bottom
+    /// (the rim columns end two rows above the center's bottom), so the
+    /// taper fills in under the rim and continues down to the waist.
+    pub upper_taper_top: i32,
     /// Narrowest row of the diamond: the middle of the portal.
     pub waist_y: i32,
     /// Row of the cutaway floor (the portal sill and the ledge the upper
@@ -100,9 +103,9 @@ pub struct RhombusConfig {
     pub lower_descent_anchor: IVec3,
 }
 
-/// Normalized footprint radius (see `footprint_radius`) of the Gate 12
-/// terrain's innermost bottom row; the upper taper continues from it.
-pub const UPPER_TAPER_START_RADIUS: f32 = 0.55;
+/// Normalized footprint radius (see `footprint_radius`) where the upper
+/// taper starts: the full footprint, at the terrain's rim bottom row.
+pub const UPPER_TAPER_START_RADIUS: f32 = 1.0;
 
 /// Radius at the waist.
 pub const WAIST_RADIUS: f32 = 0.50;
@@ -146,6 +149,7 @@ impl RhombusConfig {
             center_z,
             upper_surface_reference: terrain.max_surface_height(),
             upper_mass_bottom: bottom,
+            upper_taper_top: bottom + 2,
             waist_y,
             shelf_y,
             lower_widest_y: shelf_y - 6,
@@ -165,11 +169,11 @@ impl RhombusConfig {
         let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
         if y > self.upper_surface_reference || y < self.lower_tip_y {
             None
-        } else if y >= self.upper_mass_bottom {
+        } else if y >= self.upper_taper_top {
             Some(1.0)
         } else if y >= self.waist_y {
-            let t = (self.upper_mass_bottom - y) as f32
-                / (self.upper_mass_bottom - self.waist_y) as f32;
+            let t =
+                (self.upper_taper_top - y) as f32 / (self.upper_taper_top - self.waist_y) as f32;
             Some(lerp(UPPER_TAPER_START_RADIUS, WAIST_RADIUS, t))
         } else if y >= self.lower_widest_y {
             let t = (self.waist_y - y) as f32 / (self.waist_y - self.lower_widest_y) as f32;
@@ -265,4 +269,89 @@ impl RhombusConfig {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------
+// Upper taper: the mass between the terrain bottom and the shelf
+// ---------------------------------------------------------------------
+
+use crate::scene::block::BlockInstance;
+use crate::scene::block_type::BlockType;
+use crate::scene::overworld_blocks::{deepslate_material_id, stone_block_material_id};
+use crate::scene::terrain::hash::hash01;
+use crate::scene::voxel_world::VoxelWorld;
+
+/// Seed salt of the stone veins in the upper taper.
+const TAPER_VEIN_SALT: u32 = 0x7A9E_0001;
+
+/// Share of stone in the first taper row under the terrain; it halves with
+/// every row down so the mass turns to deepslate toward the waist.
+const TAPER_STONE_SHARE: f32 = 0.45;
+
+/// The cells the upper taper added.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UpperTaper {
+    pub cells: Vec<IVec3>,
+    pub top_y: i32,
+    pub bottom_y: i32,
+}
+
+/// Geological block of a taper cell: mostly deepslate, with stone veins
+/// that thin out row by row under the terrain's rim bottom.
+pub fn taper_block(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    x: i32,
+    y: i32,
+    z: i32,
+) -> BlockType {
+    let depth = (rhombus.upper_taper_top - 1 - y).max(0);
+    let share = TAPER_STONE_SHARE / (1u32 << depth.min(8)) as f32;
+    if hash01(terrain.seed ^ TAPER_VEIN_SALT, x * 3 + y, z * 5 - y) < share {
+        BlockType::Stone
+    } else {
+        BlockType::Deepslate
+    }
+}
+
+/// Fills every row from one under the terrain's rim bottom down to the
+/// shelf with the diamond's tapering section (under the rim first, then
+/// below the whole terrain), leaving the surface and every Gate 12 landmark
+/// untouched. Cells that already exist are kept.
+pub fn build_upper_taper(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    world: &mut VoxelWorld,
+) -> UpperTaper {
+    let top_y = rhombus.upper_taper_top - 1;
+    let bottom_y = rhombus.shelf_y;
+    let mut taper = UpperTaper {
+        cells: Vec::new(),
+        top_y,
+        bottom_y,
+    };
+    for y in (bottom_y..=top_y).rev() {
+        for z in -2..terrain.depth + 2 {
+            for x in -2..terrain.width + 2 {
+                if !rhombus.contains(terrain, x, y, z) {
+                    continue;
+                }
+                let cell = IVec3::new(x, y, z);
+                if world.contains(cell) {
+                    continue;
+                }
+                let block_type = taper_block(terrain, rhombus, x, y, z);
+                let material = match block_type {
+                    BlockType::Stone => stone_block_material_id(),
+                    _ => deepslate_material_id(),
+                };
+                world.insert(
+                    cell,
+                    BlockInstance::new(block_type, material, Orientation::Up),
+                );
+                taper.cells.push(cell);
+            }
+        }
+    }
+    taper
 }
