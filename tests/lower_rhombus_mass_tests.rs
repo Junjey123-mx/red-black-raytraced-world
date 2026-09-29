@@ -120,18 +120,78 @@ mod renderer {
 
 use core::math::IVec3;
 use scene::block_type::{BlockFamily, BlockType};
+use scene::cutaway::carve_cutaway;
+use scene::descent::build_upper_descent;
 use scene::orientation::Orientation;
+use scene::overworld::{build_house, carve_pond, furnish_house, lay_path, plant_trees};
+use scene::portal::{build_portal_core, build_portal_frame};
+use scene::red_black_maze::{LowerMass, build_lower_mass};
+use scene::rhombus::{RhombusConfig, build_upper_taper};
+use scene::terrain::TerrainConfig;
+use scene::terrain::generator::generate_terrain;
+use scene::voxel_world::VoxelWorld;
 use scene::world::WorldScene;
 use std::collections::HashMap;
 
-fn area(scene: &WorldScene, y: i32) -> usize {
+/// The lower-mass stage: everything up to `build_lower_mass`, before the
+/// inverted descent and the Red-Black surface edit the lower half.
+struct Stage {
+    config: TerrainConfig,
+    rhombus: RhombusConfig,
+    lower_mass: LowerMass,
+    world: VoxelWorld,
+}
+
+impl Stage {
+    fn new() -> Self {
+        let config = TerrainConfig::official();
+        let rhombus = RhombusConfig::derive(&config);
+        let mut world = VoxelWorld::new();
+        generate_terrain(&config, &mut world);
+        let pond = carve_pond(&config, &mut world);
+        build_house(&config, &mut world);
+        furnish_house(&config, &mut world);
+        let trees = plant_trees(&config, &mut world, &pond);
+        lay_path(&config, &mut world, &pond, &trees);
+        build_upper_taper(&config, &rhombus, &mut world);
+        carve_cutaway(&config, &rhombus, &mut world);
+        build_upper_descent(&config, &rhombus, &mut world);
+        let mut portal = build_portal_frame(&rhombus, &mut world);
+        build_portal_core(&rhombus, &mut world, &mut portal);
+        let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
+        Self {
+            config,
+            rhombus,
+            lower_mass,
+            world,
+        }
+    }
+
+    fn world(&self) -> &VoxelWorld {
+        &self.world
+    }
+
+    fn rhombus(&self) -> &RhombusConfig {
+        &self.rhombus
+    }
+
+    fn config(&self) -> &TerrainConfig {
+        &self.config
+    }
+
+    fn lower_mass(&self) -> &LowerMass {
+        &self.lower_mass
+    }
+}
+
+fn area(scene: &Stage, y: i32) -> usize {
     (-4..28)
         .flat_map(|z| (-4..28).map(move |x| (x, z)))
         .filter(|&(x, z)| scene.world().contains(IVec3::new(x, y, z)))
         .count()
 }
 
-fn census(scene: &WorldScene, min_y: i32, max_y: i32) -> HashMap<BlockType, usize> {
+fn census(scene: &Stage, min_y: i32, max_y: i32) -> HashMap<BlockType, usize> {
     let mut counts = HashMap::new();
     for z in -4..28 {
         for x in -4..28 {
@@ -147,7 +207,7 @@ fn census(scene: &WorldScene, min_y: i32, max_y: i32) -> HashMap<BlockType, usiz
 
 #[test]
 fn the_lower_mass_connects_to_the_waist_in_the_same_world() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let r = scene.rhombus();
     let m = scene.lower_mass();
     assert_eq!(m.top_y, r.shelf_y - 1);
@@ -173,8 +233,13 @@ fn the_lower_mass_connects_to_the_waist_in_the_same_world() {
     }
     assert!(joined > 50);
     // One VoxelWorld holds a grass block of the Overworld and a tip block.
-    let grass = scene.world().get(scene.trees()[0].base).unwrap();
+    let full = WorldScene::new();
+    let grass = full.world().get(full.trees()[0].base).unwrap();
     assert_eq!(grass.block_type(), BlockType::Grass);
+    assert!(
+        full.world()
+            .contains(IVec3::new(r.center_x, r.lower_tip_y, r.center_z))
+    );
     assert!(area(&scene, r.lower_tip_y) >= 1);
     let src = std::fs::read_to_string("src/scene/world.rs").unwrap();
     assert_eq!(src.matches("world: VoxelWorld,").count(), 1);
@@ -183,7 +248,7 @@ fn the_lower_mass_connects_to_the_waist_in_the_same_world() {
 
 #[test]
 fn the_section_widens_under_the_waist_and_tapers_to_the_tip() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let r = scene.rhombus();
     let waist = area(&scene, r.waist_y);
     let widest = area(&scene, r.lower_widest_y);
@@ -205,7 +270,7 @@ fn the_section_widens_under_the_waist_and_tapers_to_the_tip() {
 
 #[test]
 fn the_lower_mass_is_solid_and_reaches_the_tip() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let r = scene.rhombus();
     for y in r.lower_tip_y..r.shelf_y {
         for z in -4..28 {
@@ -228,7 +293,7 @@ fn the_lower_mass_is_solid_and_reaches_the_tip() {
 
 #[test]
 fn the_lower_mass_uses_dark_structural_materials_oriented_down() {
-    let scene = WorldScene::new();
+    let scene = Stage::new();
     let r = scene.rhombus();
     let counts = census(&scene, r.lower_tip_y, r.shelf_y - 1);
     for (t, n) in &counts {

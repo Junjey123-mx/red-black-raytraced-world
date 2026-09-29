@@ -191,3 +191,79 @@ pub fn build_upper_descent(
 
     descent
 }
+
+// ---------------------------------------------------------------------
+// Inverted descent: the hanging flight under the shelf
+// ---------------------------------------------------------------------
+
+use crate::scene::red_black_maze::LowerMass;
+
+/// The inverted descent as built: a straight flight of `Down`-oriented
+/// stairs hanging from the lower mass, one row under the shelf, running
+/// south from the portal's side along the cutaway's west wall until it
+/// emerges through the lower surface.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InvertedDescent {
+    /// Every tread in walking order (all `Orientation::Down`).
+    pub treads: Vec<(IVec3, Orientation)>,
+    /// Lower-mass cells removed under the treads (the trench that opens the
+    /// flight to the inverted world's sky).
+    pub dug: Vec<IVec3>,
+}
+
+impl InvertedDescent {
+    pub fn first(&self) -> Option<IVec3> {
+        self.treads.first().map(|(c, _)| *c)
+    }
+
+    pub fn last(&self) -> Option<IVec3> {
+        self.treads.last().map(|(c, _)| *c)
+    }
+}
+
+/// Builds the inverted descent. Each tread `(x, y, z)` needs the cell above
+/// it (its ceiling, the inverted world's ground) to be lower mass; every
+/// mass cell under the tread is removed so the tread itself becomes part of
+/// the -Y-facing surface. The flight descends one row per step southward
+/// (`Down` stairs are raised on their north half, i.e. toward the previous
+/// step) and stops once nothing of the mass lies under the last tread.
+pub fn build_inverted_descent(
+    rhombus: &RhombusConfig,
+    lower: &LowerMass,
+    world: &mut VoxelWorld,
+) -> InvertedDescent {
+    let mut descent = InvertedDescent::default();
+    let x = rhombus.cutaway.min_x - 1;
+    let z0 = rhombus.cutaway.min_z;
+    let mut y = rhombus.shelf_y - 1;
+    let mut z = z0;
+    loop {
+        let tread = IVec3::new(x, y, z);
+        let ceiling = IVec3::new(x, y + 1, z);
+        if !world.contains(ceiling) {
+            break;
+        }
+        if world.remove(tread).is_some() {
+            descent.dug.push(tread);
+        }
+        world.insert(tread, stair(Orientation::Down));
+        descent.treads.push((tread, Orientation::Down));
+        // Open the trench under the tread down to the underside.
+        let mut below = y - 1;
+        let mut emerged = true;
+        while below >= lower.bottom_y {
+            let cell = IVec3::new(x, below, z);
+            if world.remove(cell).is_some() {
+                descent.dug.push(cell);
+                emerged = false;
+            }
+            below -= 1;
+        }
+        if emerged {
+            break;
+        }
+        y -= 1;
+        z += 1;
+    }
+    descent
+}

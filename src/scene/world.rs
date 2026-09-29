@@ -11,7 +11,9 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
-use crate::scene::descent::{UpperDescent, build_upper_descent};
+use crate::scene::descent::{
+    InvertedDescent, UpperDescent, build_inverted_descent, build_upper_descent,
+};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -57,6 +59,7 @@ pub struct WorldScene {
     upper_descent: UpperDescent,
     portal: PortalBuild,
     lower_mass: LowerMass,
+    inverted_descent: InvertedDescent,
     world: VoxelWorld,
 }
 
@@ -84,6 +87,7 @@ impl WorldScene {
         let mut portal = build_portal_frame(&rhombus, &mut world);
         build_portal_core(&rhombus, &mut world, &mut portal);
         let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
+        let inverted_descent = build_inverted_descent(&rhombus, &lower_mass, &mut world);
         Self {
             config,
             field,
@@ -99,6 +103,7 @@ impl WorldScene {
             upper_descent,
             portal,
             lower_mass,
+            inverted_descent,
             world,
         }
     }
@@ -131,6 +136,11 @@ impl WorldScene {
     /// The structural lower half under the waist.
     pub fn lower_mass(&self) -> &LowerMass {
         &self.lower_mass
+    }
+
+    /// The hanging flight of inverted stairs under the shelf.
+    pub fn inverted_descent(&self) -> &InvertedDescent {
+        &self.inverted_descent
     }
 
     /// The cobblestone path from the door to the descent point.
