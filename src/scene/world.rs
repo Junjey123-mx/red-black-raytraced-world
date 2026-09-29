@@ -26,7 +26,9 @@ use crate::scene::overworld::{
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
-use crate::scene::red_black_maze::{LowerMass, build_lower_mass};
+use crate::scene::red_black_maze::{
+    LowerMass, RedBlackSurface, build_lower_mass, build_red_black_surface,
+};
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -60,6 +62,7 @@ pub struct WorldScene {
     portal: PortalBuild,
     lower_mass: LowerMass,
     inverted_descent: InvertedDescent,
+    lower_surface: RedBlackSurface,
     world: VoxelWorld,
 }
 
@@ -88,6 +91,7 @@ impl WorldScene {
         build_portal_core(&rhombus, &mut world, &mut portal);
         let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
         let inverted_descent = build_inverted_descent(&rhombus, &lower_mass, &mut world);
+        let lower_surface = build_red_black_surface(&config, &rhombus, &lower_mass, &mut world);
         Self {
             config,
             field,
@@ -104,6 +108,7 @@ impl WorldScene {
             portal,
             lower_mass,
             inverted_descent,
+            lower_surface,
             world,
         }
     }
@@ -141,6 +146,11 @@ impl WorldScene {
     /// The hanging flight of inverted stairs under the shelf.
     pub fn inverted_descent(&self) -> &InvertedDescent {
         &self.inverted_descent
+    }
+
+    /// The -Y-facing ground of the inverted world.
+    pub fn lower_surface(&self) -> &RedBlackSurface {
+        &self.lower_surface
     }
 
     /// The cobblestone path from the door to the descent point.
