@@ -60,6 +60,8 @@ mod scene {
     pub mod block_type;
     #[path = "../src/scene/catalog.rs"]
     pub mod catalog;
+    #[path = "../src/scene/cutaway.rs"]
+    pub mod cutaway;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]

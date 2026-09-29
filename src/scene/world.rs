@@ -10,6 +10,7 @@ use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
+use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, glass_material_id, leaves_material_id,
@@ -49,6 +50,7 @@ pub struct WorldScene {
     path: PathLayout,
     rhombus: RhombusConfig,
     taper: UpperTaper,
+    cutaway: Cutaway,
     world: VoxelWorld,
 }
 
@@ -71,6 +73,7 @@ impl WorldScene {
         // The diamond below the Overworld.
         let rhombus = RhombusConfig::derive(&config);
         let taper = build_upper_taper(&config, &rhombus, &mut world);
+        let cutaway = carve_cutaway(&config, &rhombus, &mut world);
         Self {
             config,
             field,
@@ -82,6 +85,7 @@ impl WorldScene {
             path,
             rhombus,
             taper,
+            cutaway,
             world,
         }
     }
@@ -94,6 +98,11 @@ impl WorldScene {
     /// The mass added under the terrain down to the shelf.
     pub fn upper_taper(&self) -> &UpperTaper {
         &self.taper
+    }
+
+    /// The physical cutaway (what was removed).
+    pub fn cutaway(&self) -> &Cutaway {
+        &self.cutaway
     }
 
     /// The cobblestone path from the door to the descent point.

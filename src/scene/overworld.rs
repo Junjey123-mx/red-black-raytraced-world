@@ -16,6 +16,7 @@ use crate::scene::overworld_blocks::{
     log_material_id, sand_material_id, stone_block_material_id, wood_door_bottom_material_id,
     wood_door_top_material_id, wood_planks_material_id, wood_stairs_material_id,
 };
+use crate::scene::rhombus::RhombusConfig;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::{footprint_contains, footprint_radius};
 use crate::scene::terrain::hash::hash01;
@@ -223,10 +224,15 @@ pub const DESCENT_ENDPOINT: (i32, i32) = (14, 16);
 /// overhangs the roof, the path or the water.
 pub const TREE_CLEARANCE: i32 = 3;
 
-/// `true` when column `(x, z)` is claimed by the house, the path corridor or
-/// the pond (each with `TREE_CLEARANCE`), so no trunk may stand there.
+/// `true` when column `(x, z)` is claimed by the house, the path corridor,
+/// the pond (each with `TREE_CLEARANCE`) or the diorama's cutaway quadrant
+/// (a canopy must not overhang the cut), so no trunk may stand there.
 pub fn is_reserved_column(pond: &PondLayout, x: i32, z: i32) -> bool {
-    HOUSE_FOOTPRINT.grown(TREE_CLEARANCE).contains(x, z)
+    let canopy = TREE_CLEARANCE - 1;
+    RhombusConfig::official()
+        .cutaway
+        .contains_column(x + canopy, z + canopy)
+        || HOUSE_FOOTPRINT.grown(TREE_CLEARANCE).contains(x, z)
         || PATH_RESERVE.grown(TREE_CLEARANCE - 1).contains(x, z)
         || pond
             .basin
@@ -816,9 +822,14 @@ pub fn lay_path(
         pave(world, x, y, z, &mut layout.cells);
     }
 
-    // Landing around the endpoint.
+    // Landing around the endpoint (only on the columns the diorama keeps:
+    // the cutaway quadrant starts right beside the endpoint).
+    let cutaway = RhombusConfig::derive(config).cutaway;
     for (lx, lz) in [(tx + 1, tz), (tx, tz + 1), (tx + 1, tz + 1)] {
-        if !PATH_RESERVE.contains(lx, lz) || blocked(world, lx, lz) {
+        if !PATH_RESERVE.contains(lx, lz)
+            || blocked(world, lx, lz)
+            || cutaway.contains_column(lx, lz)
+        {
             continue;
         }
         if let Some(ly) = height(world, lx, lz) {
