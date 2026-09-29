@@ -12,10 +12,10 @@ use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
-    GalleryTextures, advanced_materials_library, water_material_id,
+    GalleryTextures, advanced_materials_library, leaves_material_id, water_material_id,
 };
 use crate::scene::material_library::MaterialLibrary;
-use crate::scene::overworld::{PondLayout, carve_pond, column_top};
+use crate::scene::overworld::{PondLayout, Tree, carve_pond, column_top, plant_trees};
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -38,6 +38,7 @@ pub struct WorldScene {
     field: HeightField,
     bounds: TerrainBounds,
     pond: PondLayout,
+    trees: Vec<Tree>,
     world: VoxelWorld,
 }
 
@@ -53,13 +54,20 @@ impl WorldScene {
         let field = generate_terrain(&config, &mut world);
         let bounds = terrain_bounds(&config, &field);
         let pond = carve_pond(&config, &mut world);
+        let trees = plant_trees(&config, &mut world, &pond);
         Self {
             config,
             field,
             bounds,
             pond,
+            trees,
             world,
         }
+    }
+
+    /// The trees planted on the terrain.
+    pub fn trees(&self) -> &[Tree] {
+        &self.trees
     }
 
     /// The pond dug into the terrain.
@@ -148,7 +156,7 @@ pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
     insert_overworld_materials(&mut library, &textures.blocks);
 
     let gallery = advanced_materials_library(&textures.gallery);
-    for id in [water_material_id()] {
+    for id in [water_material_id(), leaves_material_id()] {
         let material = gallery
             .get(id)
             .expect("the gallery defines every optical specimen")
