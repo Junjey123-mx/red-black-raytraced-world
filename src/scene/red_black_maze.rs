@@ -380,7 +380,7 @@ pub fn compose_crimson(
                 ),
             );
             layout.accents.push(*cell);
-        } else if roll < 0.60 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
+        } else if roll < 0.60 && !world.contains(under) && under.y > rhombus.lower_tip_y {
             let (block_type, material) = Family::Crimson.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
@@ -445,7 +445,7 @@ pub fn compose_orange(
         } else if roll < 0.47
             && !world.contains(under)
             && !world.contains(under2)
-            && under2.y >= rhombus.lower_tip_y
+            && under2.y > rhombus.lower_tip_y
         {
             for c in [under, under2] {
                 world.insert(
@@ -454,7 +454,7 @@ pub fn compose_orange(
                 );
                 layout.structures.push(c);
             }
-        } else if roll < 0.59 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
+        } else if roll < 0.59 && !world.contains(under) && under.y > rhombus.lower_tip_y {
             let (block_type, material) = Family::Orange.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
@@ -507,7 +507,7 @@ pub fn compose_violet(
                 down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
             );
             layout.ground.push(*cell);
-            if roll < 0.41 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
+            if roll < 0.41 && !world.contains(under) && under.y > rhombus.lower_tip_y {
                 world.insert(
                     under,
                     down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
@@ -523,7 +523,7 @@ pub fn compose_violet(
                 ),
             );
             layout.accents.push(*cell);
-        } else if roll < 0.60 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
+        } else if roll < 0.60 && !world.contains(under) && under.y > rhombus.lower_tip_y {
             let (block_type, material) = Family::Violet.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);

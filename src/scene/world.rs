@@ -31,7 +31,9 @@ use crate::scene::red_black_maze::{
     build_lower_mass, build_red_black_surface, compose_crimson, compose_orange, compose_violet,
     family_lights,
 };
-use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
+use crate::scene::rhombus::{
+    RhombusConfig, Silhouette, UpperTaper, build_upper_taper, finalize_silhouette,
+};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::fbm::HeightField;
@@ -67,6 +69,7 @@ pub struct WorldScene {
     lower_surface: RedBlackSurface,
     families: Vec<FamilyLayout>,
     transitions: FamilyTransitions,
+    silhouette: Silhouette,
     world: VoxelWorld,
 }
 
@@ -102,6 +105,7 @@ impl WorldScene {
             compose_violet(&config, &rhombus, &lower_surface, &mut world),
         ];
         let transitions = blend_family_transitions(&config, &rhombus, &lower_surface, &mut world);
+        let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
             field,
@@ -121,6 +125,7 @@ impl WorldScene {
             lower_surface,
             families,
             transitions,
+            silhouette,
             world,
         }
     }
@@ -173,6 +178,11 @@ impl WorldScene {
     /// The blended boundaries between the families.
     pub fn transitions(&self) -> &FamilyTransitions {
         &self.transitions
+    }
+
+    /// The final silhouette pass (voids filled, fragments removed, tip).
+    pub fn silhouette(&self) -> &Silhouette {
+        &self.silhouette
     }
 
     /// The cobblestone path from the door to the descent point.

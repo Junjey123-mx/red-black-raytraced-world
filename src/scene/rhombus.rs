@@ -355,3 +355,142 @@ pub fn build_upper_taper(
     }
     taper
 }
+
+// ---------------------------------------------------------------------
+// Final silhouette
+// ---------------------------------------------------------------------
+
+use std::collections::{HashSet, VecDeque};
+
+/// What the silhouette pass changed.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Silhouette {
+    /// Cells that were not part of the main connected mass (accidental
+    /// floating fragments) and were removed.
+    pub removed_floating: Vec<IVec3>,
+    /// Empty cells enclosed on all six sides that were filled.
+    pub filled_voids: Vec<IVec3>,
+    /// The lowest cell of the diamond.
+    pub tip: IVec3,
+    /// Size of the main connected component after the pass.
+    pub main_component: usize,
+}
+
+const NEIGHBORS: [(i32, i32, i32); 6] = [
+    (1, 0, 0),
+    (-1, 0, 0),
+    (0, 1, 0),
+    (0, -1, 0),
+    (0, 0, 1),
+    (0, 0, -1),
+];
+
+/// Every cell of the world inside the diorama's bounding volume.
+fn all_cells(terrain: &TerrainConfig, rhombus: &RhombusConfig, world: &VoxelWorld) -> Vec<IVec3> {
+    let mut cells = Vec::new();
+    for z in -6..terrain.depth + 6 {
+        for x in -6..terrain.width + 6 {
+            for y in (rhombus.lower_tip_y - 6)..=(rhombus.upper_surface_reference + 16) {
+                let cell = IVec3::new(x, y, z);
+                if world.contains(cell) {
+                    cells.push(cell);
+                }
+            }
+        }
+    }
+    cells
+}
+
+/// The 6-connected component of `world` that contains `seed`.
+pub fn connected_component(world: &VoxelWorld, seed: IVec3) -> HashSet<IVec3> {
+    let mut seen = HashSet::new();
+    if !world.contains(seed) {
+        return seen;
+    }
+    let mut queue = VecDeque::from([seed]);
+    while let Some(c) = queue.pop_front() {
+        if !seen.insert(c) {
+            continue;
+        }
+        for (dx, dy, dz) in NEIGHBORS {
+            let n = IVec3::new(c.x + dx, c.y + dy, c.z + dz);
+            if world.contains(n) && !seen.contains(&n) {
+                queue.push_back(n);
+            }
+        }
+    }
+    seen
+}
+
+/// Closes the diamond's exterior:
+///
+/// 1. the tip cell at the footprint center and `lower_tip_y` is guaranteed
+///    (deepslate, `Down`);
+/// 2. every empty cell enclosed by six solid neighbors (an accidental
+///    internal void) is filled with deepslate, so the mass is solid;
+/// 3. every cell outside the main connected component (measured from the
+///    tip) is removed: nothing floats apart from the one diamond.
+///
+/// The cutaway is never touched: its cells are open on the outside, so
+/// they are neither enclosed nor part of any fragment.
+pub fn finalize_silhouette(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    world: &mut VoxelWorld,
+) -> Silhouette {
+    let deepslate = |orientation| {
+        BlockInstance::new(BlockType::Deepslate, deepslate_material_id(), orientation)
+    };
+    let tip = IVec3::new(rhombus.center_x, rhombus.lower_tip_y, rhombus.center_z);
+    if !world.contains(tip) {
+        world.insert(tip, deepslate(Orientation::Down));
+    }
+    let mut silhouette = Silhouette {
+        tip,
+        ..Default::default()
+    };
+
+    // 2. Enclosed voids.
+    let cells = all_cells(terrain, rhombus, world);
+    let mut candidates: HashSet<IVec3> = HashSet::new();
+    for c in &cells {
+        for (dx, dy, dz) in NEIGHBORS {
+            let n = IVec3::new(c.x + dx, c.y + dy, c.z + dz);
+            if !world.contains(n) {
+                candidates.insert(n);
+            }
+        }
+    }
+    let mut voids: Vec<IVec3> = candidates
+        .into_iter()
+        .filter(|c| {
+            NEIGHBORS
+                .iter()
+                .all(|(dx, dy, dz)| world.contains(IVec3::new(c.x + dx, c.y + dy, c.z + dz)))
+        })
+        .collect();
+    voids.sort_by_key(|c| (c.y, c.z, c.x));
+    for c in voids {
+        let orientation = if c.y < rhombus.shelf_y {
+            Orientation::Down
+        } else {
+            Orientation::Up
+        };
+        world.insert(c, deepslate(orientation));
+        silhouette.filled_voids.push(c);
+    }
+
+    // 3. Floating fragments.
+    let main = connected_component(world, tip);
+    let mut floating: Vec<IVec3> = all_cells(terrain, rhombus, world)
+        .into_iter()
+        .filter(|c| !main.contains(c))
+        .collect();
+    floating.sort_by_key(|c| (c.y, c.z, c.x));
+    for c in &floating {
+        world.remove(*c);
+    }
+    silhouette.removed_floating = floating;
+    silhouette.main_component = main.len();
+    silhouette
+}
