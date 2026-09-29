@@ -13,6 +13,7 @@ pub mod orientation;
 pub mod overworld;
 pub mod overworld_blocks;
 pub mod portal;
+pub mod red_black_maze;
 pub mod rhombus;
 pub mod scene;
 pub mod terrain;

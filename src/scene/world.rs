@@ -24,6 +24,7 @@ use crate::scene::overworld::{
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
+use crate::scene::red_black_maze::{LowerMass, build_lower_mass};
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -55,6 +56,7 @@ pub struct WorldScene {
     cutaway: Cutaway,
     upper_descent: UpperDescent,
     portal: PortalBuild,
+    lower_mass: LowerMass,
     world: VoxelWorld,
 }
 
@@ -81,6 +83,7 @@ impl WorldScene {
         let upper_descent = build_upper_descent(&config, &rhombus, &mut world);
         let mut portal = build_portal_frame(&rhombus, &mut world);
         build_portal_core(&rhombus, &mut world, &mut portal);
+        let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
         Self {
             config,
             field,
@@ -95,6 +98,7 @@ impl WorldScene {
             cutaway,
             upper_descent,
             portal,
+            lower_mass,
             world,
         }
     }
@@ -122,6 +126,11 @@ impl WorldScene {
     /// The portal at the waist.
     pub fn portal(&self) -> &PortalBuild {
         &self.portal
+    }
+
+    /// The structural lower half under the waist.
+    pub fn lower_mass(&self) -> &LowerMass {
+        &self.lower_mass
     }
 
     /// The cobblestone path from the door to the descent point.
