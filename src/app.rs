@@ -3,6 +3,7 @@ use raylib::prelude::*;
 use crate::camera::camera::Camera;
 use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
+use crate::camera::portal_crossing::{PortalCrossingDetector, PortalVolume};
 use crate::camera::projection::primary_ray;
 use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
@@ -166,6 +167,8 @@ struct WorldMode {
     lights: Vec<Light>,
     /// The World's own free-fly camera (the catalog keeps the orbit camera).
     free_fly: WorldFreeFlyCameraState,
+    /// Fires when the camera's movement pierces the portal membrane.
+    portal_detector: PortalCrossingDetector,
 }
 
 impl WorldMode {
@@ -179,11 +182,15 @@ impl WorldMode {
             PORTAL_TEXTURES_DIR,
         )
         .expect("missing world texture");
+        let scene = WorldScene::new();
+        let portal_detector =
+            PortalCrossingDetector::new(PortalVolume::from_anchor(&scene.rhombus().portal));
         Self {
-            scene: WorldScene::new(),
+            scene,
             materials: world_materials(&textures),
             lights: world_lights(),
             free_fly: world_free_fly_camera(),
+            portal_detector,
         }
     }
 }
@@ -223,7 +230,20 @@ impl ViewerMode for WorldMode {
     fn update(&mut self, rl: &RaylibHandle) -> bool {
         let input = poll_free_fly_input(rl);
         if input.is_active() {
+            let previous = self.free_fly.position;
             apply_free_fly_input(&mut self.free_fly, &input);
+            if input.reset {
+                self.portal_detector.reset();
+            } else if let Some(event) =
+                self.portal_detector
+                    .detect(previous, self.free_fly.position, self.free_fly.realm)
+            {
+                // The realm switch and the camera inversion follow in the
+                // next stages; for now the traversal is only reported.
+                #[cfg(debug_assertions)]
+                eprintln!("portal crossing: {event:?}");
+                let _ = event;
+            }
         }
         input.is_active()
     }

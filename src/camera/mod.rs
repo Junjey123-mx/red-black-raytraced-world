@@ -5,6 +5,7 @@
 pub mod camera;
 pub mod controls;
 pub mod diagnostic;
+pub mod portal_crossing;
 pub mod projection;
 pub mod world_free_fly;
 
