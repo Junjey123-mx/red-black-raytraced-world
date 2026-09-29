@@ -78,6 +78,8 @@ mod scene {
     pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/portal.rs"]
+    pub mod portal;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]

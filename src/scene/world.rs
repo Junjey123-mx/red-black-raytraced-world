@@ -23,6 +23,7 @@ use crate::scene::overworld::{
     furnish_house, lay_path, plant_trees,
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
+use crate::scene::portal::{PortalBuild, build_portal_frame};
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
 use crate::scene::terrain::TerrainConfig;
@@ -53,6 +54,7 @@ pub struct WorldScene {
     taper: UpperTaper,
     cutaway: Cutaway,
     upper_descent: UpperDescent,
+    portal: PortalBuild,
     world: VoxelWorld,
 }
 
@@ -77,6 +79,7 @@ impl WorldScene {
         let taper = build_upper_taper(&config, &rhombus, &mut world);
         let cutaway = carve_cutaway(&config, &rhombus, &mut world);
         let upper_descent = build_upper_descent(&config, &rhombus, &mut world);
+        let portal = build_portal_frame(&rhombus, &mut world);
         Self {
             config,
             field,
@@ -90,6 +93,7 @@ impl WorldScene {
             taper,
             cutaway,
             upper_descent,
+            portal,
             world,
         }
     }
@@ -112,6 +116,11 @@ impl WorldScene {
     /// The stepped route from the path endpoint down to the portal approach.
     pub fn upper_descent(&self) -> &UpperDescent {
         &self.upper_descent
+    }
+
+    /// The portal at the waist.
+    pub fn portal(&self) -> &PortalBuild {
+        &self.portal
     }
 
     /// The cobblestone path from the door to the descent point.

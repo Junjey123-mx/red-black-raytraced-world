@@ -78,6 +78,8 @@ mod scene {
     pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/portal.rs"]
+    pub mod portal;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]
@@ -284,29 +286,35 @@ fn the_route_keeps_away_from_the_house_and_the_pond() {
 }
 
 #[test]
-fn no_portal_and_no_red_black_yet() {
+fn the_route_never_enters_the_portal_wall() {
+    // The descent ends in front of the portal anchor, never inside it: the
+    // frame and core are built by the portal stages into an intact wall.
     let scene = WorldScene::new();
-    let r = scene.rhombus();
-    let p = r.portal;
-    for x in (p.min_x + 1)..p.max_x {
-        for y in (p.min_y + 1)..p.max_y {
-            assert_eq!(
-                block_type(&scene, IVec3::new(x, y, p.wall_z)),
-                Some(BlockType::Deepslate)
-            );
-        }
+    let p = scene.rhombus().portal;
+    let d = scene.upper_descent();
+    for cell in d
+        .treads
+        .iter()
+        .map(|(c, _)| *c)
+        .chain(d.dug.iter().copied())
+        .chain(d.footings.iter().copied())
+        .chain(d.approach.iter().copied())
+    {
+        assert!(
+            !(cell.z == p.wall_z && p.is_frame(cell.x, cell.y)),
+            "{cell:?} in the frame"
+        );
+        assert!(
+            !(cell.z == p.wall_z && p.is_opening(cell.x, cell.y)),
+            "{cell:?} in the opening"
+        );
     }
-    for z in -4..28 {
-        for x in -4..28 {
-            for y in r.lower_tip_y..=r.upper_surface_reference + 12 {
-                if let Some(t) = block_type(&scene, IVec3::new(x, y, z)) {
-                    assert!(matches!(
-                        t.family(),
-                        BlockFamily::OverworldTerrain | BlockFamily::OverworldArchitecture
-                    ));
-                }
-            }
-        }
+    // The descent itself uses only Overworld blocks.
+    for (cell, _) in &d.treads {
+        assert_eq!(
+            block_type(&scene, *cell).unwrap().family(),
+            BlockFamily::OverworldArchitecture
+        );
     }
 }
 

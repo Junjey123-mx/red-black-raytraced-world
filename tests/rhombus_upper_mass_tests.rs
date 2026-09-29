@@ -78,6 +78,8 @@ mod scene {
     pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/portal.rs"]
+    pub mod portal;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]
@@ -117,14 +119,14 @@ mod renderer {
 use core::math::IVec3;
 use scene::block_type::{BlockFamily, BlockType};
 use scene::overworld::{build_house, carve_pond, furnish_house, lay_path, plant_trees};
+use scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use scene::terrain::TerrainConfig;
 use scene::terrain::generator::generate_terrain;
 use scene::voxel_world::VoxelWorld;
 use scene::world::WorldScene;
 use std::collections::HashMap;
 
-/// The Gate 12 Overworld built through the same feature functions, so the
-/// scene can be compared cell by cell above the terrain bottom.
+/// The Gate 12 Overworld built through the same feature functions.
 fn gate12_world() -> VoxelWorld {
     let config = TerrainConfig::official();
     let mut world = VoxelWorld::new();
@@ -137,18 +139,28 @@ fn gate12_world() -> VoxelWorld {
     world
 }
 
-/// Cells the upper descent is allowed to edit: its dug pit, treads,
-/// footings, shelf plate and brick approach.
-fn descent_cells(scene: &WorldScene) -> std::collections::HashSet<IVec3> {
-    let d = scene.upper_descent();
-    d.dug
-        .iter()
-        .copied()
-        .chain(d.treads.iter().map(|(c, _)| *c))
-        .chain(d.footings.iter().copied())
-        .chain(d.shelf.iter().copied())
-        .chain(d.approach.iter().copied())
-        .collect()
+/// The taper stage: the Gate 12 Overworld plus the upper taper, before the
+/// cutaway, descent and portal edit the mass.
+struct Stage {
+    config: TerrainConfig,
+    rhombus: RhombusConfig,
+    taper: UpperTaper,
+    world: VoxelWorld,
+}
+
+impl Stage {
+    fn new() -> Self {
+        let config = TerrainConfig::official();
+        let rhombus = RhombusConfig::derive(&config);
+        let mut world = gate12_world();
+        let taper = build_upper_taper(&config, &rhombus, &mut world);
+        Self {
+            config,
+            rhombus,
+            taper,
+            world,
+        }
+    }
 }
 
 fn census(world: &VoxelWorld, min_y: i32, max_y: i32) -> HashMap<BlockType, usize> {
@@ -167,61 +179,45 @@ fn census(world: &VoxelWorld, min_y: i32, max_y: i32) -> HashMap<BlockType, usiz
 
 #[test]
 fn the_gate12_surface_and_landmarks_are_preserved_exactly() {
-    let scene = WorldScene::new();
+    let stage = Stage::new();
     let reference = gate12_world();
-    let r = scene.rhombus();
-    let descent = descent_cells(&scene);
-    // Every cell from the terrain's rim bottom up is identical outside the
-    // physical cutaway quadrant (which removes cells, never edits them).
+    let r = stage.rhombus;
+    // Every cell from the terrain's rim bottom up is identical: the taper
+    // only adds cells below it.
     for z in -4..28 {
         for x in -4..28 {
-            if r.cutaway.contains_column(x, z) {
-                continue;
-            }
             for y in r.upper_taper_top..=24 {
                 let cell = IVec3::new(x, y, z);
-                if descent.contains(&cell) {
-                    continue;
-                }
                 assert_eq!(
-                    scene.world().get(cell),
+                    stage.world.get(cell),
                     reference.get(cell),
                     "cell {cell:?} changed"
                 );
             }
         }
     }
+    assert_eq!(
+        census(&stage.world, r.upper_taper_top, 24),
+        census(&reference, r.upper_taper_top, 24)
+    );
+    // The scene keeps every landmark count of Gate 12.
+    let scene = WorldScene::new();
     assert_eq!(scene.house().floor.len(), 35);
     assert_eq!(scene.house_exterior().lamps.len(), 2);
     assert_eq!(scene.pond().water.len(), 26);
     assert_eq!(scene.trees().len(), 4);
     assert_eq!(scene.path().len(), 10);
-    let above = census(scene.world(), r.upper_taper_top, 24);
-    let above_ref = census(&reference, r.upper_taper_top, 24);
-    for (t, n) in &above_ref {
-        // Only the descent's stairs may grow above the terrain bottom.
-        if *t == BlockType::WoodStairs {
-            continue;
-        }
-        assert!(above.get(t).copied().unwrap_or(0) <= *n, "{t:?} grew");
-    }
-    assert_eq!(
-        above[&BlockType::WoodPlanks],
-        above_ref[&BlockType::WoodPlanks]
-    );
-    assert_eq!(above[&BlockType::Water], above_ref[&BlockType::Water]);
-    assert_eq!(above[&BlockType::Log], above_ref[&BlockType::Log]);
+    assert_eq!(scene.upper_taper(), &stage.taper);
 }
 
 #[test]
 fn the_section_narrows_row_by_row_toward_the_waist() {
-    let scene = WorldScene::new();
-    let r = scene.rhombus();
-    let terrain = scene.config();
+    let stage = Stage::new();
+    let r = stage.rhombus;
     let area = |y: i32| {
         (-4..28)
             .flat_map(|z| (-4..28).map(move |x| (x, z)))
-            .filter(|&(x, z)| scene.world().contains(IVec3::new(x, y, z)))
+            .filter(|&(x, z)| stage.world.contains(IVec3::new(x, y, z)))
             .count()
     };
     let mut previous = area(r.upper_taper_top);
@@ -230,54 +226,45 @@ fn the_section_narrows_row_by_row_toward_the_waist() {
         assert!(current < previous, "row {y}: {current} vs {previous} above");
         previous = current;
     }
-    // The waist is much narrower than the surface but not a needle.
     let surface = area(r.upper_taper_top);
     let waist = area(r.waist_y);
     assert!(waist * 2 < surface, "waist {waist} vs surface {surface}");
     assert!(waist > 100);
-    assert!(r.section_width(terrain, r.waist_y) < r.section_width(terrain, r.upper_taper_top));
+    assert!(
+        r.section_width(&stage.config, r.waist_y)
+            < r.section_width(&stage.config, r.upper_taper_top)
+    );
 }
 
 #[test]
 fn the_taper_reaches_the_shelf_as_a_solid_mass() {
-    let scene = WorldScene::new();
-    let r = scene.rhombus();
-    let taper = scene.upper_taper();
+    let stage = Stage::new();
+    let r = stage.rhombus;
+    let taper = &stage.taper;
     assert_eq!(taper.top_y, r.upper_taper_top - 1);
     assert_eq!(taper.bottom_y, r.shelf_y);
     assert!(taper.cells.len() > 800, "{} taper cells", taper.cells.len());
-    let descent = descent_cells(&scene);
     for cell in &taper.cells {
         assert!(cell.y <= taper.top_y && cell.y >= taper.bottom_y);
-        assert!(
-            scene.world().contains(*cell)
-                || r.is_cut(cell.x, cell.y, cell.z)
-                || descent.contains(cell)
-        );
-        assert!(r.contains(scene.config(), cell.x, cell.y, cell.z));
+        assert!(stage.world.contains(*cell));
+        assert!(r.contains(&stage.config, cell.x, cell.y, cell.z));
     }
-    // Solid: every cell inside the section between the shelf and the
-    // terrain bottom exists, so there are no cavities.
     for y in r.shelf_y..r.upper_taper_top {
         for z in -4..28 {
             for x in -4..28 {
-                if r.contains(scene.config(), x, y, z)
-                    && !r.is_cut(x, y, z)
-                    && !descent.contains(&IVec3::new(x, y, z))
-                {
+                if r.contains(&stage.config, x, y, z) {
                     assert!(
-                        scene.world().contains(IVec3::new(x, y, z)),
+                        stage.world.contains(IVec3::new(x, y, z)),
                         "cavity at ({x}, {y}, {z})"
                     );
                 }
             }
         }
     }
-    // Nothing yet under the shelf.
     for y in r.lower_tip_y..r.shelf_y {
         for z in -4..28 {
             for x in -4..28 {
-                assert!(!scene.world().contains(IVec3::new(x, y, z)));
+                assert!(!stage.world.contains(IVec3::new(x, y, z)));
             }
         }
     }
@@ -285,14 +272,10 @@ fn the_taper_reaches_the_shelf_as_a_solid_mass() {
 
 #[test]
 fn the_added_mass_is_geological_and_turns_to_deepslate_downward() {
-    let scene = WorldScene::new();
-    let r = scene.rhombus();
-    let counts = census(scene.world(), r.shelf_y, r.upper_taper_top - 1);
+    let stage = Stage::new();
+    let r = stage.rhombus;
+    let counts = census(&stage.world, r.shelf_y, r.upper_taper_top - 1);
     for (t, n) in &counts {
-        // The descent's own blocks (stairs, bricks) pass through the mass.
-        if matches!(t, BlockType::WoodStairs | BlockType::DeepslateBricks) {
-            continue;
-        }
         assert!(
             matches!(
                 t,
@@ -307,16 +290,15 @@ fn the_added_mass_is_geological_and_turns_to_deepslate_downward() {
         counts.get(&BlockType::Stone).copied().unwrap_or(0) > 0,
         "no stone veins"
     );
-    // No grass buried in the mass, deepslate dominant near the waist.
     assert!(!counts.contains_key(&BlockType::Grass));
-    let waist = census(scene.world(), r.waist_y, r.waist_y);
+    let waist = census(&stage.world, r.waist_y, r.waist_y);
     assert!(waist[&BlockType::Deepslate] * 10 > waist.values().sum::<usize>() * 9);
 }
 
 #[test]
-fn no_portal_or_red_black_block_exists_yet() {
-    let scene = WorldScene::new();
-    let counts = census(scene.world(), -40, 24);
+fn the_taper_stage_has_no_portal_or_red_black_block() {
+    let stage = Stage::new();
+    let counts = census(&stage.world, -40, 24);
     for t in counts.keys() {
         assert!(
             matches!(

@@ -78,6 +78,8 @@ mod scene {
     pub mod overworld;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/portal.rs"]
+    pub mod portal;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]
@@ -248,10 +250,12 @@ fn the_portal_anchor_is_open_to_the_cut_side() {
     // front of the opening (toward +Z) is air up to the diorama's edge.
     for x in p.min_x..=p.max_x {
         for y in p.min_y..=p.max_y {
-            assert!(
-                scene.world().contains(IVec3::new(x, y, p.wall_z)),
-                "wall ({x}, {y}) missing"
-            );
+            if p.is_frame(x, y) {
+                assert!(
+                    scene.world().contains(IVec3::new(x, y, p.wall_z)),
+                    "wall ({x}, {y}) missing"
+                );
+            }
         }
     }
     // The three rows in front of the opening are clear at every opening
