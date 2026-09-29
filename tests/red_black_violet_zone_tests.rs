@@ -150,6 +150,9 @@ fn the_four_violet_suits_and_every_violet_block_are_present() {
     let f = violet(&scene);
     let mut counts: HashMap<BlockType, usize> = HashMap::new();
     for cell in f.cells() {
+        if scene.transitions().bridged.contains(&cell) {
+            continue;
+        }
         *counts.entry(block_type(&scene, cell).unwrap()).or_insert(0) += 1;
     }
     for t in [
@@ -215,7 +218,11 @@ fn mycelium_ground_faces_down_and_the_zone_is_connected() {
     let f = violet(&scene);
     let r = scene.rhombus();
     let mut mycelium = 0;
-    for cell in &f.ground {
+    for cell in f
+        .ground
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         let b = scene.world().get(*cell).unwrap();
         assert_eq!(b.orientation(), Orientation::Down);
         if b.block_type() == BlockType::Mycelium {

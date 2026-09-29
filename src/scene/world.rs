@@ -27,8 +27,8 @@ use crate::scene::overworld::{
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
 use crate::scene::red_black_maze::{
-    FamilyLayout, LowerMass, RedBlackSurface, build_lower_mass, build_red_black_surface,
-    compose_crimson, compose_orange, compose_violet,
+    FamilyLayout, FamilyTransitions, LowerMass, RedBlackSurface, blend_family_transitions,
+    build_lower_mass, build_red_black_surface, compose_crimson, compose_orange, compose_violet,
 };
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
@@ -65,6 +65,7 @@ pub struct WorldScene {
     inverted_descent: InvertedDescent,
     lower_surface: RedBlackSurface,
     families: Vec<FamilyLayout>,
+    transitions: FamilyTransitions,
     world: VoxelWorld,
 }
 
@@ -99,6 +100,7 @@ impl WorldScene {
             compose_orange(&config, &rhombus, &lower_surface, &mut world),
             compose_violet(&config, &rhombus, &lower_surface, &mut world),
         ];
+        let transitions = blend_family_transitions(&config, &rhombus, &lower_surface, &mut world);
         Self {
             config,
             field,
@@ -117,6 +119,7 @@ impl WorldScene {
             inverted_descent,
             lower_surface,
             families,
+            transitions,
             world,
         }
     }
@@ -164,6 +167,11 @@ impl WorldScene {
     /// The visual families composed over the lower surface.
     pub fn families(&self) -> &[FamilyLayout] {
         &self.families
+    }
+
+    /// The blended boundaries between the families.
+    pub fn transitions(&self) -> &FamilyTransitions {
+        &self.transitions
     }
 
     /// The cobblestone path from the door to the descent point.

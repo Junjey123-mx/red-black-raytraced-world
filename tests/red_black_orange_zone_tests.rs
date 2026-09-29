@@ -148,6 +148,9 @@ fn all_six_orange_block_types_are_present() {
     let f = orange(&scene);
     let mut counts: HashMap<BlockType, usize> = HashMap::new();
     for cell in f.cells() {
+        if scene.transitions().bridged.contains(&cell) {
+            continue;
+        }
         *counts.entry(block_type(&scene, cell).unwrap()).or_insert(0) += 1;
     }
     for t in [
@@ -171,7 +174,11 @@ fn clubs_and_spades_are_visible_from_below() {
     let f = orange(&scene);
     let mut clubs = 0;
     let mut spades = 0;
-    for cell in &f.symbols {
+    for cell in f
+        .symbols
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         let b = scene.world().get(*cell).unwrap();
         match b.block_type() {
             BlockType::OrangeClub => {
@@ -199,7 +206,11 @@ fn basalt_columns_and_blackstone_paving_are_structural() {
     let scene = WorldScene::new();
     let f = orange(&scene);
     assert!(!f.structures.is_empty());
-    for cell in &f.structures {
+    for cell in f
+        .structures
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         let b = scene.world().get(*cell).unwrap();
         assert_eq!(b.block_type(), BlockType::SmoothBasalt);
         assert_eq!(b.material_id(), smooth_basalt_material_id());
@@ -210,18 +221,30 @@ fn basalt_columns_and_blackstone_paving_are_structural() {
             "{cell:?} floats"
         );
     }
-    for cell in &f.ground {
+    for cell in f
+        .ground
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         let b = scene.world().get(*cell).unwrap();
         assert_eq!(b.block_type(), BlockType::PolishedBlackstoneBricks);
         assert_eq!(b.material_id(), polished_blackstone_bricks_material_id());
     }
-    for cell in &f.accents {
+    for cell in f
+        .accents
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         assert_eq!(
             scene.world().get(*cell).unwrap().material_id(),
             crying_obsidian_orange_material_id()
         );
     }
-    for cell in &f.terraces {
+    for cell in f
+        .terraces
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         assert_eq!(
             scene.world().get(*cell).unwrap().material_id(),
             red_black_deepslate_bricks_orange_material_id()

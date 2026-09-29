@@ -380,7 +380,7 @@ pub fn compose_crimson(
                 ),
             );
             layout.accents.push(*cell);
-        } else if roll < 0.60 && !world.contains(under) {
+        } else if roll < 0.60 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
             let (block_type, material) = Family::Crimson.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
@@ -442,7 +442,11 @@ pub fn compose_orange(
                 ),
             );
             layout.accents.push(*cell);
-        } else if roll < 0.47 && !world.contains(under) && !world.contains(under2) {
+        } else if roll < 0.47
+            && !world.contains(under)
+            && !world.contains(under2)
+            && under2.y >= rhombus.lower_tip_y
+        {
             for c in [under, under2] {
                 world.insert(
                     c,
@@ -450,7 +454,7 @@ pub fn compose_orange(
                 );
                 layout.structures.push(c);
             }
-        } else if roll < 0.59 && !world.contains(under) {
+        } else if roll < 0.59 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
             let (block_type, material) = Family::Orange.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
@@ -489,28 +493,28 @@ pub fn compose_violet(
             (BlockType::PurpleClub, purple_club_material_id()),
             (BlockType::PurpleSpade, purple_spade_material_id()),
         ];
-        if roll < 0.16 {
+        if roll < 0.20 {
             let pick = (hash01(terrain.seed ^ SUIT_SALT, cell.x, cell.z) * 4.0) as usize % 4;
             let (block_type, material) = suit[pick];
             world.insert(*cell, down(block_type, material));
             layout.symbols.push(*cell);
-        } else if roll < 0.34 {
+        } else if roll < 0.36 {
             world.insert(*cell, down(BlockType::Mycelium, mycelium_material_id()));
             layout.ground.push(*cell);
-        } else if roll < 0.42 {
+        } else if roll < 0.44 {
             world.insert(
                 *cell,
                 down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
             );
             layout.ground.push(*cell);
-            if roll < 0.39 && !world.contains(under) {
+            if roll < 0.41 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
                 world.insert(
                     under,
                     down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
                 );
                 layout.structures.push(under);
             }
-        } else if roll < 0.47 {
+        } else if roll < 0.49 {
             world.insert(
                 *cell,
                 down(
@@ -519,11 +523,117 @@ pub fn compose_violet(
                 ),
             );
             layout.accents.push(*cell);
-        } else if roll < 0.58 && !world.contains(under) {
+        } else if roll < 0.60 && !world.contains(under) && under.y >= rhombus.lower_tip_y {
             let (block_type, material) = Family::Violet.bricks();
             world.insert(under, down(block_type, material));
             layout.terraces.push(under);
         }
     }
     layout
+}
+
+// ---------------------------------------------------------------------
+// Family transitions
+// ---------------------------------------------------------------------
+
+/// Seed salt of the transition mix.
+const TRANSITION_SALT: u32 = 0xFA31_0004;
+
+/// The blended boundaries between the families.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FamilyTransitions {
+    /// Surface columns that touch a column of another family.
+    pub boundary: Vec<(i32, i32)>,
+    /// Boundary surface cells rewritten with bridge materials.
+    pub bridged: Vec<IVec3>,
+}
+
+/// `true` when column `(x, z)` lies on a family boundary: one of its four
+/// side neighbors belongs to a different family.
+pub fn is_boundary_column(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    x: i32,
+    z: i32,
+) -> bool {
+    let own = family_zone(terrain, rhombus, x, z);
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .iter()
+        .any(|(dx, dz)| family_zone(terrain, rhombus, x + dx, z + dz) != own)
+}
+
+/// The family of the first side neighbor that differs from the column's own.
+fn neighbor_family(terrain: &TerrainConfig, rhombus: &RhombusConfig, x: i32, z: i32) -> Family {
+    let own = family_zone(terrain, rhombus, x, z);
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .iter()
+        .map(|(dx, dz)| family_zone(terrain, rhombus, x + dx, z + dz))
+        .find(|f| *f != own)
+        .unwrap_or(own)
+}
+
+/// The crying-obsidian accent of a family.
+fn crying_accent(family: Family) -> (BlockType, MaterialId) {
+    match family {
+        Family::Crimson => (
+            BlockType::CryingObsidianCrimson,
+            crying_obsidian_crimson_material_id(),
+        ),
+        Family::Orange => (
+            BlockType::CryingObsidianOrange,
+            crying_obsidian_orange_material_id(),
+        ),
+        Family::Violet => (
+            BlockType::CryingObsidianViolet,
+            crying_obsidian_violet_material_id(),
+        ),
+    }
+}
+
+/// Softens the family boundaries: every boundary surface cell is rewritten
+/// with a bridge material (smooth basalt, polished blackstone, mycelium,
+/// the neighboring family's bricks, or rarely its crying-obsidian accent),
+/// so no suit symbol sits on a border and the three regions interleave
+/// through shared dark stone instead of meeting on hard lines. Hanging
+/// extras (terraces, columns, crystals) are left in place.
+pub fn blend_family_transitions(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    surface: &RedBlackSurface,
+    world: &mut VoxelWorld,
+) -> FamilyTransitions {
+    let mut transitions = FamilyTransitions::default();
+    for cell in &surface.cells {
+        if !is_boundary_column(terrain, rhombus, cell.x, cell.z) {
+            continue;
+        }
+        // A budding block hosting a hanging crystal keeps its crystal's root.
+        let hosts_crystal = world
+            .get(IVec3::new(cell.x, cell.y - 1, cell.z))
+            .map(|b| b.block_type() == BlockType::AmethystCluster)
+            .unwrap_or(false);
+        if hosts_crystal {
+            continue;
+        }
+        transitions.boundary.push((cell.x, cell.z));
+        let roll = hash01(terrain.seed ^ TRANSITION_SALT, cell.x, cell.z);
+        let neighbor = neighbor_family(terrain, rhombus, cell.x, cell.z);
+        let (block_type, material) = if roll < 0.36 {
+            (BlockType::SmoothBasalt, smooth_basalt_material_id())
+        } else if roll < 0.62 {
+            (
+                BlockType::PolishedBlackstoneBricks,
+                polished_blackstone_bricks_material_id(),
+            )
+        } else if roll < 0.78 {
+            (BlockType::Mycelium, mycelium_material_id())
+        } else if roll < 0.95 {
+            neighbor.bricks()
+        } else {
+            crying_accent(neighbor)
+        };
+        world.insert(*cell, down(block_type, material));
+        transitions.bridged.push(*cell);
+    }
+    transitions
 }

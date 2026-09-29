@@ -148,6 +148,9 @@ fn all_five_crimson_block_types_are_present() {
     let f = crimson(&scene);
     let mut counts: HashMap<BlockType, usize> = HashMap::new();
     for cell in f.cells() {
+        if scene.transitions().bridged.contains(&cell) {
+            continue;
+        }
         *counts.entry(block_type(&scene, cell).unwrap()).or_insert(0) += 1;
     }
     for t in [
@@ -239,7 +242,11 @@ fn the_crimson_zone_is_part_of_the_lower_world_not_an_island() {
 fn symbols_face_the_inverted_world_and_the_materials_are_the_catalog_ones() {
     let scene = WorldScene::new();
     let f = crimson(&scene);
-    for cell in &f.symbols {
+    for cell in f
+        .symbols
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         let b = scene.world().get(*cell).unwrap();
         assert!(matches!(
             b.block_type(),
@@ -258,19 +265,31 @@ fn symbols_face_the_inverted_world_and_the_materials_are_the_catalog_ones() {
                 .contains(IVec3::new(cell.x, cell.y - 1, cell.z))
         );
     }
-    for cell in &f.ground {
+    for cell in f
+        .ground
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         assert_eq!(
             scene.world().get(*cell).unwrap().material_id(),
             nether_wart_block_material_id()
         );
     }
-    for cell in &f.accents {
+    for cell in f
+        .accents
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         assert_eq!(
             scene.world().get(*cell).unwrap().material_id(),
             crying_obsidian_crimson_material_id()
         );
     }
-    for cell in &f.terraces {
+    for cell in f
+        .terraces
+        .iter()
+        .filter(|c| !scene.transitions().bridged.contains(c))
+    {
         assert_eq!(
             scene.world().get(*cell).unwrap().material_id(),
             red_black_deepslate_bricks_crimson_material_id()
