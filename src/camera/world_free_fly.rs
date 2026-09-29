@@ -107,6 +107,7 @@ pub struct WorldFreeFlyCameraState {
     pub movement_speed: f32,
     pub mouse_sensitivity: f32,
     home: FreeFlyPose,
+    transition: Option<PortalTransitionState>,
 }
 
 impl WorldFreeFlyCameraState {
@@ -133,6 +134,7 @@ impl WorldFreeFlyCameraState {
             movement_speed: FREE_FLY_SPEED,
             mouse_sensitivity: FREE_FLY_MOUSE_SENSITIVITY,
             home: pose,
+            transition: None,
         }
     }
 
@@ -145,14 +147,15 @@ impl WorldFreeFlyCameraState {
         look_direction(self.yaw, self.pitch, self.local_up)
     }
 
-    /// Unit right (`forward x up`).
+    /// Unit right (`forward x up`), following the roll of a transition.
     pub fn right(&self) -> Vec3 {
-        right_of(self.forward(), self.local_up)
+        self.forward().cross(self.up()).normalize()
     }
 
-    /// Unit up of the view frame (perpendicular to `forward`).
+    /// Unit up of the view frame (perpendicular to `forward`), following
+    /// the roll of a transition.
     pub fn up(&self) -> Vec3 {
-        frame_up(self.forward(), self.local_up)
+        self.rolled_up()
     }
 
     /// The raytracer camera for this state.
@@ -166,13 +169,15 @@ impl WorldFreeFlyCameraState {
         )
     }
 
-    /// Restores everything: the reset pose, the Overworld realm and +Y.
+    /// Restores everything: the reset pose, the Overworld realm, +Y and no
+    /// transition in progress.
     pub fn reset(&mut self) {
         self.position = self.home.position;
         self.yaw = self.home.yaw;
         self.pitch = self.home.pitch;
         self.realm = WorldRealm::Overworld;
         self.local_up = WorldRealm::Overworld.up();
+        self.transition = None;
     }
 }
 
@@ -274,4 +279,127 @@ pub fn apply_free_fly_input(state: &mut WorldFreeFlyCameraState, input: &FreeFly
         input.move_up,
         input.delta_time,
     );
+}
+
+// ---------------------------------------------------------------------
+// Portal transition: the 180-degree roll between realms
+// ---------------------------------------------------------------------
+
+use crate::camera::portal_crossing::PortalCrossingEvent;
+
+/// Seconds the roll takes.
+pub const PORTAL_TRANSITION_DURATION: f32 = 0.8;
+
+/// Hermite smoothstep `t * t * (3 - 2t)`.
+pub fn smoothstep(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Rotates `v` (perpendicular to the unit `axis`) by `angle` radians around
+/// it (Rodrigues, reduced to the perpendicular case).
+pub fn rotate_around(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
+    let (sin, cos) = angle.sin_cos();
+    v * cos + axis.cross(v) * sin
+}
+
+/// An in-progress traversal: which realm the camera leaves and enters and
+/// how far the roll has come.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PortalTransitionState {
+    pub from_realm: WorldRealm,
+    pub to_realm: WorldRealm,
+    pub elapsed: f32,
+    pub duration: f32,
+}
+
+impl PortalTransitionState {
+    pub fn start(event: PortalCrossingEvent) -> Self {
+        Self {
+            from_realm: event.from_realm(),
+            to_realm: event.to_realm(),
+            elapsed: 0.0,
+            duration: PORTAL_TRANSITION_DURATION,
+        }
+    }
+
+    /// Linear progress in `[0, 1]`.
+    pub fn progress(&self) -> f32 {
+        if self.duration <= 0.0 {
+            1.0
+        } else {
+            (self.elapsed / self.duration).clamp(0.0, 1.0)
+        }
+    }
+
+    /// Eased progress in `[0, 1]`.
+    pub fn eased(&self) -> f32 {
+        smoothstep(self.progress())
+    }
+
+    /// Roll angle so far, in radians (`0` to `pi`).
+    pub fn roll_angle(&self) -> f32 {
+        std::f32::consts::PI * self.eased()
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.progress() >= 1.0
+    }
+
+    /// Advances the clock (non-finite or negative steps count as zero; a
+    /// stall simply completes the roll).
+    pub fn advance(&mut self, delta_time: f32) {
+        if delta_time.is_finite() && delta_time > 0.0 {
+            self.elapsed += delta_time;
+        }
+    }
+}
+
+impl WorldFreeFlyCameraState {
+    /// The active transition, if any.
+    pub fn transition(&self) -> Option<&PortalTransitionState> {
+        self.transition.as_ref()
+    }
+
+    /// Starts the roll for `event`. Returns `false` (and does nothing) while
+    /// another transition is active or the event does not leave the current
+    /// realm.
+    pub fn begin_transition(&mut self, event: PortalCrossingEvent) -> bool {
+        if self.transition.is_some() || event.from_realm() != self.realm {
+            return false;
+        }
+        self.transition = Some(PortalTransitionState::start(event));
+        true
+    }
+
+    /// Advances an active transition by `delta_time`; on completion the
+    /// camera adopts the destination realm: `local_up` flips and the pitch
+    /// is mirrored so `forward` is exactly preserved. Returns `true` while a
+    /// transition was active this frame (the view keeps changing).
+    pub fn advance_transition(&mut self, delta_time: f32) -> bool {
+        let Some(transition) = self.transition.as_mut() else {
+            return false;
+        };
+        transition.advance(delta_time);
+        if transition.is_complete() {
+            let to = transition.to_realm;
+            self.transition = None;
+            self.realm = to;
+            self.local_up = to.up();
+            self.pitch = -self.pitch;
+        }
+        true
+    }
+
+    /// The view frame's up, including the roll of an active transition:
+    /// the frame up of the realm being left, rotated around `forward` by
+    /// the eased angle; at the end of the roll it coincides with the
+    /// destination realm's frame up.
+    pub fn rolled_up(&self) -> Vec3 {
+        let base = frame_up(self.forward(), self.local_up);
+        match &self.transition {
+            Some(t) => rotate_around(base, self.forward(), t.roll_angle()).normalize(),
+            None => base,
+        }
+    }
 }

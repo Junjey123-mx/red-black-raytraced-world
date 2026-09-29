@@ -220,8 +220,11 @@ impl ViewerMode for WorldMode {
         WORLD_MAX_DISTANCE
     }
 
-    /// Mouse look needs a captured cursor: relative motion, no edges.
+    /// Mouse look needs a captured cursor: relative motion, no edges. The
+    /// default ESC exit key is disabled so a stray key event cannot end a
+    /// recording; the window's close button still quits.
     fn setup(&self, rl: &mut RaylibHandle) {
+        rl.set_exit_key(None);
         rl.disable_cursor();
     }
 
@@ -229,23 +232,24 @@ impl ViewerMode for WorldMode {
     /// free-fly state (never the orbit camera).
     fn update(&mut self, rl: &RaylibHandle) -> bool {
         let input = poll_free_fly_input(rl);
+        // An active roll keeps changing the view even without input.
+        let rolling = self.free_fly.advance_transition(rl.get_frame_time());
         if input.is_active() {
             let previous = self.free_fly.position;
             apply_free_fly_input(&mut self.free_fly, &input);
             if input.reset {
                 self.portal_detector.reset();
-            } else if let Some(event) =
-                self.portal_detector
-                    .detect(previous, self.free_fly.position, self.free_fly.realm)
-            {
-                // The realm switch and the camera inversion follow in the
-                // next stages; for now the traversal is only reported.
-                #[cfg(debug_assertions)]
-                eprintln!("portal crossing: {event:?}");
-                let _ = event;
+            } else if self.free_fly.transition().is_none() {
+                if let Some(event) = self.portal_detector.detect(
+                    previous,
+                    self.free_fly.position,
+                    self.free_fly.realm,
+                ) {
+                    self.free_fly.begin_transition(event);
+                }
             }
         }
-        input.is_active()
+        input.is_active() || rolling
     }
 
     fn camera(&self, aspect_ratio: f32) -> Camera {

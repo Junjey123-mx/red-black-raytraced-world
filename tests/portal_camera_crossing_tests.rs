@@ -311,17 +311,24 @@ fn the_detector_fires_once_and_rearms_only_after_leaving_the_membrane() {
 }
 
 #[test]
-fn the_world_mode_owns_a_detector_built_from_the_scene_and_reports_only() {
+fn the_world_mode_owns_a_detector_built_from_the_scene() {
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     let world =
         &app[app.find("struct WorldMode").unwrap()..app.find("/// Casts one primary ray").unwrap()];
     assert!(world.contains("PortalVolume::from_anchor(&scene.rhombus().portal)"));
+    let compact: String = world
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .replace(",)", ")");
     assert!(
-        world.contains(
-            "portal_detector.detect(previous, self.free_fly.position, self.free_fly.realm)"
-        ) || world.contains(".detect(previous, self.free_fly.position, self.free_fly.realm)")
+        compact.contains(
+            "portal_detector.detect(previous,self.free_fly.position,self.free_fly.realm)"
+        )
     );
-    // No realm switch yet, no height rule anywhere.
+    // The realm changes only through the detector's event, never by a
+    // height or coordinate rule.
+    assert!(world.contains("begin_transition(event)"));
     assert!(!world.contains("realm = WorldRealm::RedBlack"));
     assert!(!world.contains("waist_y") && !world.contains("position.y <"));
     let catalog =
