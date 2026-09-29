@@ -4,6 +4,7 @@
 // value is a pure function of the seed and the integer/float coordinates.
 #![allow(dead_code)]
 
+pub mod fbm;
 pub mod hash;
 pub mod noise;
 
