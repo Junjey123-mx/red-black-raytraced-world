@@ -243,17 +243,34 @@ pub fn world_background() -> Background {
     Background::Sky(world_sky())
 }
 
-/// Orbit camera looking at the terrain from the front, elevated.
-pub fn world_camera(aspect_ratio: f32) -> Camera {
+/// World-space point the official framing looks at: the volumetric center
+/// of the micro-scene (middle of the footprint, just above the typical
+/// surface so the house and the tree crowns balance the geological sides).
+pub fn world_focus() -> Vec3 {
     let config = TerrainConfig::official();
-    let center = Vec3::new(
+    Vec3::new(
         config.width as f32 / 2.0,
-        config.base_height as f32,
+        config.base_height as f32 + 1.0,
         config.depth as f32 / 2.0,
-    );
+    )
+}
+
+/// Eye offset of the official framing: a raised three-quarter view from the
+/// south-south-east (the door side), high enough to read the relief, the
+/// pond and the path, low enough to keep the layered sides in view.
+pub const WORLD_CAMERA_OFFSET: Vec3 = Vec3 {
+    x: 7.0,
+    y: 14.0,
+    z: 24.0,
+};
+
+/// The official Overworld framing: the orbit camera's starting pose and
+/// what `R` resets to.
+pub fn world_camera(aspect_ratio: f32) -> Camera {
+    let focus = world_focus();
     Camera::new(
-        center + Vec3::new(0.0, 18.0, 30.0),
-        center,
+        focus + WORLD_CAMERA_OFFSET,
+        focus,
         Vec3::new(0.0, 1.0, 0.0),
         60.0,
         aspect_ratio,
