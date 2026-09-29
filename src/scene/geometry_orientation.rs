@@ -101,3 +101,95 @@ pub fn orient_growth(geometry: &BlockGeometry, orientation: Orientation) -> Bloc
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Functional faces: which texture a geometric face shows
+// ---------------------------------------------------------------------
+
+use crate::core::hit::Face;
+use crate::core::math::Vec2;
+
+/// The block-local ("functional") face that a world-space geometric `face`
+/// of a block placed with `orientation` corresponds to, i.e. the inverse of
+/// `map_point` applied to face normals. Face textures are authored for the
+/// canonical pose (South, Up); a hit on a geometric face samples the texture
+/// of its functional face:
+///
+/// ```text
+/// Up / South -> identity
+/// Down       -> +Y <-> -Y (the logical top now faces down)
+/// North      -> +X <-> -X, +Z <-> -Z
+/// East       -> +X -> +Z, -X -> -Z, +Z -> -X, -Z -> +X
+/// West       -> +X -> -Z, -X -> +Z, +Z -> +X, -Z -> -X
+/// ```
+pub fn functional_face(face: Face, orientation: Orientation) -> Face {
+    use Face::*;
+    match orientation {
+        Orientation::Up | Orientation::South => face,
+        Orientation::Down => match face {
+            PositiveY => NegativeY,
+            NegativeY => PositiveY,
+            other => other,
+        },
+        Orientation::North => match face {
+            PositiveX => NegativeX,
+            NegativeX => PositiveX,
+            PositiveZ => NegativeZ,
+            NegativeZ => PositiveZ,
+            other => other,
+        },
+        Orientation::East => match face {
+            PositiveX => PositiveZ,
+            NegativeX => NegativeZ,
+            PositiveZ => NegativeX,
+            NegativeZ => PositiveX,
+            other => other,
+        },
+        Orientation::West => match face {
+            PositiveX => NegativeZ,
+            NegativeX => PositiveZ,
+            PositiveZ => PositiveX,
+            NegativeZ => NegativeX,
+            other => other,
+        },
+    }
+}
+
+/// The UV, in the functional face's own convention, of a hit at `uv` on
+/// the geometric `face` of a block placed with `orientation` (see
+/// `functional_face`). Lateral faces keep their UV under the cardinal
+/// rotations (the per-face UV conventions rotate with them); `Down` flips
+/// `v` on every face (the block is mirrored top-to-bottom) and the rotated
+/// `+/-Y` faces turn their UV with the block.
+pub fn functional_uv(face: Face, uv: Vec2, orientation: Orientation) -> Vec2 {
+    let vertical = matches!(face, Face::PositiveY | Face::NegativeY);
+    match orientation {
+        Orientation::Up | Orientation::South => uv,
+        Orientation::Down => Vec2::new(uv.x, 1.0 - uv.y),
+        Orientation::North => {
+            if vertical {
+                Vec2::new(1.0 - uv.x, 1.0 - uv.y)
+            } else {
+                uv
+            }
+        }
+        Orientation::East => match face {
+            Face::PositiveY => Vec2::new(1.0 - uv.y, uv.x),
+            Face::NegativeY => Vec2::new(uv.y, 1.0 - uv.x),
+            _ => uv,
+        },
+        Orientation::West => match face {
+            Face::PositiveY => Vec2::new(uv.y, 1.0 - uv.x),
+            Face::NegativeY => Vec2::new(1.0 - uv.y, uv.x),
+            _ => uv,
+        },
+    }
+}
+
+/// `functional_face` and `functional_uv` together.
+pub fn functional_face_uv(face: Face, uv: Vec2, orientation: Orientation) -> (Face, Vec2) {
+    (
+        functional_face(face, orientation),
+        functional_uv(face, uv, orientation),
+    )
+}

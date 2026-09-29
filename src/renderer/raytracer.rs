@@ -20,6 +20,7 @@ use crate::renderer::voxel_traversal::DdaState;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_geometry::BlockGeometry;
 use crate::scene::block_shape_factory::block_geometry;
+use crate::scene::geometry_orientation::functional_face_uv;
 use crate::scene::light::Light;
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
@@ -228,8 +229,13 @@ fn resolve_albedo(
 struct SurfaceHit<'a> {
     point: Vec3,
     normal: Vec3,
+    /// The block-local face whose texture the hit shows (the geometric
+    /// face mapped through the block's orientation).
     face: Face,
+    /// UV in that functional face's convention.
     uv: Vec2,
+    /// The geometric (world-space) face, for the normal map's tangent frame.
+    tangent_face: Face,
     material: &'a Material,
 }
 
@@ -287,8 +293,13 @@ fn shade_surface(
     // light on the visible side" test below, so relief can never leak light
     // through the back of a surface. Without a normal texture the two are
     // identical.
-    let shading_normal =
-        sample_shading_normal(material, surface.face, surface.uv, normal, texture_manager);
+    let shading_normal = sample_shading_normal(
+        material,
+        surface.tangent_face,
+        surface.uv,
+        normal,
+        texture_manager,
+    );
 
     let view_direction = (view_origin - point).normalize();
     let ambient = shading::ambient(&shading_material, ambient_factor);
@@ -409,6 +420,7 @@ pub fn cast_ray_lit(
         normal,
         face,
         uv,
+        tangent_face: face,
         material,
     };
 
@@ -552,12 +564,8 @@ fn is_solid_hit(scene: &VoxelScene, voxel: &VoxelHit) -> bool {
         return true;
     }
 
-    let texel = sample_albedo(
-        material,
-        voxel.hit.face,
-        voxel.hit.uv,
-        scene.texture_manager,
-    );
+    let (face, uv) = functional_face_uv(voxel.hit.face, voxel.hit.uv, voxel.block.orientation());
+    let texel = sample_albedo(material, face, uv, scene.texture_manager);
     !material.is_cut_out(texel.a)
 }
 
@@ -648,11 +656,15 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         voxel.hit.normal
     };
 
+    // Textures are looked up through the block's functional face, so a
+    // Down-oriented block shows its logical top on its geometric -Y face.
+    let (face, uv) = functional_face_uv(voxel.hit.face, voxel.hit.uv, voxel.block.orientation());
     let surface = SurfaceHit {
         point: voxel.hit.point,
         normal: shading_normal,
-        face: voxel.hit.face,
-        uv: voxel.hit.uv,
+        face,
+        uv,
+        tangent_face: voxel.hit.face,
         material,
     };
 
