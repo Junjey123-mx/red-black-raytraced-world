@@ -17,8 +17,8 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::overworld::{
-    HouseExterior, HouseLayout, PondLayout, Tree, build_house, carve_pond, column_top,
-    furnish_house, plant_trees,
+    HouseExterior, HouseLayout, PathLayout, PondLayout, Tree, build_house, carve_pond, column_top,
+    furnish_house, lay_path, plant_trees,
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
@@ -45,6 +45,7 @@ pub struct WorldScene {
     house: HouseLayout,
     exterior: HouseExterior,
     trees: Vec<Tree>,
+    path: PathLayout,
     world: VoxelWorld,
 }
 
@@ -63,6 +64,7 @@ impl WorldScene {
         let house = build_house(&config, &mut world);
         let exterior = furnish_house(&config, &mut world);
         let trees = plant_trees(&config, &mut world, &pond);
+        let path = lay_path(&config, &mut world, &pond, &trees);
         Self {
             config,
             field,
@@ -71,8 +73,14 @@ impl WorldScene {
             house,
             exterior,
             trees,
+            path,
             world,
         }
+    }
+
+    /// The cobblestone path from the door to the descent point.
+    pub fn path(&self) -> &PathLayout {
+        &self.path
     }
 
     /// The roof, door, glass, fence and lamps of the house.

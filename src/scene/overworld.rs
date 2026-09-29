@@ -1,5 +1,6 @@
 // The Overworld micro-scene: the deliberate features built on top of the
-// generated terrain (pond and sandy shore, house, trees; the path follows). Each feature is a deterministic edit of the `VoxelWorld` driven
+// generated terrain: pond and sandy shore, house, trees and the cobblestone
+// path toward the reserved descent point. Each feature is a deterministic edit of the `VoxelWorld` driven
 // by the terrain seed, never by a random-number crate.
 #![allow(dead_code)]
 
@@ -11,8 +12,8 @@ use crate::scene::material_gallery::{
 };
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld_blocks::{
-    dirt_material_id, double_wood_slab_material_id, fence_material_id, log_material_id,
-    sand_material_id, stone_block_material_id, wood_door_bottom_material_id,
+    cobblestone_material_id, dirt_material_id, double_wood_slab_material_id, fence_material_id,
+    log_material_id, sand_material_id, stone_block_material_id, wood_door_bottom_material_id,
     wood_door_top_material_id, wood_planks_material_id, wood_stairs_material_id,
 };
 use crate::scene::terrain::TerrainConfig;
@@ -655,4 +656,175 @@ pub fn furnish_house(config: &TerrainConfig, world: &mut VoxelWorld) -> HouseExt
     }
 
     ext
+}
+
+// ---------------------------------------------------------------------
+// Cobblestone path
+// ---------------------------------------------------------------------
+
+/// Where the path starts: the ground in front of the door.
+pub const PATH_START: (i32, i32) = (HOUSE_DOOR_X, HOUSE_PORCH_Z);
+
+/// Largest rise or fall between two consecutive path cells.
+pub const PATH_MAX_STEP: i32 = 1;
+
+/// Upper bound on path cells (the corridor is small; this only guards the
+/// walk against a malformed configuration).
+const PATH_MAX_LENGTH: usize = 64;
+
+/// `true` for the blocks that make up the ground surface.
+fn is_ground_block(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::Grass
+            | BlockType::Dirt
+            | BlockType::Sand
+            | BlockType::Stone
+            | BlockType::Cobblestone
+            | BlockType::Deepslate
+    )
+}
+
+/// Highest ground cell of column `(x, z)`, ignoring anything built above
+/// it (fences, awnings, canopies).
+pub fn ground_top(config: &TerrainConfig, world: &VoxelWorld, x: i32, z: i32) -> Option<i32> {
+    let top = config.max_surface_height() + 16;
+    let bottom = config.deepslate_level - 8;
+    (bottom..=top).rev().find(|&y| {
+        world
+            .get(IVec3::new(x, y, z))
+            .map(|b| is_ground_block(b.block_type()))
+            .unwrap_or(false)
+    })
+}
+
+/// The laid path: its surface cells in walking order from the door to the
+/// descent endpoint, plus the landing around the endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PathLayout {
+    pub cells: Vec<IVec3>,
+    pub landing: Vec<IVec3>,
+}
+
+impl PathLayout {
+    pub fn start(&self) -> Option<IVec3> {
+        self.cells.first().copied()
+    }
+
+    pub fn end(&self) -> Option<IVec3> {
+        self.cells.last().copied()
+    }
+
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+}
+
+/// Lays the cobblestone path from `PATH_START` to `DESCENT_ENDPOINT`.
+///
+/// A greedy walk inside `PATH_RESERVE`: at each cell the two moves that
+/// close in on the endpoint are considered (a sideways move only when
+/// neither is possible), a move is valid when its column is not water, not
+/// a trunk, has nothing built on its ground and is at most `PATH_MAX_STEP`
+/// higher or lower, and the gentler move wins (ties go to the axis with
+/// more distance left).
+/// Each visited column's ground block becomes `Cobblestone`; the endpoint
+/// gets a 2 x 2 cobblestone landing that marks the Gate 13 descent entrance.
+pub fn lay_path(
+    config: &TerrainConfig,
+    world: &mut VoxelWorld,
+    pond: &PondLayout,
+    trees: &[Tree],
+) -> PathLayout {
+    // A column is closed to the path when it is water, a trunk, or has
+    // something built right on its ground (a fence post).
+    let blocked = |world: &VoxelWorld, x: i32, z: i32| {
+        if pond.basin.contains(&(x, z)) || trees.iter().any(|t| t.base.x == x && t.base.z == z) {
+            return true;
+        }
+        match ground_top(config, world, x, z) {
+            Some(y) => world.contains(IVec3::new(x, y + 1, z)),
+            None => true,
+        }
+    };
+    let height = |world: &VoxelWorld, x: i32, z: i32| ground_top(config, world, x, z);
+
+    let mut layout = PathLayout::default();
+    let (mut x, mut z) = PATH_START;
+    let (tx, tz) = DESCENT_ENDPOINT;
+    let Some(mut y) = height(world, x, z) else {
+        return layout;
+    };
+    let pave = |world: &mut VoxelWorld, x: i32, y: i32, z: i32, into: &mut Vec<IVec3>| {
+        let cell = IVec3::new(x, y, z);
+        world.insert(
+            cell,
+            full(BlockType::Cobblestone, cobblestone_material_id()),
+        );
+        into.push(cell);
+    };
+    pave(world, x, y, z, &mut layout.cells);
+
+    while (x, z) != (tx, tz) && layout.cells.len() < PATH_MAX_LENGTH {
+        let dx = (tx - x).signum();
+        let dz = (tz - z).signum();
+        // Closing moves first; sideways moves only when neither closes in.
+        let closing = [(dx, 0), (0, dz)];
+        let sideways = [(-dz, 0), (dz, 0), (0, -dx), (0, dx)];
+        let valid = |world: &VoxelWorld, layout: &PathLayout, moves: &[(i32, i32)]| {
+            let mut out: Vec<(i32, i32, i32)> = Vec::new();
+            for &(mx, mz) in moves {
+                if (mx, mz) == (0, 0) {
+                    continue;
+                }
+                let (nx, nz) = (x + mx, z + mz);
+                if !PATH_RESERVE.contains(nx, nz)
+                    || blocked(world, nx, nz)
+                    || layout.cells.iter().any(|c| c.x == nx && c.z == nz)
+                {
+                    continue;
+                }
+                let Some(ny) = height(world, nx, nz) else {
+                    continue;
+                };
+                if (ny - y).abs() > PATH_MAX_STEP {
+                    continue;
+                }
+                out.push((nx, nz, ny));
+            }
+            out
+        };
+        let mut candidates = valid(world, &layout, &closing);
+        if candidates.is_empty() {
+            candidates = valid(world, &layout, &sideways);
+        }
+        let Some(&(nx, nz, ny)) = candidates.iter().min_by_key(|&&(nx, nz, ny)| {
+            let along_longer = if (tx - x).abs() >= (tz - z).abs() {
+                nx != x
+            } else {
+                nz != z
+            };
+            ((ny - y).abs(), !along_longer)
+        }) else {
+            break;
+        };
+        (x, z, y) = (nx, nz, ny);
+        pave(world, x, y, z, &mut layout.cells);
+    }
+
+    // Landing around the endpoint.
+    for (lx, lz) in [(tx + 1, tz), (tx, tz + 1), (tx + 1, tz + 1)] {
+        if !PATH_RESERVE.contains(lx, lz) || blocked(world, lx, lz) {
+            continue;
+        }
+        if let Some(ly) = height(world, lx, lz) {
+            pave(world, lx, ly, lz, &mut layout.landing);
+        }
+    }
+
+    layout
 }
