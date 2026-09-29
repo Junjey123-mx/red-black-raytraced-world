@@ -10,6 +10,7 @@ pub mod material_library;
 pub mod orientation;
 pub mod overworld;
 pub mod overworld_blocks;
+pub mod rhombus;
 pub mod scene;
 pub mod terrain;
 pub mod texture_manager;
