@@ -11,10 +11,11 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
+use crate::scene::descent::{UpperDescent, build_upper_descent};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
-    GalleryTextures, advanced_materials_library, glass_material_id, leaves_material_id,
-    redstone_lamp_material_id, water_material_id,
+    GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
+    leaves_material_id, redstone_lamp_material_id, water_material_id,
 };
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::overworld::{
@@ -51,6 +52,7 @@ pub struct WorldScene {
     rhombus: RhombusConfig,
     taper: UpperTaper,
     cutaway: Cutaway,
+    upper_descent: UpperDescent,
     world: VoxelWorld,
 }
 
@@ -74,6 +76,7 @@ impl WorldScene {
         let rhombus = RhombusConfig::derive(&config);
         let taper = build_upper_taper(&config, &rhombus, &mut world);
         let cutaway = carve_cutaway(&config, &rhombus, &mut world);
+        let upper_descent = build_upper_descent(&config, &rhombus, &mut world);
         Self {
             config,
             field,
@@ -86,6 +89,7 @@ impl WorldScene {
             rhombus,
             taper,
             cutaway,
+            upper_descent,
             world,
         }
     }
@@ -103,6 +107,11 @@ impl WorldScene {
     /// The physical cutaway (what was removed).
     pub fn cutaway(&self) -> &Cutaway {
         &self.cutaway
+    }
+
+    /// The stepped route from the path endpoint down to the portal approach.
+    pub fn upper_descent(&self) -> &UpperDescent {
+        &self.upper_descent
     }
 
     /// The cobblestone path from the door to the descent point.
@@ -216,6 +225,7 @@ pub fn world_materials(textures: &WorldTextures) -> MaterialLibrary {
         leaves_material_id(),
         glass_material_id(),
         redstone_lamp_material_id(),
+        deepslate_bricks_material_id(),
     ] {
         let material = gallery
             .get(id)

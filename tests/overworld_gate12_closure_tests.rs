@@ -62,6 +62,8 @@ mod scene {
     pub mod catalog;
     #[path = "../src/scene/cutaway.rs"]
     pub mod cutaway;
+    #[path = "../src/scene/descent.rs"]
+    pub mod descent;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
@@ -265,7 +267,10 @@ fn nothing_of_the_later_gates_is_built() {
     for z in 0..c.depth {
         for x in 0..c.width {
             if let Some(block) = scene.world().get(IVec3::new(x, b.min.y - 1, z)) {
-                assert_eq!(block.block_type().family(), BlockFamily::OverworldTerrain);
+                assert!(matches!(
+                    block.block_type().family(),
+                    BlockFamily::OverworldTerrain | BlockFamily::OverworldArchitecture
+                ));
             }
         }
     }

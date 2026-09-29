@@ -108,7 +108,7 @@ pub struct RhombusConfig {
 pub const UPPER_TAPER_START_RADIUS: f32 = 1.0;
 
 /// Radius at the waist.
-pub const WAIST_RADIUS: f32 = 0.50;
+pub const WAIST_RADIUS: f32 = 0.52;
 
 /// Radius at the widest row of the lower half.
 pub const LOWER_WIDEST_RADIUS: f32 = 0.85;

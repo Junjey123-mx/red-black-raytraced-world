@@ -62,6 +62,8 @@ mod scene {
     pub mod catalog;
     #[path = "../src/scene/cutaway.rs"]
     pub mod cutaway;
+    #[path = "../src/scene/descent.rs"]
+    pub mod descent;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
@@ -135,9 +137,21 @@ fn the_cutaway_region_is_the_deterministic_south_east_quadrant() {
     assert_eq!(a.cutaway().region, r.cutaway);
     assert_eq!(a.cutaway().shelf_y, r.shelf_y);
     assert!(r.cutaway.min_x > r.center_x && r.cutaway.min_z > r.center_z);
+    // Removed cells stay removed unless the descent deliberately re-uses
+    // them (its exit stair and footing stand inside the cut).
+    let descent: HashSet<IVec3> = a
+        .upper_descent()
+        .treads
+        .iter()
+        .map(|(c, _)| *c)
+        .chain(a.upper_descent().footings.iter().copied())
+        .collect();
     for cell in &a.cutaway().removed {
         assert!(r.is_cut(cell.x, cell.y, cell.z));
-        assert!(!a.world().contains(*cell), "{cell:?} still exists");
+        assert!(
+            !a.world().contains(*cell) || descent.contains(cell),
+            "{cell:?} still exists"
+        );
         assert_ne!(cell.y, r.shelf_y);
     }
     assert!(a.cutaway().removed_count() > 200);
@@ -181,7 +195,9 @@ fn the_cut_walls_expose_dirt_stone_and_deepslate() {
             let wall = IVec3::new(r.cutaway.min_x - 1, y, z);
             let air = IVec3::new(r.cutaway.min_x, y, z);
             if let Some(b) = scene.world().get(wall) {
-                if y != r.shelf_y {
+                let descent_cell = scene.upper_descent().treads.iter().any(|(c, _)| *c == air)
+                    || scene.upper_descent().footings.contains(&air);
+                if y != r.shelf_y && !descent_cell {
                     assert!(!scene.world().contains(air), "{air:?} should be cut");
                 }
                 exposed.insert(b.block_type());
@@ -238,12 +254,22 @@ fn the_portal_anchor_is_open_to_the_cut_side() {
             );
         }
     }
+    // The three rows in front of the opening are clear at every opening
+    // height, and the upper rows stay clear all the way out.
     for x in (p.min_x + 1)..p.max_x {
         for y in (p.min_y + 1)..p.max_y {
-            for z in (p.wall_z + 1)..30 {
+            for z in (p.wall_z + 1)..=(p.wall_z + 3) {
                 assert!(
                     !scene.world().contains(IVec3::new(x, y, z)),
                     "({x}, {y}, {z}) blocks the portal"
+                );
+            }
+        }
+        for y in (p.max_y - 2)..=p.max_y {
+            for z in (p.wall_z + 1)..30 {
+                assert!(
+                    !scene.world().contains(IVec3::new(x, y, z)),
+                    "({x}, {y}, {z}) blocks the view"
                 );
             }
         }

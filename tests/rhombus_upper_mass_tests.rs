@@ -62,6 +62,8 @@ mod scene {
     pub mod catalog;
     #[path = "../src/scene/cutaway.rs"]
     pub mod cutaway;
+    #[path = "../src/scene/descent.rs"]
+    pub mod descent;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
@@ -135,6 +137,20 @@ fn gate12_world() -> VoxelWorld {
     world
 }
 
+/// Cells the upper descent is allowed to edit: its dug pit, treads,
+/// footings, shelf plate and brick approach.
+fn descent_cells(scene: &WorldScene) -> std::collections::HashSet<IVec3> {
+    let d = scene.upper_descent();
+    d.dug
+        .iter()
+        .copied()
+        .chain(d.treads.iter().map(|(c, _)| *c))
+        .chain(d.footings.iter().copied())
+        .chain(d.shelf.iter().copied())
+        .chain(d.approach.iter().copied())
+        .collect()
+}
+
 fn census(world: &VoxelWorld, min_y: i32, max_y: i32) -> HashMap<BlockType, usize> {
     let mut counts = HashMap::new();
     for z in -4..28 {
@@ -154,6 +170,7 @@ fn the_gate12_surface_and_landmarks_are_preserved_exactly() {
     let scene = WorldScene::new();
     let reference = gate12_world();
     let r = scene.rhombus();
+    let descent = descent_cells(&scene);
     // Every cell from the terrain's rim bottom up is identical outside the
     // physical cutaway quadrant (which removes cells, never edits them).
     for z in -4..28 {
@@ -163,6 +180,9 @@ fn the_gate12_surface_and_landmarks_are_preserved_exactly() {
             }
             for y in r.upper_taper_top..=24 {
                 let cell = IVec3::new(x, y, z);
+                if descent.contains(&cell) {
+                    continue;
+                }
                 assert_eq!(
                     scene.world().get(cell),
                     reference.get(cell),
@@ -179,6 +199,10 @@ fn the_gate12_surface_and_landmarks_are_preserved_exactly() {
     let above = census(scene.world(), r.upper_taper_top, 24);
     let above_ref = census(&reference, r.upper_taper_top, 24);
     for (t, n) in &above_ref {
+        // Only the descent's stairs may grow above the terrain bottom.
+        if *t == BlockType::WoodStairs {
+            continue;
+        }
         assert!(above.get(t).copied().unwrap_or(0) <= *n, "{t:?} grew");
     }
     assert_eq!(
@@ -222,9 +246,14 @@ fn the_taper_reaches_the_shelf_as_a_solid_mass() {
     assert_eq!(taper.top_y, r.upper_taper_top - 1);
     assert_eq!(taper.bottom_y, r.shelf_y);
     assert!(taper.cells.len() > 800, "{} taper cells", taper.cells.len());
+    let descent = descent_cells(&scene);
     for cell in &taper.cells {
         assert!(cell.y <= taper.top_y && cell.y >= taper.bottom_y);
-        assert!(scene.world().contains(*cell) || r.is_cut(cell.x, cell.y, cell.z));
+        assert!(
+            scene.world().contains(*cell)
+                || r.is_cut(cell.x, cell.y, cell.z)
+                || descent.contains(cell)
+        );
         assert!(r.contains(scene.config(), cell.x, cell.y, cell.z));
     }
     // Solid: every cell inside the section between the shelf and the
@@ -232,7 +261,10 @@ fn the_taper_reaches_the_shelf_as_a_solid_mass() {
     for y in r.shelf_y..r.upper_taper_top {
         for z in -4..28 {
             for x in -4..28 {
-                if r.contains(scene.config(), x, y, z) && !r.is_cut(x, y, z) {
+                if r.contains(scene.config(), x, y, z)
+                    && !r.is_cut(x, y, z)
+                    && !descent.contains(&IVec3::new(x, y, z))
+                {
                     assert!(
                         scene.world().contains(IVec3::new(x, y, z)),
                         "cavity at ({x}, {y}, {z})"
@@ -257,6 +289,10 @@ fn the_added_mass_is_geological_and_turns_to_deepslate_downward() {
     let r = scene.rhombus();
     let counts = census(scene.world(), r.shelf_y, r.upper_taper_top - 1);
     for (t, n) in &counts {
+        // The descent's own blocks (stairs, bricks) pass through the mass.
+        if matches!(t, BlockType::WoodStairs | BlockType::DeepslateBricks) {
+            continue;
+        }
         assert!(
             matches!(
                 t,
