@@ -225,8 +225,10 @@ fn a_bounded_crimson_point_light_sits_in_front_of_the_membrane() {
             Light::Directional(_) => None,
         })
         .collect();
-    assert_eq!(points.len(), 1);
-    let light = points[0];
+    let light = points
+        .iter()
+        .find(|p| p.color == portal_light_color())
+        .expect("portal light");
     let expected = portal_light_position(scene.rhombus());
     assert_eq!(light.position, expected);
     let p = scene.rhombus().portal;

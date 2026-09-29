@@ -637,3 +637,77 @@ pub fn blend_family_transitions(
     }
     transitions
 }
+
+// ---------------------------------------------------------------------
+// Accent lights
+// ---------------------------------------------------------------------
+
+use crate::core::color::Color;
+use crate::core::math::Vec3;
+use crate::scene::light::{Light, PointLight};
+
+/// Intensity of each family's accent light: a fifth of the sun, enough to
+/// lift the underside out of pure ambient without competing with the
+/// emissive symbols.
+pub const FAMILY_LIGHT_INTENSITY: f32 = 0.22;
+
+/// How far under the diamond's tip the accent lights hang, so every
+/// -Y-facing surface cell sees them.
+pub const FAMILY_LIGHT_DROP: i32 = 3;
+
+impl Family {
+    /// The family's light color: its palette's bright tone.
+    pub fn light_color(self) -> Color {
+        match self {
+            Family::Crimson => Color::new(0.82, 0.12, 0.17, 1.0),
+            Family::Orange => Color::new(1.00, 0.48, 0.00, 1.0),
+            Family::Violet => Color::new(0.76, 0.24, 1.00, 1.0),
+        }
+    }
+}
+
+/// World-space position of a family's accent light: under the centroid of
+/// the family's columns at the lower half's widest row, `FAMILY_LIGHT_DROP`
+/// blocks below the tip. Derived from the zone geometry alone, so it needs
+/// no built world.
+pub fn family_light_position(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    family: Family,
+) -> Vec3 {
+    let mut sum_x = 0.0;
+    let mut sum_z = 0.0;
+    let mut count = 0.0;
+    for z in -4..terrain.depth + 4 {
+        for x in -4..terrain.width + 4 {
+            if rhombus.contains(terrain, x, rhombus.lower_widest_y, z)
+                && !rhombus.cutaway.contains_column(x, z)
+                && family_zone(terrain, rhombus, x, z) == family
+            {
+                sum_x += x as f32 + 0.5;
+                sum_z += z as f32 + 0.5;
+                count += 1.0;
+            }
+        }
+    }
+    let (cx, cz) = if count > 0.0 {
+        (sum_x / count, sum_z / count)
+    } else {
+        (rhombus.center_x as f32, rhombus.center_z as f32)
+    };
+    Vec3::new(cx, (rhombus.lower_tip_y - FAMILY_LIGHT_DROP) as f32, cz)
+}
+
+/// One representative point light per family.
+pub fn family_lights(terrain: &TerrainConfig, rhombus: &RhombusConfig) -> Vec<Light> {
+    Family::ALL
+        .iter()
+        .map(|&family| {
+            Light::Point(PointLight::new(
+                family_light_position(terrain, rhombus, family),
+                family.light_color(),
+                FAMILY_LIGHT_INTENSITY,
+            ))
+        })
+        .collect()
+}

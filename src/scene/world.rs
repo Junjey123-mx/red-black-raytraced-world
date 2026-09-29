@@ -29,6 +29,7 @@ use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, p
 use crate::scene::red_black_maze::{
     FamilyLayout, FamilyTransitions, LowerMass, RedBlackSurface, blend_family_transitions,
     build_lower_mass, build_red_black_surface, compose_crimson, compose_orange, compose_violet,
+    family_lights,
 };
 use crate::scene::rhombus::{RhombusConfig, UpperTaper, build_upper_taper};
 use crate::scene::scene::{diagnostic_materials, grass_material_id};
@@ -317,13 +318,19 @@ pub fn sun_color() -> Color {
     Color::new(1.0, 0.97, 0.90, 1.0)
 }
 
-/// The world's lights: the sun, and the portal's crimson point light at the
-/// waist (the block lamps of the house stay emissive-only).
+/// The world's lights: the sun, the portal's crimson point light at the
+/// waist, and one accent light per Red-Black family under the tip. Every
+/// other glow (lamps, symbols, crying obsidian, amethyst) is emissive
+/// texture only, so the light count stays bounded.
 pub fn world_lights() -> Vec<Light> {
-    vec![
+    let terrain = TerrainConfig::official();
+    let rhombus = RhombusConfig::derive(&terrain);
+    let mut lights = vec![
         Light::Directional(DirectionalLight::new(sun_direction(), sun_color(), 1.0)),
-        portal_light(&RhombusConfig::official()),
-    ]
+        portal_light(&rhombus),
+    ];
+    lights.extend(family_lights(&terrain, &rhombus));
+    lights
 }
 
 /// The clear daytime sky: a medium celeste-blue zenith, a pale luminous
