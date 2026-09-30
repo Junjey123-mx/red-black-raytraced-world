@@ -15,9 +15,11 @@ use std::time::Duration;
 /// The preview scales the controller chooses between, sharpest first.
 pub const PREVIEW_SCALES: [usize; 2] = [2, 4];
 
-/// Time an Interactive render may take per frame: 40 ms is 25 frames per
-/// second, the middle of the 33-50 ms (20-30 FPS) target.
-pub const INTERACTIVE_FRAME_BUDGET: Duration = Duration::from_millis(40);
+/// Time an Interactive render may take per frame: 50 ms is 20 frames per
+/// second, the floor of the 20-30 FPS target, so the sharper 400x300
+/// preview is kept whenever it still holds 20 FPS (the portal view traces
+/// it in about 38 ms) and 200x150 remains a fallback only.
+pub const INTERACTIVE_FRAME_BUDGET: Duration = Duration::from_millis(50);
 
 /// Consecutive over-budget frames at the sharper scale before dropping to
 /// the coarser one.

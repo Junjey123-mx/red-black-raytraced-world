@@ -143,7 +143,7 @@ fn ms(v: u64) -> Duration {
 }
 
 fn fast() -> Duration {
-    // At x4 this predicts 4 * 5 = 20 ms at x2: well inside 80 % of 40 ms.
+    // At x4 this predicts 4 * 5 = 20 ms at x2: well inside 80 % of 50 ms.
     ms(5)
 }
 
@@ -159,7 +159,7 @@ fn the_default_scale_is_the_sharper_valid_one() {
     assert_eq!(PREVIEW_SCALES, [2, 4]);
     assert_eq!(AdaptivePreview::default(), preview);
     assert_eq!(preview.resolution(800, 600), (400, 300));
-    assert_eq!(INTERACTIVE_FRAME_BUDGET, ms(40));
+    assert_eq!(INTERACTIVE_FRAME_BUDGET, ms(50));
     assert!((33..=50).contains(&(INTERACTIVE_FRAME_BUDGET.as_millis() as u64)));
 }
 
