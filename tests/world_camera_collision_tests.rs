@@ -170,11 +170,15 @@ fn resolve(scene: &WorldScene, from: Vec3, delta: Vec3) -> Vec3 {
     )
 }
 
-/// The air in front of the portal membrane (the brick landing at y = -10,
-/// the opening at y -9..-6, membrane at z 14.44..14.56).
+/// The open cutaway air in front of the portal frame's top row (frame at
+/// y = -5, z = 14): a solid wall to push against. The membrane below it is
+/// camera-passable (see the passability contract), so it is not a wall.
 fn portal_approach() -> Vec3 {
-    v(16.5, -7.5, 16.5)
+    v(16.5, -4.5, 16.5)
 }
+
+/// Front face of the frame row, plus the radius: where the camera stops.
+const WALL_STOP: f32 = 15.0 + CAMERA_COLLISION_RADIUS;
 
 #[test]
 fn a_position_in_open_air_is_clear() {
@@ -226,8 +230,8 @@ fn a_wall_stops_forward_movement() {
 #[test]
 fn movement_parallel_to_a_wall_keeps_its_full_length() {
     let scene = WorldScene::new();
-    // Hugging the membrane, moving east along it.
-    let from = v(15.5, -7.5, 14.5625 + CAMERA_COLLISION_RADIUS + 0.05);
+    // Hugging the frame row, moving east along it.
+    let from = v(15.5, -4.5, WALL_STOP + 0.05);
     assert!(clear(&scene, from));
     let to = resolve(&scene, from, v(1.0, 0.0, 0.0));
     assert!(near(to, from + v(1.0, 0.0, 0.0), 1e-4), "{to:?}");
@@ -236,14 +240,11 @@ fn movement_parallel_to_a_wall_keeps_its_full_length() {
 #[test]
 fn a_diagonal_push_into_a_wall_slides_along_it() {
     let scene = WorldScene::new();
-    let from = v(15.5, -7.5, 15.4);
-    // North-east: the north component hits the membrane, the east one slides.
+    let from = v(15.5, -4.5, 16.0);
+    // North-east: the north component hits the frame, the east one slides.
     let to = resolve(&scene, from, v(1.0, 0.0, -1.0));
     assert!(to.x > from.x + 0.9, "east component lost: {to:?}");
-    assert!(
-        to.z >= 14.5625 + CAMERA_COLLISION_RADIUS - 1e-3,
-        "went through: {to:?}"
-    );
+    assert!(to.z >= WALL_STOP - 1e-3, "went through: {to:?}");
     assert!(to.z < from.z, "did not close the gap: {to:?}");
     assert!(clear(&scene, to));
 }
@@ -263,7 +264,7 @@ fn substeps_prevent_tunneling_through_thin_geometry() {
         assert!(clear(&scene, to));
     }
     // The free-fly state itself, moved through the resolver frame by frame.
-    let mut state = WorldFreeFlyCameraState::looking_at(from, v(16.5, -7.5, 14.5));
+    let mut state = WorldFreeFlyCameraState::looking_at(from, v(16.5, -4.5, 14.5));
     for _ in 0..60 {
         let previous = state.position;
         apply_free_fly_input(
@@ -276,11 +277,7 @@ fn substeps_prevent_tunneling_through_thin_geometry() {
         );
         state.position = resolve(&scene, previous, state.position - previous);
     }
-    assert!(
-        state.position.z >= 14.5625 + CAMERA_COLLISION_RADIUS - 1e-3,
-        "{:?}",
-        state.position
-    );
+    assert!(state.position.z >= WALL_STOP - 1e-3, "{:?}", state.position);
 }
 
 #[test]
@@ -304,15 +301,20 @@ fn negative_coordinates_resolve_like_positive_ones() {
 #[test]
 fn partial_geometry_is_tested_against_its_real_shape() {
     let scene = WorldScene::new();
-    // The portal core is a 1/8 slab centered in its cell (z 14.4375..14.5625):
-    // the empty part of the cell is free, the slab is solid.
-    let core = IVec3::new(16, -8, 14);
+    // The porch fence: thin rails and a post inside a mostly empty cell.
+    // The empty part of the cell is free, the rails are solid.
+    let fence = IVec3::new(6, 6, 13);
     assert_eq!(
-        scene.world().get(core).map(|b| b.block_type()),
-        Some(BlockType::PortalCoreDarkCrimson)
+        scene.world().get(fence).map(|b| b.block_type()),
+        Some(BlockType::Fence)
     );
-    assert!(clear(&scene, v(16.5, -7.5, 14.5625 + 0.3)));
-    assert!(!clear(&scene, v(16.5, -7.5, 14.5625 + 0.2)));
+    // Rails span z 0.4375..0.5625 of the cell (the post reaches 0.625):
+    // beside the post, 0.29 past the rails is clear, 0.19 is not.
+    assert!(clear(&scene, v(6.9, 6.5, 13.5625 + 0.29)));
+    assert!(!clear(&scene, v(6.9, 6.5, 13.5625 + 0.19)));
+    // The camera-passable membrane is not a collider even though it is a
+    // thin slab in its cell.
+    assert!(clear(&scene, v(16.5, -7.5, 14.5)));
     // A wooden stair of the upper descent: its raised half is solid, the
     // open half above the low step is free.
     let (tread, orientation) = scene.upper_descent().treads[2];

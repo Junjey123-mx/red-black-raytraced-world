@@ -524,7 +524,7 @@ fn the_catalog_controls_are_unchanged_and_the_world_hud_is_free_fly() {
     let world =
         &app[app.find("struct WorldMode").unwrap()..app.find("/// Casts one primary ray").unwrap()];
     assert!(world.contains("poll_free_fly_input") && world.contains("apply_free_fly_input"));
-    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | R reset"));
+    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | N noclip | R reset"));
     assert!(!world.contains("apply_orbit_input"));
     for key in [
         "KEY_W",

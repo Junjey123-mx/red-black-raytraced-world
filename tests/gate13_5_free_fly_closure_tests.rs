@@ -238,7 +238,7 @@ fn world_uses_free_fly_and_catalog_uses_the_diagnostic_camera() {
     assert!(
         catalog.contains("Drag: orbit | Wheel: zoom | [ ] or Q E: select | F: focus | R: reset")
     );
-    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | R reset"));
+    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | N noclip | R reset"));
     let g = gallery_camera(4.0 / 3.0);
     let view = DiagnosticCameraState::from_pose(g.position, g.target);
     assert_eq!(g.position, Vec3::new(6.0, 5.6, 14.0));

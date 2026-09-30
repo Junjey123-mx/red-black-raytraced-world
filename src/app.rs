@@ -7,7 +7,7 @@ use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::portal_crossing::{PortalCrossingDetector, PortalVolume};
 use crate::camera::world_collision::{
-    CameraCollisionConfig, is_camera_solid, resolve_camera_motion,
+    CameraCollisionConfig, CollisionState, is_camera_solid, resolve_camera_motion,
 };
 use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
@@ -185,6 +185,8 @@ struct WorldMode {
     portal_detector: PortalCrossingDetector,
     /// The camera's collision sphere (solid blocks stop it).
     collision: CameraCollisionConfig,
+    /// Collision on / noclip switch (`N`).
+    collision_state: CollisionState,
 }
 
 impl WorldMode {
@@ -208,6 +210,7 @@ impl WorldMode {
             free_fly: world_free_fly_camera(),
             portal_detector,
             collision: CameraCollisionConfig::default(),
+            collision_state: CollisionState::new(),
         }
     }
 }
@@ -251,12 +254,22 @@ impl ViewerMode for WorldMode {
     /// free-fly state (never the orbit camera).
     fn update(&mut self, rl: &RaylibHandle) -> bool {
         let input = poll_free_fly_input(rl);
+        // `N` toggles noclip (refused while embedded in a solid block).
+        if rl.is_key_pressed(KeyboardKey::KEY_N) {
+            self.collision_state.toggle_noclip(
+                self.scene.world(),
+                self.free_fly.position,
+                &self.collision,
+            );
+        }
         // An active roll keeps changing the view even without input.
         let rolling = self.free_fly.advance_transition(rl.get_frame_time());
         if input.is_active() {
             let previous = self.free_fly.position;
             apply_free_fly_input(&mut self.free_fly, &input);
-            if !input.reset {
+            if input.reset {
+                self.collision_state.reset();
+            } else if self.collision_state.collision_enabled() {
                 // The flight is resolved against nearby solid blocks once
                 // per update, from the previous position toward the new one.
                 self.free_fly.position = resolve_camera_motion(
@@ -288,14 +301,15 @@ impl ViewerMode for WorldMode {
 
     fn label(&self) -> String {
         format!(
-            "{} | {} blocks",
+            "{} | {} blocks{}",
             self.free_fly.realm.label(),
-            self.scene.world().len()
+            self.scene.world().len(),
+            self.collision_state.hud_suffix()
         )
     }
 
     fn help(&self) -> &'static str {
-        "WASD move | Mouse look | Space/Shift up/down | R reset"
+        "WASD move | Mouse look | Space/Shift up/down | N noclip | R reset"
     }
 
     /// The World prefers the sharper 400x300 preview whenever it fits the

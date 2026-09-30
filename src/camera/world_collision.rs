@@ -20,6 +20,7 @@ use crate::core::prism::Prism;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_geometry::BlockGeometry;
 use crate::scene::block_shape_factory::block_geometry;
+use crate::scene::block_type::BlockType;
 use crate::scene::voxel_world::VoxelWorld;
 
 /// Radius of the camera's collision sphere, in blocks: small enough for
@@ -35,11 +36,89 @@ pub const COLLISION_SUBSTEP: f32 = 0.2;
 /// so a resolved position is never exactly touching.
 pub const COLLISION_SKIN: f32 = 1e-4;
 
-/// Whether the camera may not pass through a placed block. In this stage
-/// every occupied cell is solid; the passable exceptions (portal membrane,
-/// doorway) come with the passability contract.
-pub fn is_camera_solid(_block: &BlockInstance) -> bool {
-    true
+/// The camera passability contract: every placed block stops the camera
+/// except the two it must be able to go through. The portal membrane
+/// (`PortalCoreDarkCrimson`) stays visible, raytraced, emissive and the
+/// crossing trigger, but the camera passes it; the house `WoodDoor` stays
+/// visible and closed, but the camera enters through it. The portal frame,
+/// walls, glass, fences, terrain and every other block remain solid.
+pub fn is_camera_passable(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::PortalCoreDarkCrimson | BlockType::WoodDoor
+    )
+}
+
+/// Whether the camera may not pass through a placed block (see
+/// `is_camera_passable`).
+pub fn is_camera_solid(block: &BlockInstance) -> bool {
+    !is_camera_passable(block.block_type())
+}
+
+/// What a noclip toggle did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoclipToggle {
+    /// Collision is now bypassed.
+    Enabled,
+    /// Collision is back on.
+    Disabled,
+    /// Collision could not be re-enabled: the camera is embedded in a
+    /// solid block and must first fly out to a clear position.
+    RefusedInsideSolid,
+}
+
+/// The camera's collision switch. Collision is on by default; `N` toggles
+/// noclip, which bypasses collision only (portal crossing, realm change,
+/// roll and sky transition keep working). Noclip cannot be switched off
+/// while the camera sits inside a solid block, so it is never trapped and
+/// never teleported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CollisionState {
+    noclip: bool,
+}
+
+impl CollisionState {
+    /// Collision on, noclip off.
+    pub fn new() -> Self {
+        Self { noclip: false }
+    }
+
+    pub fn is_noclip(&self) -> bool {
+        self.noclip
+    }
+
+    pub fn collision_enabled(&self) -> bool {
+        !self.noclip
+    }
+
+    /// Toggles noclip. Turning it off is refused while `position` is not
+    /// clear of solid blocks.
+    pub fn toggle_noclip(
+        &mut self,
+        world: &VoxelWorld,
+        position: Vec3,
+        config: &CameraCollisionConfig,
+    ) -> NoclipToggle {
+        if !self.noclip {
+            self.noclip = true;
+            NoclipToggle::Enabled
+        } else if is_position_clear(world, position, config, &is_camera_solid) {
+            self.noclip = false;
+            NoclipToggle::Disabled
+        } else {
+            NoclipToggle::RefusedInsideSolid
+        }
+    }
+
+    /// `R`: collision on, noclip off (the reset pose is always clear).
+    pub fn reset(&mut self) {
+        self.noclip = false;
+    }
+
+    /// The HUD suffix while noclip is active.
+    pub fn hud_suffix(&self) -> &'static str {
+        if self.noclip { " | Noclip: ON" } else { "" }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
