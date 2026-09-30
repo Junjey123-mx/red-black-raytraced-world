@@ -11,6 +11,7 @@ use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::parallel::{ParallelRenderConfig, render_parallel};
 use crate::renderer::perf::{FramePerfStats, PerfReporter, TracedFrameKind};
+use crate::renderer::preview::AdaptivePreview;
 use crate::renderer::raytracer::{RenderQuality, VoxelScene};
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
@@ -27,10 +28,11 @@ use crate::scene::world::{
     world_lights, world_materials,
 };
 
-/// While the camera is being moved the scene is traced at `1 / PREVIEW_DOWNSCALE`
-/// of the window resolution (each preview pixel is stretched to fill its
-/// block) so interaction stays responsive on a single CPU thread; as soon as
-/// the input stops, one full-resolution frame is traced.
+/// While the camera is being moved the scene is traced at a reduced scale
+/// (each preview pixel is stretched to fill its block) and at Interactive
+/// quality; as soon as the input stops, one full-resolution Full frame is
+/// traced. The World picks its scale adaptively (`AdaptivePreview`); the
+/// Catalog keeps this fixed downscale, unchanged.
 const PREVIEW_DOWNSCALE: usize = 4;
 
 const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
@@ -64,6 +66,11 @@ trait ViewerMode {
     fn label(&self) -> String;
     /// Controls hint drawn along the bottom edge.
     fn help(&self) -> &'static str;
+    /// Whether moving frames pick their preview scale from measured render
+    /// time (`AdaptivePreview`) instead of the fixed `PREVIEW_DOWNSCALE`.
+    fn adaptive_preview(&self) -> bool {
+        false
+    }
 }
 
 /// The block catalog: the definitive 39-block `CatalogScene` plus the optical
@@ -272,6 +279,12 @@ impl ViewerMode for WorldMode {
     fn help(&self) -> &'static str {
         "WASD move | Mouse look | Space/Shift up/down | R reset"
     }
+
+    /// The World prefers the sharper 400x300 preview whenever it fits the
+    /// interactive budget.
+    fn adaptive_preview(&self) -> bool {
+        true
+    }
 }
 
 /// Casts one primary ray per pixel into the sparse `VoxelWorld` (3D DDA +
@@ -431,6 +444,8 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     let perf = PerfReporter::from_env();
     // Worker threads: one per hardware thread unless `RBRW_THREADS` says otherwise.
     let threads = ParallelRenderConfig::detect();
+    // Preview scale chosen from measured Interactive render times.
+    let mut preview = AdaptivePreview::new();
 
     let mut texture_scale = 1;
     let (mut texture, _) = trace_to_texture(
@@ -450,11 +465,13 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
         // Each mode owns and advances its own camera.
         let mut traced: Option<(TracedFrameKind, usize, usize, TraceTiming)> = None;
         if mode.update(&rl) {
-            texture_scale = PREVIEW_DOWNSCALE;
-            let (width, height) = (
-                full_width / PREVIEW_DOWNSCALE,
-                full_height / PREVIEW_DOWNSCALE,
-            );
+            let scale = if mode.adaptive_preview() {
+                preview.scale()
+            } else {
+                PREVIEW_DOWNSCALE
+            };
+            texture_scale = scale;
+            let (width, height) = (full_width / scale, full_height / scale);
             // A moving view is traced at Interactive quality.
             let (new_texture, timing) = trace_to_texture(
                 &mut rl,
@@ -467,6 +484,9 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 &threads,
             );
             texture = new_texture;
+            if mode.adaptive_preview() {
+                preview.record(timing.render);
+            }
             traced = Some((TracedFrameKind::Interactive, width, height, timing));
             needs_full_frame = true;
         } else if needs_full_frame {
