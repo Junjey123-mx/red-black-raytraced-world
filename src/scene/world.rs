@@ -13,7 +13,7 @@ use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
-    InvertedDescent, UpperDescent, build_inverted_descent, build_upper_descent,
+    InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::light::{DirectionalLight, Light};
@@ -67,7 +67,7 @@ pub struct WorldScene {
     upper_descent: UpperDescent,
     portal: PortalBuild,
     lower_mass: LowerMass,
-    inverted_descent: InvertedDescent,
+    inverted_route: InvertedRoute,
     lower_surface: RedBlackSurface,
     families: Vec<FamilyLayout>,
     transitions: FamilyTransitions,
@@ -99,7 +99,7 @@ impl WorldScene {
         let mut portal = build_portal_frame(&rhombus, &mut world);
         build_portal_core(&rhombus, &mut world, &mut portal);
         let lower_mass = build_lower_mass(&config, &rhombus, &mut world);
-        let inverted_descent = build_inverted_descent(&rhombus, &lower_mass, &mut world);
+        let inverted_route = build_inverted_route(&rhombus, &lower_mass, &mut world);
         let lower_surface = build_red_black_surface(&config, &rhombus, &lower_mass, &mut world);
         let families = vec![
             compose_crimson(&config, &rhombus, &lower_surface, &mut world),
@@ -123,7 +123,7 @@ impl WorldScene {
             upper_descent,
             portal,
             lower_mass,
-            inverted_descent,
+            inverted_route,
             lower_surface,
             families,
             transitions,
@@ -162,9 +162,10 @@ impl WorldScene {
         &self.lower_mass
     }
 
-    /// The hanging flight of inverted stairs under the shelf.
-    pub fn inverted_descent(&self) -> &InvertedDescent {
-        &self.inverted_descent
+    /// The post-portal route: exit clearance and the inverted flight from
+    /// the membrane to the Red-Black underside.
+    pub fn inverted_route(&self) -> &InvertedRoute {
+        &self.inverted_route
     }
 
     /// The -Y-facing ground of the inverted world.

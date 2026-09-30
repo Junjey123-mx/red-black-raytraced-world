@@ -254,13 +254,13 @@ fn the_portal_core_is_passable_but_still_visible() {
     }
     // Inside the membrane slab: clear for the camera.
     assert!(clear(&scene, v(16.5, -7.5, 14.5)));
-    // Through the membrane from the approach: the slab is passed; what
-    // stops the camera is the rock still behind the wall (the exit
-    // clearance is carved with the route), one radius before z = 14.
+    // Through the membrane from the approach into the exit clearance
+    // behind it: the slab is passed and the camera ends in clear air on
+    // the far side.
     let from = v(16.5, -7.5, 16.5);
     let to = resolve(&scene, from, v(0.0, 0.0, -2.5));
     assert!(to.z < 14.4375, "did not pass the membrane: {to:?}");
-    assert!(to.z >= 14.0 + CAMERA_COLLISION_RADIUS - 1e-3, "{to:?}");
+    assert!(to.z <= 14.0 + 1e-3, "{to:?}");
     assert!(clear(&scene, to));
     // Still raytraced: a ray from the approach hits the membrane first.
     let ray = Ray::new(from, v(0.0, 0.0, -1.0));

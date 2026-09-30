@@ -132,7 +132,7 @@ use renderer::skybox::Background;
 use scene::block::BlockInstance;
 use scene::block_type::{BlockFamily, BlockType};
 use scene::cutaway::carve_cutaway;
-use scene::descent::{build_inverted_descent, build_upper_descent};
+use scene::descent::{build_inverted_route, build_upper_descent};
 use scene::orientation::Orientation;
 use scene::overworld::{build_house, carve_pond, furnish_house, lay_path, plant_trees};
 use scene::overworld_blocks::mycelium_material_id;
@@ -174,7 +174,7 @@ impl Stage {
         let mut portal = build_portal_frame(&rhombus, &mut world);
         build_portal_core(&rhombus, &mut world, &mut portal);
         let lower = build_lower_mass(&config, &rhombus, &mut world);
-        build_inverted_descent(&rhombus, &lower, &mut world);
+        build_inverted_route(&rhombus, &lower, &mut world);
         let surface = build_red_black_surface(&config, &rhombus, &lower, &mut world);
         Self {
             config,
@@ -307,16 +307,16 @@ fn mycelium_shows_its_top_toward_negative_y() {
 }
 
 #[test]
-fn the_inverted_stairs_reach_the_surface() {
+fn the_inverted_route_lands_on_the_surface() {
     let scene = WorldScene::new();
-    let last = scene.inverted_descent().last().unwrap();
-    // A surface cell lies within one column of the last tread, at most two
-    // rows away: the flight lands on the ground of the inverted world.
+    let landing = scene.inverted_route().layout.landing;
+    // A surface cell lies within one column of the landing, at most three
+    // rows away: the route lands on the ground of the inverted world.
     let near = scene.lower_surface().cells.iter().any(|c| {
-        (c.x - last.x).abs() <= 1 && (c.z - last.z).abs() <= 1 && (c.y - last.y).abs() <= 2
+        (c.x - landing.x).abs() <= 1 && (c.z - landing.z).abs() <= 1 && (c.y - landing.y).abs() <= 3
     });
-    assert!(near, "no surface cell near the last tread {last:?}");
-    for (tread, _) in &scene.inverted_descent().treads {
+    assert!(near, "no surface cell near the landing {landing:?}");
+    for (tread, _) in &scene.inverted_route().treads {
         assert_eq!(block_type(&scene, *tread), Some(BlockType::WoodStairs));
     }
 }

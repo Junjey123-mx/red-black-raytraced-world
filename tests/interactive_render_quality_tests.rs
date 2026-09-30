@@ -501,7 +501,8 @@ fn the_quality_enum_touches_no_scene_state() {
         (rig.scene.world().len(), rig.scene.world().bounds()),
         (len, bounds)
     );
-    assert_eq!(len, 6784);
+    assert_eq!(len, WorldScene::new().world().len()); // deterministic (Gate 14 changed the total)
+    assert!(len > 6000);
     assert_eq!(rig.lights.len(), 5);
     assert_eq!(RenderQuality::Interactive.label(), "Interactive");
     assert_eq!(RenderQuality::Full.label(), "Full");

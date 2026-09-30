@@ -243,9 +243,10 @@ fn down_face_mapping_lower_mass_inverted_descent_and_surface_hold() {
     );
     // 10. lower mass.
     assert!(scene.lower_mass().cells.len() > 1000);
-    // 11. inverted descent.
-    let inv = scene.inverted_descent();
-    assert!(inv.treads.len() >= 5);
+    // 11. inverted route (rebuilt behind the portal in Gate 14): every
+    //     tread is a Down stair hanging from the mass with air below it.
+    let inv = scene.inverted_route();
+    assert!(inv.layout.step_count >= 5);
     for (cell, o) in &inv.treads {
         assert_eq!(*o, Orientation::Down);
         assert!(

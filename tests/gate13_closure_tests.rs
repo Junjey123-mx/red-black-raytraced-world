@@ -238,8 +238,9 @@ fn inversion_15_to_19_mapping_stairs_surface_mass_tip() {
         functional_face(Face::PositiveY, Orientation::Up),
         Face::PositiveY
     );
-    let inv = scene.inverted_descent();
-    assert!(inv.treads.len() >= 5 && inv.treads.iter().all(|(_, o)| *o == Orientation::Down)); // 16
+    // 16: the inverted route (Gate 14 rebuilt it behind the portal).
+    let inv = scene.inverted_route();
+    assert!(inv.layout.step_count >= 5 && inv.treads.iter().all(|(_, o)| *o == Orientation::Down));
     assert!(scene.lower_surface().cells.len() > 150); // 17
     assert!(
         scene
@@ -470,10 +471,7 @@ fn gate13_metrics() {
             count(&c, BlockType::PortalCoreDarkCrimson)
         ),
         format!("upper stair count: {}", scene.upper_descent().treads.len()),
-        format!(
-            "lower stair count: {}",
-            scene.inverted_descent().treads.len()
-        ),
+        format!("lower stair count: {}", scene.inverted_route().treads.len()),
         format!("Crimson block count: {crimson}"),
         format!(
             "Orange block count: {orange} (+ {} SmoothBasalt, {} PolishedBlackstoneBricks shared)",

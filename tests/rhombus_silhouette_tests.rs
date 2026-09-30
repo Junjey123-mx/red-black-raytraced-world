@@ -164,7 +164,7 @@ fn the_upper_and_lower_halves_form_one_connected_mass() {
         assert!(main.contains(cell));
     }
     for (cell, _) in scene
-        .inverted_descent()
+        .inverted_route()
         .treads
         .iter()
         .chain(scene.upper_descent().treads.iter())
