@@ -239,6 +239,18 @@ pub struct InvertedRouteLayout {
     pub surface_connection: IVec3,
     /// Air cells kept under every tread.
     pub clearance_height: i32,
+    /// One more tread past the rim, hanging from `rim_support`, that
+    /// brings the flight's floor down to the level of the rim surface.
+    pub rim_step: IVec3,
+    /// The support block the rim step hangs from (added to the mass).
+    pub rim_support: IVec3,
+    /// The landing: a brick platform hung off the rim at `platform_y`, over
+    /// `platform_z_min..=platform_z_max`, as wide as the exit clearance.
+    /// Its -Y face is flush with the rim's surface, so the viewer steps
+    /// from the flight onto the Red-Black ground.
+    pub platform_y: i32,
+    pub platform_z_min: i32,
+    pub platform_z_max: i32,
 }
 
 impl InvertedRouteLayout {
@@ -262,6 +274,24 @@ impl InvertedRouteLayout {
         (1..=self.clearance_height)
             .map(|d| IVec3::new(t.x, t.y - d, t.z))
             .collect()
+    }
+
+    /// The air cells kept clear under an arbitrary tread cell.
+    pub fn clearance_under_cell(&self, t: IVec3) -> Vec<IVec3> {
+        (1..=self.clearance_height)
+            .map(|d| IVec3::new(t.x, t.y - d, t.z))
+            .collect()
+    }
+
+    /// The landing platform cells.
+    pub fn platform_cells(&self) -> Vec<IVec3> {
+        let mut cells = Vec::new();
+        for z in self.platform_z_min..=self.platform_z_max {
+            for x in self.exit_min_x..=self.exit_max_x {
+                cells.push(IVec3::new(x, self.platform_y, z));
+            }
+        }
+        cells
     }
 
     /// The exit clearance: the aperture's rows and columns, one cell
@@ -303,6 +333,11 @@ impl InvertedRouteLayout {
             landing: first_step,
             surface_connection: first_step,
             clearance_height: ROUTE_CLEARANCE_HEIGHT,
+            rim_step: first_step,
+            rim_support: first_step,
+            platform_y: first_step.y,
+            platform_z_min: first_step.z,
+            platform_z_max: first_step.z,
         };
         // Count treads: each needs rock to replace and rock above to hang
         // from, and must stay above the mass bottom.
@@ -324,6 +359,14 @@ impl InvertedRouteLayout {
         // clearance, one column east (the rim keeps its cells there).
         let l = layout.landing;
         layout.surface_connection = IVec3::new(l.x + 1, l.y - layout.clearance_height + 1, l.z);
+        // Past the rim: one more tread, its support, and the platform two
+        // cells further north with its -Y face one cell below that tread.
+        layout.rim_step = layout.tread(layout.step_count);
+        layout.rim_support =
+            IVec3::new(layout.rim_step.x, layout.rim_step.y + 1, layout.rim_step.z);
+        layout.platform_y = layout.rim_step.y - 1;
+        layout.platform_z_max = layout.rim_step.z + layout.direction.z;
+        layout.platform_z_min = layout.platform_z_max + layout.direction.z;
         layout
     }
 }
@@ -365,6 +408,11 @@ impl InvertedRoute {
 ///    it for the viewer. The first tread stands right behind the
 ///    clearance, so the climb starts the moment the camera has crossed.
 ///
+/// 3. The connection to the Red-Black surface: one more tread past the
+///    rim, hung from a deepslate support, and a small brick landing hung
+///    off the rim with its -Y face flush with the surrounding surface, so
+///    the flight ends on the ground of the inverted world.
+///
 /// Only structural mass is removed or replaced; the frame, the core and
 /// every family block stay.
 pub fn build_inverted_route(
@@ -397,6 +445,39 @@ pub fn build_inverted_route(
             if world.remove(cell).is_some() {
                 route.dug.push(cell);
             }
+        }
+    }
+    // 3. Rim step, its support, and the landing.
+    let deepslate = BlockInstance::new(
+        BlockType::Deepslate,
+        deepslate_material_id(),
+        Orientation::Down,
+    );
+    if !world.contains(layout.rim_support) {
+        world.insert(layout.rim_support, deepslate);
+        route.supports.push(layout.rim_support);
+    }
+    if world.remove(layout.rim_step).is_some() {
+        route.dug.push(layout.rim_step);
+    }
+    world.insert(layout.rim_step, stair(Orientation::Down));
+    route.treads.push((layout.rim_step, Orientation::Down));
+    for cell in layout.clearance_under_cell(layout.rim_step) {
+        if world.remove(cell).is_some() {
+            route.dug.push(cell);
+        }
+    }
+    for cell in layout.platform_cells() {
+        if !world.contains(cell) {
+            world.insert(
+                cell,
+                BlockInstance::new(
+                    BlockType::DeepslateBricks,
+                    deepslate_bricks_material_id(),
+                    Orientation::Down,
+                ),
+            );
+            route.supports.push(cell);
         }
     }
     route

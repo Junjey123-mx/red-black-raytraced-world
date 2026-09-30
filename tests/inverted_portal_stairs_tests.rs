@@ -195,8 +195,9 @@ fn the_first_stair_stands_right_behind_the_exit_clearance() {
             .exit_clearance
             .contains(&IVec3::new(first.x, first.y, first.z + 1))
     );
-    assert_eq!(route.treads.len(), route.layout.step_count as usize);
-    assert_eq!(route.treads.len(), 9);
+    // The flight inside the mass plus the rim step that meets the landing.
+    assert_eq!(route.treads.len(), route.layout.step_count as usize + 1);
+    assert_eq!(route.treads.len(), 10);
 }
 
 #[test]
