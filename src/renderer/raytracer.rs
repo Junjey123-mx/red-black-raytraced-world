@@ -88,7 +88,10 @@ fn cell_local_uv(local: Vec3, face: Face) -> Vec2 {
 /// Every shape lives inside its own cell, and cells are visited in
 /// increasing entry distance, so the first confirmed hit is the nearest one.
 /// Returns `None` for an empty world, a miss, a non-positive/NaN
-/// `max_distance`, or when `MAX_VOXEL_STEPS` is reached.
+/// `max_distance`, or when `MAX_VOXEL_STEPS` is reached. Every ray is first
+/// clipped to the world's occupied box (`VoxelWorld::bounds`), so no cell
+/// beyond it is ever visited; primary, secondary and shadow rays all pass
+/// through here.
 pub fn nearest_voxel_hit(world: &VoxelWorld, ray: &Ray, max_distance: f32) -> Option<VoxelHit> {
     nearest_voxel_hit_where(world, ray, max_distance, |_| true)
 }
@@ -117,6 +120,12 @@ pub fn nearest_voxel_hit_where(
     if world.is_empty() || max_distance.is_nan() || max_distance <= 0.0 {
         return None;
     }
+
+    // Nothing exists outside the world's box, so the traversal ends where
+    // the ray leaves it (or never starts when the ray misses the box). The
+    // DDA itself is unchanged: same origin, same cells, same distances.
+    let bounds = world.bounds()?;
+    let max_distance = bounds.clip_distance(ray.origin, ray.direction, max_distance)?;
 
     let mut state = DdaState::from_ray(ray);
 
