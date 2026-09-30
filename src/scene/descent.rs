@@ -352,12 +352,21 @@ impl InvertedRoute {
     }
 }
 
-/// Builds the post-portal route. This stage lays out the route and carves
-/// the exit clearance immediately behind the membrane: the aperture's own
-/// rows and columns, one cell deep, so the camera that crosses the core
-/// anywhere in the opening is in air, with the camera radius and head room
-/// the collision volume needs. Only structural mass is removed; the frame,
-/// the core and every family block stay.
+/// Builds the post-portal route.
+///
+/// 1. The exit clearance immediately behind the membrane: the aperture's
+///    own rows and columns, one cell deep, so the camera that crosses the
+///    core anywhere in the opening is in air with the radius and head room
+///    the collision volume needs. The rock over the aperture is the
+///    inverted viewer's first floor.
+/// 2. The flight: from `first_step`, one `Down` wooden stair per cell
+///    north, each one cell lower (toward the inverted up), hanging from
+///    the rock above it, with `clearance_height` cells of air carved under
+///    it for the viewer. The first tread stands right behind the
+///    clearance, so the climb starts the moment the camera has crossed.
+///
+/// Only structural mass is removed or replaced; the frame, the core and
+/// every family block stay.
 pub fn build_inverted_route(
     rhombus: &RhombusConfig,
     lower: &LowerMass,
@@ -376,6 +385,19 @@ pub fn build_inverted_route(
             route.dug.push(cell);
         }
         route.exit_clearance.push(cell);
+    }
+    for k in 0..layout.step_count {
+        let tread = layout.tread(k);
+        if world.remove(tread).is_some() {
+            route.dug.push(tread);
+        }
+        world.insert(tread, stair(Orientation::Down));
+        route.treads.push((tread, Orientation::Down));
+        for cell in layout.clearance_under(k) {
+            if world.remove(cell).is_some() {
+                route.dug.push(cell);
+            }
+        }
     }
     route
 }
