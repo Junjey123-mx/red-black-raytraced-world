@@ -619,8 +619,11 @@ fn the_app_renders_through_the_voxel_world_instead_of_a_manual_cube_list() {
     let app = code_of(include_str!("../src/app.rs"));
 
     // The app traces every pixel through the shared `VoxelScene` path
-    // (`cast_ray_voxel_at`: the quality-aware form since Gate 13.6).
-    assert!(has_token(&app, "cast_ray_voxel_at"));
+    // (since Gate 13.6 the per-pixel loop is `render_parallel`, whose
+    // workers call the quality-aware `cast_ray_voxel_at`).
+    assert!(has_token(&app, "render_parallel"));
+    let parallel = code_of(include_str!("../src/renderer/parallel.rs"));
+    assert!(has_token(&parallel, "cast_ray_voxel_at"));
     assert!(has_token(&app, "VoxelScene"));
     // Gate 07: the visible scene is the advanced-materials gallery VoxelWorld
     // (it replaced the Gate 06 partial-geometry gallery as the visible scene).

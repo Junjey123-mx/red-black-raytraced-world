@@ -371,12 +371,10 @@ fn camera_catalog_and_gate_boundaries_are_respected() {
     assert!(!app.contains("cubemap") && !app.contains("Player") && !app.contains("gravity"));
     let skybox = std::fs::read_to_string("src/renderer/skybox.rs").unwrap();
     assert!(!skybox.contains("Cubemap {"));
-    assert_eq!(
-        std::fs::read_to_string("src/renderer/parallel.rs")
-            .unwrap()
-            .trim(),
-        ""
-    );
+    // Gate 13.6 filled `parallel.rs` with scoped std threads; the viewer
+    // itself still spawns nothing and no rayon is involved.
+    let parallel = std::fs::read_to_string("src/renderer/parallel.rs").unwrap();
+    assert!(parallel.contains("std::thread::scope") && !parallel.contains("rayon"));
     // Every block in the world belongs to a known family (no stray type).
     for t in census(&scene).keys() {
         let _ = t.family();

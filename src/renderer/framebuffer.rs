@@ -31,6 +31,12 @@ impl Framebuffer {
         &self.pixels
     }
 
+    /// Row-major pixel storage, for writers that own whole regions at once
+    /// (the parallel renderer's bands).
+    pub fn pixels_mut(&mut self) -> &mut [Color] {
+        &mut self.pixels
+    }
+
     /// Resets every pixel to `color` while reusing the existing allocation.
     pub fn clear(&mut self, color: Color) {
         self.pixels.fill(color);

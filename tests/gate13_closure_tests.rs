@@ -346,12 +346,11 @@ fn camera_catalog_and_constraints_26_to_33() {
             .unwrap()
             .contains("Cubemap {")
     );
-    assert_eq!(
-        std::fs::read_to_string("src/renderer/parallel.rs")
-            .unwrap()
-            .trim(),
-        ""
-    ); // 33
+    // 33: Gate 13 shipped no parallel renderer; Gate 13.6 filled
+    // `parallel.rs` with scoped std threads (still no rayon, and the
+    // viewer itself spawns nothing: tracing stays inside the renderer).
+    let parallel = std::fs::read_to_string("src/renderer/parallel.rs").unwrap();
+    assert!(parallel.contains("std::thread::scope") && !parallel.contains("rayon"));
     assert!(!app.contains("std::thread"));
     for t in census(&scene).keys() {
         let _ = t.family() as BlockFamily;

@@ -1,6 +1,7 @@
 pub mod emission;
 pub mod framebuffer;
 pub mod normal_mapping;
+pub mod parallel;
 pub mod perf;
 pub mod raytracer;
 pub mod shading;

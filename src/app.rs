@@ -6,12 +6,12 @@ use crate::camera::camera::Camera;
 use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::portal_crossing::{PortalCrossingDetector, PortalVolume};
-use crate::camera::projection::primary_ray;
 use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
+use crate::renderer::parallel::{ParallelRenderConfig, render_parallel};
 use crate::renderer::perf::{FramePerfStats, PerfReporter, TracedFrameKind};
-use crate::renderer::raytracer::{RenderQuality, VoxelScene, cast_ray_voxel_at};
+use crate::renderer::raytracer::{RenderQuality, VoxelScene};
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
 use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
@@ -278,15 +278,16 @@ impl ViewerMode for WorldMode {
 /// local block-geometry intersection) and writes the fully shaded color
 /// (ambient + visible diffuse/specular per light, hard shadows queried
 /// against the same world, or the background on a miss) into the framebuffer.
+/// The pixels are traced by `render_parallel` across the configured worker
+/// threads; every pixel still goes through `cast_ray_voxel_at`.
 fn render(
     framebuffer: &mut Framebuffer,
     camera: &Camera,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
     quality: RenderQuality,
+    threads: &ParallelRenderConfig,
 ) {
-    let width = framebuffer.width();
-    let height = framebuffer.height();
     // Assembled once per frame; every pixel traces through the same scene.
     let scene = VoxelScene {
         world: mode.world(),
@@ -299,12 +300,7 @@ fn render(
         max_distance: mode.max_distance(),
     };
 
-    for y in 0..height {
-        for x in 0..width {
-            let ray = primary_ray(camera, x, y, width, height);
-            framebuffer.set_pixel(x, y, cast_ray_voxel_at(&scene, &ray, quality));
-        }
-    }
+    render_parallel(framebuffer, camera, &scene, quality, threads);
 }
 
 /// Copies already-computed framebuffer pixels into a Raylib Image, the only
@@ -384,12 +380,20 @@ fn trace_to_texture(
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
     quality: RenderQuality,
+    threads: &ParallelRenderConfig,
 ) -> (Texture2D, TraceTiming) {
     let started = Instant::now();
     let mut framebuffer = Framebuffer::new(width, height);
     let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
 
-    render(&mut framebuffer, &camera, mode, texture_manager, quality);
+    render(
+        &mut framebuffer,
+        &camera,
+        mode,
+        texture_manager,
+        quality,
+        threads,
+    );
     let rendered = Instant::now();
 
     let image = framebuffer_to_image(&framebuffer);
@@ -425,6 +429,8 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
 
     // Frame timing is reported only when `RBRW_PERF` asks for it.
     let perf = PerfReporter::from_env();
+    // Worker threads: one per hardware thread unless `RBRW_THREADS` says otherwise.
+    let threads = ParallelRenderConfig::detect();
 
     let mut texture_scale = 1;
     let (mut texture, _) = trace_to_texture(
@@ -435,6 +441,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
         &mode,
         &texture_manager,
         RenderQuality::Full,
+        &threads,
     );
     // A full-resolution frame is up to date until the camera moves again.
     let mut needs_full_frame = false;
@@ -457,6 +464,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 &mode,
                 &texture_manager,
                 RenderQuality::Interactive,
+                &threads,
             );
             texture = new_texture;
             traced = Some((TracedFrameKind::Interactive, width, height, timing));
@@ -471,6 +479,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 &mode,
                 &texture_manager,
                 RenderQuality::Full,
+                &threads,
             );
             texture = new_texture;
             traced = Some((TracedFrameKind::Full, full_width, full_height, timing));
