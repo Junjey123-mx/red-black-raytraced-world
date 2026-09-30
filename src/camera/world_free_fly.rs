@@ -54,17 +54,35 @@ pub struct FreeFlyPose {
     pub pitch: f32,
 }
 
-/// Horizontal heading for `yaw` (radians): `0` looks toward -Z, growing
-/// yaw turns toward +X. Shared by both realms, so a realm change never
-/// turns the camera around.
+/// The reference heading of yaw `0`: toward -Z in both realms.
+pub const REFERENCE_HEADING: Vec3 = Vec3 {
+    x: 0.0,
+    y: 0.0,
+    z: -1.0,
+};
+
+/// Horizontal heading for `yaw` (radians) in the Overworld frame (`+Y`):
+/// `0` looks toward -Z, growing yaw turns toward +X. See `heading_about`
+/// for the realm-aware form.
 pub fn heading(yaw: f32) -> Vec3 {
-    Vec3::new(yaw.sin(), 0.0, -yaw.cos())
+    heading_about(yaw, Vec3::new(0.0, 1.0, 0.0))
+}
+
+/// Horizontal heading for `yaw` in a frame whose vertical is `up`: yaw
+/// turns about `up`, from the reference heading toward the frame's right
+/// (`REFERENCE_HEADING x up`). This keeps one handedness in both realms:
+/// growing yaw always turns toward the camera's visual right, so with the
+/// inverted vertical (`-Y`) it turns toward -X instead of +X.
+pub fn heading_about(yaw: f32, up: Vec3) -> Vec3 {
+    let (sin, cos) = yaw.sin_cos();
+    let right = REFERENCE_HEADING.cross(up.normalize());
+    (REFERENCE_HEADING * cos + right * sin).normalize()
 }
 
 /// Viewing direction for `yaw`/`pitch` in a frame whose vertical is `up`.
 pub fn look_direction(yaw: f32, pitch: f32, up: Vec3) -> Vec3 {
     let (sin_pitch, cos_pitch) = pitch.sin_cos();
-    (heading(yaw) * cos_pitch + up * sin_pitch).normalize()
+    (heading_about(yaw, up) * cos_pitch + up * sin_pitch).normalize()
 }
 
 /// The camera's right for a viewing direction and a vertical reference
@@ -79,20 +97,24 @@ pub fn frame_up(forward: Vec3, reference_up: Vec3) -> Vec3 {
     right_of(forward, reference_up).cross(forward).normalize()
 }
 
-/// Yaw and pitch that reproduce `forward` in a frame whose vertical is `up`.
+/// Yaw and pitch that reproduce `forward` in a frame whose vertical is `up`
+/// (the inverse of `look_direction`, same handedness rule).
 pub fn angles_for(forward: Vec3, up: Vec3) -> (f32, f32) {
+    let up = up.normalize();
     let f = forward.normalize();
     let pitch = f.dot(up).clamp(-1.0, 1.0).asin();
-    let horizontal = (f - up * f.dot(up)).normalize();
+    let horizontal = f - up * f.dot(up);
     let yaw = if horizontal.length_squared() > 1e-8 {
-        horizontal.x.atan2(-horizontal.z)
+        let right = REFERENCE_HEADING.cross(up);
+        horizontal
+            .dot(right)
+            .atan2(horizontal.dot(REFERENCE_HEADING))
     } else {
         0.0
     };
     (yaw, pitch)
 }
 
-/// The World's free-fly camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WorldFreeFlyCameraState {
     pub position: Vec3,
@@ -393,7 +415,11 @@ impl WorldFreeFlyCameraState {
             self.transition = None;
             self.realm = to;
             self.local_up = to.up();
+            // Same viewing direction expressed in the inverted frame: the
+            // vertical flips, so pitch mirrors, and the frame's right
+            // flips with it, so yaw mirrors too (see `heading_about`).
             self.pitch = -self.pitch;
+            self.yaw = wrap_yaw(-self.yaw);
         }
         true
     }
