@@ -135,31 +135,64 @@ pub fn render_parallel(
 ) {
     let width = framebuffer.width();
     let height = framebuffer.height();
-    if width == 0 || height == 0 {
+    let pixels = framebuffer.pixels_mut();
+    render_rows_parallel(
+        pixels,
+        0..height,
+        width,
+        height,
+        camera,
+        scene,
+        quality,
+        config,
+    );
+}
+
+/// Traces the rows `rows` of a `width x height` frame into `pixels` (the
+/// storage of exactly those rows, row-major) with the same band dealing as
+/// `render_parallel`. This is how a Full frame is refined a batch of rows
+/// at a time without changing a single pixel's value.
+#[allow(clippy::too_many_arguments)]
+pub fn render_rows_parallel(
+    pixels: &mut [Color],
+    rows: std::ops::Range<usize>,
+    width: usize,
+    height: usize,
+    camera: &Camera,
+    scene: &VoxelScene,
+    quality: RenderQuality,
+    config: &ParallelRenderConfig,
+) {
+    let row_count = rows.len();
+    assert_eq!(
+        pixels.len(),
+        row_count * width,
+        "pixel storage must match the rows"
+    );
+    if width == 0 || row_count == 0 {
         return;
     }
     let band_rows = config.band_rows.max(1);
-    let workers = config.effective_workers(height);
-    let pixels = framebuffer.pixels_mut();
+    let workers = config.effective_workers(row_count);
 
     if workers <= 1 {
-        trace_rows(pixels, 0..height, width, height, camera, scene, quality);
+        trace_rows(pixels, rows, width, height, camera, scene, quality);
         return;
     }
 
     // Deal the bands round-robin: worker `w` gets bands w, w + workers, ...
     let mut per_worker: Vec<Vec<(usize, &mut [Color])>> =
         (0..workers).map(|_| Vec::new()).collect();
-    for (i, (band_index, band)) in pixels.chunks_mut(band_rows * width).enumerate().enumerate() {
-        per_worker[i % workers].push((band_index * band_rows, band));
+    for (i, band) in pixels.chunks_mut(band_rows * width).enumerate() {
+        per_worker[i % workers].push((rows.start + i * band_rows, band));
     }
 
     std::thread::scope(|scope| {
         for bands in per_worker {
             scope.spawn(move || {
                 for (start_row, band) in bands {
-                    let rows = start_row..(start_row + band.len() / width);
-                    trace_rows(band, rows, width, height, camera, scene, quality);
+                    let band_range = start_row..(start_row + band.len() / width);
+                    trace_rows(band, band_range, width, height, camera, scene, quality);
                 }
             });
         }

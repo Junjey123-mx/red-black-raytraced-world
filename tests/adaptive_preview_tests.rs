@@ -256,17 +256,18 @@ fn the_scale_never_goes_above_the_maximum() {
 
 #[test]
 fn full_frames_ignore_the_preview_scale() {
-    // The Full branch of the viewer traces the full window regardless of
-    // the controller; only the Interactive branch consults it.
+    // The Full frame is refined by the job at the full window size
+    // regardless of the controller; only the Interactive branch consults it.
     let app = std::fs::read_to_string("src/app.rs").unwrap();
-    let full_branch = &app[app.find("} else if needs_full_frame {").unwrap()..];
-    let full_branch = &full_branch[..full_branch.find("needs_full_frame = false;").unwrap()];
-    assert!(full_branch.contains(
-        "full_width,
-                full_height,"
-    ));
-    assert!(full_branch.contains("RenderQuality::Full"));
-    assert!(!full_branch.contains("preview."));
+    let full_branch = &app[app.find("if refinement.ready_to_start(now) {").unwrap()..];
+    let full_branch = &full_branch[..full_branch.find("let drawing_started").unwrap()];
+    assert!(full_branch.contains("TracedFrameKind::Full"));
+    assert!(full_branch.contains("full_width,"));
+    assert!(full_branch.contains("full_height,"));
+    assert!(!full_branch.contains("preview.scale()") && !full_branch.contains("preview.record"));
+    assert!(app.contains("FullRefinement::new(full_width, full_height)"));
+    let refinement = std::fs::read_to_string("src/renderer/refinement.rs").unwrap();
+    assert!(refinement.contains("RenderQuality::Full,"));
     assert_eq!(RenderQuality::Full.label(), "Full");
 }
 
@@ -274,7 +275,7 @@ fn full_frames_ignore_the_preview_scale() {
 fn interactive_frames_use_the_controller_resolution() {
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     let interactive = &app[app.find("if mode.update(&rl) {").unwrap()
-        ..app.find("} else if needs_full_frame {").unwrap()];
+        ..app.find("if refinement.ready_to_start(now) {").unwrap()];
     assert!(interactive.contains("preview.scale()"));
     assert!(
         interactive.contains("let (width, height) = (full_width / scale, full_height / scale);")

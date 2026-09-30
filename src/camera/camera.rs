@@ -8,6 +8,8 @@ const MIN_FOV_DEGREES: f32 = 1.0;
 const MAX_FOV_DEGREES: f32 = 179.0;
 const MIN_ASPECT_RATIO: f32 = 1e-4;
 
+/// Plain data: a job can keep its own copy of the camera it traces with.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     pub position: Vec3,
     pub target: Vec3,

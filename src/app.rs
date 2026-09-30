@@ -13,6 +13,7 @@ use crate::renderer::parallel::{ParallelRenderConfig, render_parallel};
 use crate::renderer::perf::{FramePerfStats, PerfReporter, TracedFrameKind};
 use crate::renderer::preview::AdaptivePreview;
 use crate::renderer::raytracer::{RenderQuality, VoxelScene};
+use crate::renderer::refinement::FullRefinement;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
 use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
@@ -302,7 +303,19 @@ fn render(
     threads: &ParallelRenderConfig,
 ) {
     // Assembled once per frame; every pixel traces through the same scene.
-    let scene = VoxelScene {
+    let scene = voxel_scene(mode, texture_manager, camera);
+
+    render_parallel(framebuffer, camera, &scene, quality, threads);
+}
+
+/// The scene a refinement batch traces: the same assembly `render` does,
+/// with the camera the job captured when it started.
+fn voxel_scene<'a>(
+    mode: &'a dyn ViewerMode,
+    texture_manager: &'a TextureManager,
+    camera: &Camera,
+) -> VoxelScene<'a> {
+    VoxelScene {
         world: mode.world(),
         materials: mode.materials(),
         camera_position: camera.position,
@@ -311,9 +324,7 @@ fn render(
         background: mode.background(),
         texture_manager,
         max_distance: mode.max_distance(),
-    };
-
-    render_parallel(framebuffer, camera, &scene, quality, threads);
+    }
 }
 
 /// Copies already-computed framebuffer pixels into a Raylib Image, the only
@@ -394,7 +405,7 @@ fn trace_to_texture(
     texture_manager: &TextureManager,
     quality: RenderQuality,
     threads: &ParallelRenderConfig,
-) -> (Texture2D, TraceTiming) {
+) -> (Texture2D, TraceTiming, Framebuffer) {
     let started = Instant::now();
     let mut framebuffer = Framebuffer::new(width, height);
     let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
@@ -409,15 +420,19 @@ fn trace_to_texture(
     );
     let rendered = Instant::now();
 
-    let image = framebuffer_to_image(&framebuffer);
-    let texture = rl
-        .load_texture_from_image(thread, &image)
-        .expect("failed to upload the CPU framebuffer to a Raylib texture");
+    let texture = upload(rl, thread, &framebuffer);
     let timing = TraceTiming {
         render: rendered - started,
         upload: rendered.elapsed(),
     };
-    (texture, timing)
+    (texture, timing, framebuffer)
+}
+
+/// Uploads a framebuffer as a new presentation texture.
+fn upload(rl: &mut RaylibHandle, thread: &RaylibThread, framebuffer: &Framebuffer) -> Texture2D {
+    let image = framebuffer_to_image(framebuffer);
+    rl.load_texture_from_image(thread, &image)
+        .expect("failed to upload the CPU framebuffer to a Raylib texture")
 }
 
 /// The shared runtime of every executable: opens the window, creates the one
@@ -448,7 +463,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     let mut preview = AdaptivePreview::new();
 
     let mut texture_scale = 1;
-    let (mut texture, _) = trace_to_texture(
+    let (mut texture, _, _) = trace_to_texture(
         &mut rl,
         &thread,
         full_width,
@@ -458,10 +473,13 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
         RenderQuality::Full,
         &threads,
     );
-    // A full-resolution frame is up to date until the camera moves again.
-    let mut needs_full_frame = false;
+    // The Full frame is refined in bounded batches once the view rests;
+    // input keeps being polled between batches and cancels it.
+    let mut refinement = FullRefinement::new(full_width, full_height);
+    let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
 
     while !rl.window_should_close() {
+        let now = Instant::now();
         // Each mode owns and advances its own camera.
         let mut traced: Option<(TracedFrameKind, usize, usize, TraceTiming)> = None;
         if mode.update(&rl) {
@@ -473,7 +491,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
             texture_scale = scale;
             let (width, height) = (full_width / scale, full_height / scale);
             // A moving view is traced at Interactive quality.
-            let (new_texture, timing) = trace_to_texture(
+            let (new_texture, timing, framebuffer) = trace_to_texture(
                 &mut rl,
                 &thread,
                 width,
@@ -488,22 +506,41 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 preview.record(timing.render);
             }
             traced = Some((TracedFrameKind::Interactive, width, height, timing));
-            needs_full_frame = true;
-        } else if needs_full_frame {
-            texture_scale = 1;
-            let (new_texture, timing) = trace_to_texture(
-                &mut rl,
-                &thread,
-                full_width,
-                full_height,
-                &mode,
-                &texture_manager,
-                RenderQuality::Full,
-                &threads,
-            );
-            texture = new_texture;
-            traced = Some((TracedFrameKind::Full, full_width, full_height, timing));
-            needs_full_frame = false;
+            // Any activity discards a refinement in progress and restarts
+            // the idle clock; the preview seeds the next one.
+            refinement.view_changed(now);
+            refinement.seed(framebuffer.pixels(), width, height);
+        } else {
+            if refinement.ready_to_start(now) {
+                refinement.start(mode.camera(aspect_ratio));
+            }
+            if refinement.is_refining() {
+                let camera = *refinement.camera().expect("a refining job has its camera");
+                let scene = voxel_scene(&mode, &texture_manager, &camera);
+                let step = refinement.step(&scene, &threads);
+                // Show the rows finished so far over the stretched preview.
+                let upload_started = Instant::now();
+                texture = upload(&mut rl, &thread, refinement.framebuffer());
+                texture_scale = 1;
+                if step.complete {
+                    traced = Some((
+                        TracedFrameKind::Full,
+                        full_width,
+                        full_height,
+                        TraceTiming {
+                            render: refinement.render_time(),
+                            upload: upload_started.elapsed(),
+                        },
+                    ));
+                    perf.note(&format!(
+                        "refinement batches={} longest_batch_ms={:.2} last_step_ms={:.2}",
+                        refinement.batches(),
+                        refinement.longest_batch().as_secs_f64() * 1000.0,
+                        step.elapsed.as_secs_f64() * 1000.0
+                    ));
+                    refinement.acknowledge_complete();
+                }
+            }
         }
 
         let drawing_started = Instant::now();

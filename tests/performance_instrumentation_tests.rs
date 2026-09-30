@@ -243,8 +243,11 @@ fn full_frames_are_labelled_full() {
     let stats = FramePerfStats::new(TracedFrameKind::Full, 800, 600, ms(3600), ms(12));
     assert_eq!(stats.kind.label(), "Full");
     assert!(stats.report_line().contains("kind=Full resolution=800x600"));
+    // The refinement branch of the viewer reports a completed Full frame
+    // at the full window resolution.
     let app = std::fs::read_to_string("src/app.rs").unwrap();
-    assert!(app.contains("TracedFrameKind::Full, full_width, full_height, timing"));
+    let refine = &app[app.find("if step.complete {").unwrap()..];
+    assert!(refine.contains("TracedFrameKind::Full,\n                        full_width,\n                        full_height,"));
 }
 
 #[test]

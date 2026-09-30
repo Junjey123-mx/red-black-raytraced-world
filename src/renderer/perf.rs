@@ -176,6 +176,13 @@ impl PerfReporter {
             eprintln!("{}", stats.report_line());
         }
     }
+
+    /// Prints an extra line (prefixed like `report`) when enabled.
+    pub fn note(&self, message: &str) {
+        if self.enabled {
+            eprintln!("{PERF_ENV_VAR} {message}");
+        }
+    }
 }
 
 fn millis(duration: Duration) -> f64 {

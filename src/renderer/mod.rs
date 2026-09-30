@@ -5,6 +5,7 @@ pub mod parallel;
 pub mod perf;
 pub mod preview;
 pub mod raytracer;
+pub mod refinement;
 pub mod shading;
 pub mod shadows;
 pub mod skybox;
