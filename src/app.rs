@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use raylib::prelude::*;
 
 use crate::camera::camera::Camera;
@@ -8,6 +10,7 @@ use crate::camera::projection::primary_ray;
 use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
+use crate::renderer::perf::{FramePerfStats, PerfReporter, TracedFrameKind};
 use crate::renderer::raytracer::{VoxelScene, cast_ray_voxel};
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
@@ -363,6 +366,13 @@ fn poll_free_fly_input(rl: &RaylibHandle) -> FreeFlyInput {
     }
 }
 
+/// How long the two halves of a traced frame took: the CPU render and the
+/// framebuffer-to-texture upload.
+struct TraceTiming {
+    render: Duration,
+    upload: Duration,
+}
+
 /// Traces the scene from the mode's camera into a framebuffer of
 /// `width x height` and uploads it to a Raylib texture for presentation.
 fn trace_to_texture(
@@ -372,15 +382,23 @@ fn trace_to_texture(
     height: usize,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
-) -> Texture2D {
+) -> (Texture2D, TraceTiming) {
+    let started = Instant::now();
     let mut framebuffer = Framebuffer::new(width, height);
     let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
 
     render(&mut framebuffer, &camera, mode, texture_manager);
+    let rendered = Instant::now();
 
     let image = framebuffer_to_image(&framebuffer);
-    rl.load_texture_from_image(thread, &image)
-        .expect("failed to upload the CPU framebuffer to a Raylib texture")
+    let texture = rl
+        .load_texture_from_image(thread, &image)
+        .expect("failed to upload the CPU framebuffer to a Raylib texture");
+    let timing = TraceTiming {
+        render: rendered - started,
+        upload: rendered.elapsed(),
+    };
+    (texture, timing)
 }
 
 /// The shared runtime of every executable: opens the window, creates the one
@@ -403,8 +421,11 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     let mut mode = build_mode(&mut texture_manager);
     mode.setup(&mut rl);
 
+    // Frame timing is reported only when `RBRW_PERF` asks for it.
+    let perf = PerfReporter::from_env();
+
     let mut texture_scale = 1;
-    let mut texture = trace_to_texture(
+    let (mut texture, _) = trace_to_texture(
         &mut rl,
         &thread,
         full_width,
@@ -417,20 +438,21 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
 
     while !rl.window_should_close() {
         // Each mode owns and advances its own camera.
+        let mut traced: Option<(TracedFrameKind, usize, usize, TraceTiming)> = None;
         if mode.update(&rl) {
             texture_scale = PREVIEW_DOWNSCALE;
-            texture = trace_to_texture(
-                &mut rl,
-                &thread,
+            let (width, height) = (
                 full_width / PREVIEW_DOWNSCALE,
                 full_height / PREVIEW_DOWNSCALE,
-                &mode,
-                &texture_manager,
             );
+            let (new_texture, timing) =
+                trace_to_texture(&mut rl, &thread, width, height, &mode, &texture_manager);
+            texture = new_texture;
+            traced = Some((TracedFrameKind::Interactive, width, height, timing));
             needs_full_frame = true;
         } else if needs_full_frame {
             texture_scale = 1;
-            texture = trace_to_texture(
+            let (new_texture, timing) = trace_to_texture(
                 &mut rl,
                 &thread,
                 full_width,
@@ -438,26 +460,42 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 &mode,
                 &texture_manager,
             );
+            texture = new_texture;
+            traced = Some((TracedFrameKind::Full, full_width, full_height, timing));
             needs_full_frame = false;
         }
 
-        let mut d = rl.begin_drawing(&thread);
-        d.clear_background(Color::BLACK);
-        d.draw_texture_ex(
-            &texture,
-            Vector2::new(0.0, 0.0),
-            0.0,
-            texture_scale as f32,
-            Color::WHITE,
-        );
-        d.draw_text(&mode.label(), 12, 10, 20, Color::WHITE);
-        d.draw_text(
-            mode.help(),
-            12,
-            config::WINDOW_HEIGHT - 26,
-            16,
-            Color::LIGHTGRAY,
-        );
+        let drawing_started = Instant::now();
+        {
+            let mut d = rl.begin_drawing(&thread);
+            d.clear_background(Color::BLACK);
+            d.draw_texture_ex(
+                &texture,
+                Vector2::new(0.0, 0.0),
+                0.0,
+                texture_scale as f32,
+                Color::WHITE,
+            );
+            d.draw_text(&mode.label(), 12, 10, 20, Color::WHITE);
+            d.draw_text(
+                mode.help(),
+                12,
+                config::WINDOW_HEIGHT - 26,
+                16,
+                Color::LIGHTGRAY,
+            );
+        }
+
+        if let Some((kind, width, height, timing)) = traced {
+            let presentation = timing.upload + drawing_started.elapsed();
+            perf.report(&FramePerfStats::new(
+                kind,
+                width,
+                height,
+                timing.render,
+                presentation,
+            ));
+        }
     }
 }
 
