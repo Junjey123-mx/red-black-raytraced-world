@@ -469,6 +469,51 @@ pub const MISSING_MATERIAL_COLOR: Color = Color {
     a: 1.0,
 };
 
+/// Reflectivity below which a mirror bounce is visually insignificant: an
+/// `Interactive` trace skips it. Measured before Gate 13.6: the blocks of the
+/// world carry reflectivities of 0.01-0.03 whose bounces cost up to three
+/// fully shaded levels per pixel while changing the image by at most 8/255.
+pub const INTERACTIVE_REFLECTION_THRESHOLD: f32 = 0.05;
+
+/// How faithfully a frame is traced. `Full` is the certified renderer
+/// (every optical effect, exactly as before). `Interactive` is used only
+/// while the view is changing: it skips the mirror bounce of opaque
+/// materials whose reflectivity is below `INTERACTIVE_REFLECTION_THRESHOLD`.
+/// Everything else (primary hits, shadows, refraction, transparency, normal
+/// maps, emission, and every material at or above the threshold or with a
+/// transmissive medium, such as water, glass, amethyst and the portal core)
+/// is traced identically in both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RenderQuality {
+    Interactive,
+    #[default]
+    Full,
+}
+
+impl RenderQuality {
+    pub fn label(self) -> &'static str {
+        match self {
+            RenderQuality::Interactive => "Interactive",
+            RenderQuality::Full => "Full",
+        }
+    }
+
+    /// Whether a hit on `material` spawns its mirror ray at this quality.
+    /// Decided purely from material properties, never from block types.
+    pub fn traces_reflection(self, material: &Material) -> bool {
+        if material.reflectivity <= 0.0 {
+            return false;
+        }
+        match self {
+            RenderQuality::Full => true,
+            RenderQuality::Interactive => {
+                material.reflectivity >= INTERACTIVE_REFLECTION_THRESHOLD
+                    || is_transmissive_medium(material)
+            }
+        }
+    }
+}
+
 /// Maximum number of secondary-ray bounces. The primary ray is depth `0`;
 /// a ray traced at `depth >= MAX_RAY_DEPTH` contributes only local shading,
 /// so recursion always terminates (primary -> secondary -> tertiary -> stop).
@@ -649,6 +694,14 @@ pub fn light_visibility(scene: &VoxelScene, ray: &Ray, max_distance: f32) -> f32
 /// its local color untouched. A miss returns `background`; a voxel whose
 /// `MaterialId` is unknown returns `MISSING_MATERIAL_COLOR`.
 pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
+    trace_ray_at(scene, ray, depth, RenderQuality::Full)
+}
+
+/// `trace_ray` at an explicit quality: `Full` is exactly `trace_ray`;
+/// `Interactive` skips the mirror bounce of weakly reflective opaque
+/// materials (see `RenderQuality`). The quality is carried into every
+/// secondary ray.
+pub fn trace_ray_at(scene: &VoxelScene, ray: &Ray, depth: u32, quality: RenderQuality) -> Color {
     let Some(voxel) = nearest_visible_hit(scene, ray, scene.max_distance) else {
         return scene.background.color(ray.direction);
     };
@@ -698,7 +751,11 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
     let transparency = material
         .effective_transparency(local.texel_alpha)
         .clamp(0.0, 1.0);
-    let reflectivity = material.reflectivity;
+    let reflectivity = if quality.traces_reflection(material) {
+        material.reflectivity
+    } else {
+        0.0
+    };
 
     if depth >= MAX_RAY_DEPTH || (reflectivity <= 0.0 && transparency <= 0.0) {
         return local.full;
@@ -726,10 +783,10 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
         let transmitted = match refract(ray.direction, normal, eta_i, eta_t) {
             Some(direction) => {
                 let transmitted_ray = Ray::new(point - normal * SECONDARY_RAY_EPSILON, direction);
-                trace_ray(scene, &transmitted_ray, depth + 1)
+                trace_ray_at(scene, &transmitted_ray, depth + 1, quality)
             }
             // Total internal reflection: the energy stays in the medium.
-            None => *reflected.insert(trace_ray(scene, &reflected_ray, depth + 1)),
+            None => *reflected.insert(trace_ray_at(scene, &reflected_ray, depth + 1, quality)),
         };
 
         // The back face of a medium is only seen through it: tint with the
@@ -749,7 +806,7 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
     if reflectivity > 0.0 {
         let reflected = match reflected {
             Some(color) => color,
-            None => trace_ray(scene, &reflected_ray, depth + 1),
+            None => trace_ray_at(scene, &reflected_ray, depth + 1, quality),
         };
         surface_color = mix(surface_color, reflected, reflectivity);
     }
@@ -799,4 +856,9 @@ pub fn cast_ray_voxel_lit(
 /// with the scene's `Background` (flat or directional sky) on a miss.
 pub fn cast_ray_voxel(scene: &VoxelScene, ray: &Ray) -> Color {
     trace_ray(scene, ray, 0)
+}
+
+/// `cast_ray_voxel` at an explicit `RenderQuality`.
+pub fn cast_ray_voxel_at(scene: &VoxelScene, ray: &Ray, quality: RenderQuality) -> Color {
+    trace_ray_at(scene, ray, 0, quality)
 }

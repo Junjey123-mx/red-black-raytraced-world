@@ -11,7 +11,7 @@ use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::perf::{FramePerfStats, PerfReporter, TracedFrameKind};
-use crate::renderer::raytracer::{VoxelScene, cast_ray_voxel};
+use crate::renderer::raytracer::{RenderQuality, VoxelScene, cast_ray_voxel_at};
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
 use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
@@ -283,6 +283,7 @@ fn render(
     camera: &Camera,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
+    quality: RenderQuality,
 ) {
     let width = framebuffer.width();
     let height = framebuffer.height();
@@ -301,7 +302,7 @@ fn render(
     for y in 0..height {
         for x in 0..width {
             let ray = primary_ray(camera, x, y, width, height);
-            framebuffer.set_pixel(x, y, cast_ray_voxel(&scene, &ray));
+            framebuffer.set_pixel(x, y, cast_ray_voxel_at(&scene, &ray, quality));
         }
     }
 }
@@ -382,12 +383,13 @@ fn trace_to_texture(
     height: usize,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
+    quality: RenderQuality,
 ) -> (Texture2D, TraceTiming) {
     let started = Instant::now();
     let mut framebuffer = Framebuffer::new(width, height);
     let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
 
-    render(&mut framebuffer, &camera, mode, texture_manager);
+    render(&mut framebuffer, &camera, mode, texture_manager, quality);
     let rendered = Instant::now();
 
     let image = framebuffer_to_image(&framebuffer);
@@ -432,6 +434,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
         full_height,
         &mode,
         &texture_manager,
+        RenderQuality::Full,
     );
     // A full-resolution frame is up to date until the camera moves again.
     let mut needs_full_frame = false;
@@ -445,8 +448,16 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 full_width / PREVIEW_DOWNSCALE,
                 full_height / PREVIEW_DOWNSCALE,
             );
-            let (new_texture, timing) =
-                trace_to_texture(&mut rl, &thread, width, height, &mode, &texture_manager);
+            // A moving view is traced at Interactive quality.
+            let (new_texture, timing) = trace_to_texture(
+                &mut rl,
+                &thread,
+                width,
+                height,
+                &mode,
+                &texture_manager,
+                RenderQuality::Interactive,
+            );
             texture = new_texture;
             traced = Some((TracedFrameKind::Interactive, width, height, timing));
             needs_full_frame = true;
@@ -459,6 +470,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 full_height,
                 &mode,
                 &texture_manager,
+                RenderQuality::Full,
             );
             texture = new_texture;
             traced = Some((TracedFrameKind::Full, full_width, full_height, timing));

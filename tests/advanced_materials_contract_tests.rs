@@ -586,9 +586,11 @@ fn the_dda_is_still_the_primary_traversal_of_every_ray_kind() {
     let app =
         std::fs::read_to_string(format!("{}/src/app.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
     // The app assembles one `VoxelScene` per frame and traces every pixel
-    // through the same `trace_ray` path (`cast_ray_voxel`).
-    assert!(app.contains("cast_ray_voxel(&scene, &ray)"));
+    // through the same `trace_ray` path (`cast_ray_voxel_at`, the
+    // quality-aware form of `cast_ray_voxel` since Gate 13.6).
+    assert!(app.contains("cast_ray_voxel_at(&scene, &ray, quality)"));
     assert!(source.contains("pub fn cast_ray_voxel(scene: &VoxelScene, ray: &Ray) -> Color"));
+    assert!(source.contains("pub fn cast_ray_voxel_at("));
     // Gate 07.5: the visible scene is the CatalogScene, which is built on the
     // advanced-materials gallery world.
     assert!(app.contains("CatalogScene"));
