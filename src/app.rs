@@ -327,25 +327,62 @@ fn voxel_scene<'a>(
     }
 }
 
-/// Copies already-computed framebuffer pixels into a Raylib Image, the only
-/// place where `core::Color` is converted to a Raylib-facing type.
-fn framebuffer_to_image(framebuffer: &Framebuffer) -> Image {
-    let mut image = Image::gen_image_color(
-        framebuffer.width() as i32,
-        framebuffer.height() as i32,
-        Color::BLACK,
-    );
+/// The presentation texture and the byte buffer that feeds it. The texture
+/// is created once per resolution and updated in place for every frame of
+/// that resolution; the RGBA byte buffer is reused across frames. This is
+/// the only place where `core::Color` is converted to a Raylib-facing
+/// pixel format.
+struct Presenter {
+    texture: Texture2D,
+    width: usize,
+    height: usize,
+    rgba: Vec<u8>,
+}
 
-    for y in 0..framebuffer.height() {
-        for x in 0..framebuffer.width() {
-            if let Some(pixel) = framebuffer.get_pixel(x, y) {
-                let [r, g, b, a] = pixel.to_rgba8();
-                image.draw_pixel(x as i32, y as i32, Color::new(r, g, b, a));
-            }
-        }
+impl Presenter {
+    /// A presenter whose texture matches `framebuffer`'s size, showing it.
+    fn new(rl: &mut RaylibHandle, thread: &RaylibThread, framebuffer: &Framebuffer) -> Self {
+        let texture = Self::create_texture(rl, thread, framebuffer.width(), framebuffer.height());
+        let mut presenter = Self {
+            texture,
+            width: framebuffer.width(),
+            height: framebuffer.height(),
+            rgba: Vec::new(),
+        };
+        presenter.present(rl, thread, framebuffer);
+        presenter
     }
 
-    image
+    /// An empty 8-bit RGBA texture of the given size (the format
+    /// `update_texture` then expects: 4 bytes per pixel).
+    fn create_texture(
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        width: usize,
+        height: usize,
+    ) -> Texture2D {
+        let image = Image::gen_image_color(width as i32, height as i32, Color::BLACK);
+        rl.load_texture_from_image(thread, &image)
+            .expect("failed to create the presentation texture")
+    }
+
+    /// Uploads `framebuffer` into the texture, recreating the texture only
+    /// when the framebuffer's size differs from the texture's.
+    fn present(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread, framebuffer: &Framebuffer) {
+        if framebuffer.width() != self.width || framebuffer.height() != self.height {
+            self.width = framebuffer.width();
+            self.height = framebuffer.height();
+            self.texture = Self::create_texture(rl, thread, self.width, self.height);
+        }
+        framebuffer.write_rgba8(&mut self.rgba);
+        self.texture
+            .update_texture(&self.rgba)
+            .expect("the RGBA buffer matches the presentation texture");
+    }
+
+    fn texture(&self) -> &Texture2D {
+        &self.texture
+    }
 }
 
 /// Polls the mouse and keyboard into one frame of `OrbitInput`: left-button
@@ -394,24 +431,27 @@ struct TraceTiming {
     upload: Duration,
 }
 
-/// Traces the scene from the mode's camera into a framebuffer of
-/// `width x height` and uploads it to a Raylib texture for presentation.
-fn trace_to_texture(
+/// Traces the scene from the mode's camera into `framebuffer` (resized to
+/// `width x height`, reusing its storage) and presents it.
+#[allow(clippy::too_many_arguments)]
+fn trace_and_present(
     rl: &mut RaylibHandle,
     thread: &RaylibThread,
+    presenter: &mut Presenter,
+    framebuffer: &mut Framebuffer,
     width: usize,
     height: usize,
     mode: &dyn ViewerMode,
     texture_manager: &TextureManager,
     quality: RenderQuality,
     threads: &ParallelRenderConfig,
-) -> (Texture2D, TraceTiming, Framebuffer) {
+) -> TraceTiming {
     let started = Instant::now();
-    let mut framebuffer = Framebuffer::new(width, height);
+    framebuffer.resize(width, height);
     let camera = mode.camera(config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32);
 
     render(
-        &mut framebuffer,
+        framebuffer,
         &camera,
         mode,
         texture_manager,
@@ -420,19 +460,11 @@ fn trace_to_texture(
     );
     let rendered = Instant::now();
 
-    let texture = upload(rl, thread, &framebuffer);
-    let timing = TraceTiming {
+    presenter.present(rl, thread, framebuffer);
+    TraceTiming {
         render: rendered - started,
         upload: rendered.elapsed(),
-    };
-    (texture, timing, framebuffer)
-}
-
-/// Uploads a framebuffer as a new presentation texture.
-fn upload(rl: &mut RaylibHandle, thread: &RaylibThread, framebuffer: &Framebuffer) -> Texture2D {
-    let image = framebuffer_to_image(framebuffer);
-    rl.load_texture_from_image(thread, &image)
-        .expect("failed to upload the CPU framebuffer to a Raylib texture")
+    }
 }
 
 /// The shared runtime of every executable: opens the window, creates the one
@@ -462,21 +494,28 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
     // Preview scale chosen from measured Interactive render times.
     let mut preview = AdaptivePreview::new();
 
+    // The Full frame is refined in bounded batches once the view rests;
+    // input keeps being polled between batches and cancels it. Its
+    // framebuffer is allocated once; the preview framebuffer below is
+    // reused across frames and only resized when the preview scale changes.
+    let mut refinement = FullRefinement::new(full_width, full_height);
+    let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
+    let mut preview_frame =
+        Framebuffer::new(full_width / preview.scale(), full_height / preview.scale());
+
+    // The first frame is a synchronous Full trace (nothing to show yet).
     let mut texture_scale = 1;
-    let (mut texture, _, _) = trace_to_texture(
-        &mut rl,
-        &thread,
-        full_width,
-        full_height,
+    let mut first_frame = Framebuffer::new(full_width, full_height);
+    render(
+        &mut first_frame,
+        &mode.camera(aspect_ratio),
         &mode,
         &texture_manager,
         RenderQuality::Full,
         &threads,
     );
-    // The Full frame is refined in bounded batches once the view rests;
-    // input keeps being polled between batches and cancels it.
-    let mut refinement = FullRefinement::new(full_width, full_height);
-    let aspect_ratio = config::WINDOW_WIDTH as f32 / config::WINDOW_HEIGHT as f32;
+    let mut presenter = Presenter::new(&mut rl, &thread, &first_frame);
+    drop(first_frame);
 
     while !rl.window_should_close() {
         let now = Instant::now();
@@ -491,9 +530,11 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
             texture_scale = scale;
             let (width, height) = (full_width / scale, full_height / scale);
             // A moving view is traced at Interactive quality.
-            let (new_texture, timing, framebuffer) = trace_to_texture(
+            let timing = trace_and_present(
                 &mut rl,
                 &thread,
+                &mut presenter,
+                &mut preview_frame,
                 width,
                 height,
                 &mode,
@@ -501,7 +542,6 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 RenderQuality::Interactive,
                 &threads,
             );
-            texture = new_texture;
             if mode.adaptive_preview() {
                 preview.record(timing.render);
             }
@@ -509,7 +549,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
             // Any activity discards a refinement in progress and restarts
             // the idle clock; the preview seeds the next one.
             refinement.view_changed(now);
-            refinement.seed(framebuffer.pixels(), width, height);
+            refinement.seed(preview_frame.pixels(), width, height);
         } else {
             if refinement.ready_to_start(now) {
                 refinement.start(mode.camera(aspect_ratio));
@@ -520,7 +560,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
                 let step = refinement.step(&scene, &threads);
                 // Show the rows finished so far over the stretched preview.
                 let upload_started = Instant::now();
-                texture = upload(&mut rl, &thread, refinement.framebuffer());
+                presenter.present(&mut rl, &thread, refinement.framebuffer());
                 texture_scale = 1;
                 if step.complete {
                     traced = Some((
@@ -548,7 +588,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
             let mut d = rl.begin_drawing(&thread);
             d.clear_background(Color::BLACK);
             d.draw_texture_ex(
-                &texture,
+                presenter.texture(),
                 Vector2::new(0.0, 0.0),
                 0.0,
                 texture_scale as f32,
