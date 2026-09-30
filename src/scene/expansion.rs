@@ -18,7 +18,9 @@ use crate::scene::descent::InvertedRouteLayout;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::column_top;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basin_columns};
-use crate::scene::overworld_blocks::deepslate_material_id;
+use crate::scene::overworld_blocks::{
+    cobblestone_material_id, deepslate_material_id, fence_material_id, log_material_id,
+};
 use crate::scene::rhombus::RhombusConfig;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::stratum_material;
@@ -209,6 +211,7 @@ const RELIEF_SALT: u32 = 0x1500_0002;
 const CUT_SALT: u32 = 0x1500_0003;
 const EXPOSURE_SALT: u32 = 0x1500_0004;
 const RISE_SALT: u32 = 0x1500_0005;
+const PAVING_SALT: u32 = 0x1500_0006;
 
 /// Layers of the lobe's upper geology: the grass, the dirt below it and
 /// the stone under that. Deepslate follows below on the visible ring.
@@ -557,4 +560,131 @@ pub fn shape_overworld_relief(
         }
     }
     relief
+}
+
+// ---------------------------------------------------------------------
+// Approach path (C179)
+// ---------------------------------------------------------------------
+
+/// The paved approach from the existing path to the castle site.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OverworldApproach {
+    /// Paved cells of the main route (cobblestone and stone), in walking
+    /// order from the anchor to the pad's west edge.
+    pub main: Vec<IVec3>,
+    /// The forecourt in front of the pad (outside it).
+    pub forecourt: Vec<IVec3>,
+    /// Timber markers beside the route (fence posts and a log or two).
+    pub accents: Vec<IVec3>,
+}
+
+impl OverworldApproach {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.main
+            .iter()
+            .chain(self.forecourt.iter())
+            .copied()
+            .collect()
+    }
+}
+
+fn is_ground(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::Grass
+            | BlockType::Dirt
+            | BlockType::Stone
+            | BlockType::Sand
+            | BlockType::Cobblestone
+    )
+}
+
+/// The highest ground cell of a column (leaves and trunks above it do not
+/// count: the path runs under the canopy).
+pub fn ground_cell(world: &VoxelWorld, x: i32, z: i32, top: i32, bottom: i32) -> Option<IVec3> {
+    (bottom..=top)
+        .rev()
+        .map(|y| IVec3::new(x, y, z))
+        .find(|c| world.get(*c).is_some_and(|b| is_ground(b.block_type())))
+}
+
+/// Paves the approach corridor: every corridor column's ground cell
+/// becomes cobblestone (stone every few cells), two rows wide east along
+/// the cutaway's north edge and two columns wide north to the pad's west
+/// edge; a three-by-three forecourt of cobblestone stands in front of the
+/// pad (outside it); two fence posts flank the route's start and a log
+/// marks each forecourt corner. Only ground cells are replaced, so the
+/// voxel count barely moves and nothing of the house, pond, trees, portal
+/// or descent is touched.
+pub fn pave_overworld_approach(
+    terrain: &TerrainConfig,
+    layout: &WorldExpansionLayout,
+    world: &mut VoxelWorld,
+) -> OverworldApproach {
+    let mut approach = OverworldApproach::default();
+    let top = terrain.max_surface_height() + 16;
+    let bottom = terrain.deepslate_level - 8;
+    let pave = |world: &mut VoxelWorld, cell: IVec3, stone: bool| {
+        let (block_type, material) = if stone {
+            (BlockType::Stone, stratum_material(BlockType::Stone))
+        } else {
+            (BlockType::Cobblestone, cobblestone_material_id())
+        };
+        world.insert(
+            cell,
+            BlockInstance::new(block_type, material, Orientation::Up),
+        );
+    };
+    for (x, z) in approach_columns(layout) {
+        let Some(cell) = ground_cell(world, x, z, top, bottom) else {
+            continue;
+        };
+        let stone = expansion_hash(terrain.seed, x, z, PAVING_SALT) < 0.2;
+        pave(world, cell, stone);
+        approach.main.push(cell);
+    }
+    // Forecourt: three columns west of the pad around the target row.
+    let pad = layout.overworld_castle_pad;
+    let target = layout.overworld_path_target;
+    for z in (target.z - 1)..=(target.z + 1) {
+        for x in (pad.min_x - 3)..pad.min_x {
+            let Some(cell) = ground_cell(world, x, z, top, bottom) else {
+                continue;
+            };
+            if !approach.main.contains(&cell) {
+                pave(world, cell, false);
+                approach.forecourt.push(cell);
+            }
+        }
+    }
+    // Accents: fence posts flanking the start of the corridor (north side,
+    // beside the route) and a log at each forecourt corner.
+    let anchor = layout.overworld_path_anchor;
+    for x in [anchor.x + 2, anchor.x + 9] {
+        let z = anchor.z - 2;
+        if let Some(ground) = ground_cell(world, x, z, top, bottom) {
+            let post = IVec3::new(x, ground.y + 1, z);
+            if !world.contains(post) {
+                world.insert(
+                    post,
+                    BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::Up),
+                );
+                approach.accents.push(post);
+            }
+        }
+    }
+    for z in [target.z - 2, target.z + 2] {
+        let x = pad.min_x - 3;
+        if let Some(ground) = ground_cell(world, x, z, top, bottom) {
+            let log = IVec3::new(x, ground.y + 1, z);
+            if !world.contains(log) {
+                world.insert(
+                    log,
+                    BlockInstance::new(BlockType::Log, log_material_id(), Orientation::Up),
+                );
+                approach.accents.push(log);
+            }
+        }
+    }
+    approach
 }

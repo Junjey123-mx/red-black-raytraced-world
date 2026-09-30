@@ -264,7 +264,14 @@ fn the_path_is_one_to_two_blocks_wide_and_does_not_invade_the_surface() {
     }
     assert!(path.landing.len() <= 3);
     let cobblestone = all_cobblestone(&scene);
-    assert_eq!(cobblestone.len(), path.cells.len() + path.landing.len());
+    // Gate 15 paves the castle approach in cobblestone too; the Gate 12
+    // path itself is still exactly its cells plus the landing.
+    let approach = scene.overworld_approach().cells();
+    let gate12: Vec<_> = cobblestone
+        .iter()
+        .filter(|c| !approach.contains(c))
+        .collect();
+    assert_eq!(gate12.len(), path.cells.len() + path.landing.len());
     assert!(
         cobblestone.len() < 40,
         "{} cobblestone blocks",

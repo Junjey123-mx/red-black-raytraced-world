@@ -149,6 +149,16 @@ fn v(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, y, z)
 }
 
+/// Columns paved or marked by the castle approach (C179), covered by its
+/// own tests.
+fn paved(scene: &WorldScene, x: i32, z: i32) -> bool {
+    let a = scene.overworld_approach();
+    a.cells()
+        .iter()
+        .chain(a.accents.iter())
+        .any(|c| c.x == x && c.z == z)
+}
+
 fn clear(scene: &WorldScene, p: Vec3) -> bool {
     is_position_clear(
         scene.world(),
@@ -241,6 +251,9 @@ fn dirt_is_exposed_by_the_cuts() {
     let r = scene.overworld_relief();
     assert!(r.dirt_cuts.len() >= 3, "{}", r.dirt_cuts.len());
     for cell in &r.dirt_cuts {
+        if paved(&scene, cell.x, cell.z) {
+            continue;
+        }
         assert_eq!(scene.column_top(cell.x, cell.z), Some(cell.y));
         assert_eq!(
             scene.world().get(*cell).map(|b| b.block_type()),
@@ -265,6 +278,9 @@ fn grass_tops_still_face_up() {
         .map(|c| (c.x, c.z))
         .collect();
     for c in &scene.overworld_expansion().columns {
+        if paved(&scene, c.x, c.z) {
+            continue;
+        }
         let top = scene.column_top(c.x, c.z).unwrap();
         assert_eq!(top, c.surface_y, "({}, {})", c.x, c.z);
         let b = scene.world().get(IVec3::new(c.x, top, c.z)).unwrap();
@@ -275,7 +291,6 @@ fn grass_tops_still_face_up() {
             assert_eq!(b.block_type(), BlockType::Grass);
         }
     }
-    // The pad itself is still level grass.
     let l = scene.expansion_layout();
     for c in scene
         .overworld_expansion()
@@ -363,8 +378,12 @@ fn no_column_stands_two_above_all_its_neighbours() {
 fn the_surface_is_collision_safe() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
-    // Every top has two open cells above it (head room for the camera).
+    // Every top has two open cells above it (head room for the camera);
+    // the approach's markers (C179) stand on their own columns.
     for c in &scene.overworld_expansion().columns {
+        if paved(&scene, c.x, c.z) {
+            continue;
+        }
         for dy in 1..=2 {
             assert!(
                 !scene

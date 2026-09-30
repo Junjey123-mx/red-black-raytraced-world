@@ -17,8 +17,8 @@ use crate::scene::descent::{
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
-    EXPANSION_WIDTH, OverworldExpansion, OverworldRelief, WorldExpansionLayout,
-    build_overworld_expansion, shape_overworld_relief,
+    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, WorldExpansionLayout,
+    build_overworld_expansion, pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -78,6 +78,7 @@ pub struct WorldScene {
     expansion_layout: WorldExpansionLayout,
     overworld_expansion: OverworldExpansion,
     overworld_relief: OverworldRelief,
+    overworld_approach: OverworldApproach,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -125,6 +126,7 @@ impl WorldScene {
             &mut overworld_expansion,
             &mut world,
         );
+        let overworld_approach = pave_overworld_approach(&config, &expansion_layout, &mut world);
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -148,6 +150,7 @@ impl WorldScene {
             expansion_layout,
             overworld_expansion,
             overworld_relief,
+            overworld_approach,
             silhouette,
             world,
         }
@@ -218,6 +221,11 @@ impl WorldScene {
     /// The relief sculpted into the east lobe (Gate 15).
     pub fn overworld_relief(&self) -> &OverworldRelief {
         &self.overworld_relief
+    }
+
+    /// The paved approach to the castle site (Gate 15).
+    pub fn overworld_approach(&self) -> &OverworldApproach {
+        &self.overworld_approach
     }
 
     pub fn silhouette(&self) -> &Silhouette {

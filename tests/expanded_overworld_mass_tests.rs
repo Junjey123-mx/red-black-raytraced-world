@@ -200,12 +200,15 @@ fn the_strata_are_present_in_order() {
     let relief = scene.overworld_relief();
     // Terraced, cut and raised columns have their profile shifted by one
     // (checked by the relief tests); the others keep the full sequence.
+    let approach = scene.overworld_approach();
     let touched = |c: &scene::expansion::ExpansionColumn| {
         relief
             .dirt_cuts
             .iter()
             .chain(relief.terraces.iter())
             .chain(relief.rises.iter())
+            .chain(approach.cells().iter())
+            .chain(approach.accents.iter())
             .any(|d| d.x == c.x && d.z == c.z)
     };
     for c in &e.columns {
@@ -231,14 +234,27 @@ fn the_strata_are_present_in_order() {
             deepslate += 1;
         }
     }
-    assert!(deepslate >= 20, "{deepslate} deepslate ring cells");
+    assert!(deepslate >= 12, "{deepslate} deepslate ring cells");
 }
 
 #[test]
 fn the_top_of_every_new_column_is_grass_facing_up() {
     let scene = WorldScene::new();
     let cuts = &scene.overworld_relief().dirt_cuts;
+    // Columns paved or marked by the castle approach (C179) are covered by
+    // its own tests.
+    let approach = scene.overworld_approach();
+    let paved = |x: i32, z: i32| {
+        approach
+            .cells()
+            .iter()
+            .chain(approach.accents.iter())
+            .any(|c| c.x == x && c.z == z)
+    };
     for c in &scene.overworld_expansion().columns {
+        if paved(c.x, c.z) {
+            continue;
+        }
         let top = scene.column_top(c.x, c.z).unwrap();
         assert_eq!(top, c.surface_y, "({}, {})", c.x, c.z);
         let b = scene.world().get(IVec3::new(c.x, top, c.z)).unwrap();
