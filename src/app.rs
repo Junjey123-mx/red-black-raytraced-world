@@ -6,6 +6,9 @@ use crate::camera::camera::Camera;
 use crate::camera::controls::{OrbitInput, apply_orbit_input};
 use crate::camera::diagnostic::DiagnosticCameraState;
 use crate::camera::portal_crossing::{PortalCrossingDetector, PortalVolume};
+use crate::camera::world_collision::{
+    CameraCollisionConfig, is_camera_solid, resolve_camera_motion,
+};
 use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
@@ -180,6 +183,8 @@ struct WorldMode {
     free_fly: WorldFreeFlyCameraState,
     /// Fires when the camera's movement pierces the portal membrane.
     portal_detector: PortalCrossingDetector,
+    /// The camera's collision sphere (solid blocks stop it).
+    collision: CameraCollisionConfig,
 }
 
 impl WorldMode {
@@ -202,6 +207,7 @@ impl WorldMode {
             lights: world_lights(),
             free_fly: world_free_fly_camera(),
             portal_detector,
+            collision: CameraCollisionConfig::default(),
         }
     }
 }
@@ -250,6 +256,17 @@ impl ViewerMode for WorldMode {
         if input.is_active() {
             let previous = self.free_fly.position;
             apply_free_fly_input(&mut self.free_fly, &input);
+            if !input.reset {
+                // The flight is resolved against nearby solid blocks once
+                // per update, from the previous position toward the new one.
+                self.free_fly.position = resolve_camera_motion(
+                    self.scene.world(),
+                    previous,
+                    self.free_fly.position - previous,
+                    &self.collision,
+                    &is_camera_solid,
+                );
+            }
             if input.reset {
                 self.portal_detector.reset();
             } else if self.free_fly.transition().is_none() {
