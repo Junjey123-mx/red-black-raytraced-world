@@ -17,8 +17,9 @@ use crate::scene::descent::{
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
-    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, WorldExpansionLayout,
-    build_overworld_expansion, pave_overworld_approach, shape_overworld_relief,
+    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, RedBlackExpansion,
+    WorldExpansionLayout, build_overworld_expansion, build_red_black_expansion,
+    pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -79,6 +80,7 @@ pub struct WorldScene {
     overworld_expansion: OverworldExpansion,
     overworld_relief: OverworldRelief,
     overworld_approach: OverworldApproach,
+    red_black_expansion: RedBlackExpansion,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -127,6 +129,13 @@ impl WorldScene {
             &mut world,
         );
         let overworld_approach = pave_overworld_approach(&config, &expansion_layout, &mut world);
+        let red_black_expansion = build_red_black_expansion(
+            &config,
+            &rhombus,
+            &expansion_layout,
+            &overworld_expansion,
+            &mut world,
+        );
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -151,6 +160,7 @@ impl WorldScene {
             overworld_expansion,
             overworld_relief,
             overworld_approach,
+            red_black_expansion,
             silhouette,
             world,
         }
@@ -226,6 +236,11 @@ impl WorldScene {
     /// The paved approach to the castle site (Gate 15).
     pub fn overworld_approach(&self) -> &OverworldApproach {
         &self.overworld_approach
+    }
+
+    /// The lower shell of the east lobe (Gate 15).
+    pub fn red_black_expansion(&self) -> &RedBlackExpansion {
+        &self.red_black_expansion
     }
 
     pub fn silhouette(&self) -> &Silhouette {

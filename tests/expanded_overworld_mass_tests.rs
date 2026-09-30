@@ -176,7 +176,7 @@ fn the_castle_pad_is_fully_supported() {
                 .column(x, z)
                 .unwrap_or_else(|| panic!("pad column ({x}, {z}) missing"));
             assert_eq!(c.surface_y, l.castle_pad_surface_y);
-            for d in 0..UPPER_STRATA_DEPTH {
+            for d in 0..(UPPER_STRATA_DEPTH - 1) {
                 assert!(scene.world().contains(IVec3::new(x, c.surface_y - d, z)));
             }
             // Open air above the pad.
@@ -228,8 +228,8 @@ fn the_strata_are_present_in_order() {
                 assert_eq!(t(d), Some(BlockType::Dirt), "{cell:?}");
             }
         }
-        assert_eq!(t(3), Some(BlockType::Stone));
         if c.ring {
+            assert_eq!(t(3), Some(BlockType::Stone));
             assert_eq!(t(4), Some(BlockType::Deepslate));
             deepslate += 1;
         }

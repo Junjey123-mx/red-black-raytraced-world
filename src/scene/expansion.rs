@@ -21,6 +21,7 @@ use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basi
 use crate::scene::overworld_blocks::{
     cobblestone_material_id, deepslate_material_id, fence_material_id, log_material_id,
 };
+use crate::scene::red_black_maze::lower_mass_block;
 use crate::scene::rhombus::RhombusConfig;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::stratum_material;
@@ -346,10 +347,13 @@ pub fn build_overworld_expansion(
                 ring,
                 seam,
             });
+            // Ring columns show their flank: grass, dirt, dirt, stone,
+            // deepslate. Interior columns are never seen from the side, so
+            // they carry only what their top exposes (grass over dirt).
             let depth = if ring {
                 UPPER_STRATA_DEPTH + 1
             } else {
-                UPPER_STRATA_DEPTH
+                UPPER_STRATA_DEPTH - 1
             };
             for d in 0..depth {
                 let y = surface_y - d;
@@ -687,4 +691,153 @@ pub fn pave_overworld_approach(
         }
     }
     approach
+}
+
+// ---------------------------------------------------------------------
+// Red-Black mass (C180)
+// ---------------------------------------------------------------------
+
+/// One column of the lobe's lower shell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LowerColumn {
+    pub x: i32,
+    pub z: i32,
+    /// The lowest cell of the column: its -Y face is Red-Black ground.
+    pub bottom_y: i32,
+    /// On the lower shell's outline (its flank is visible).
+    pub ring: bool,
+}
+
+/// The lower half of the lobe as built: an underside layer that steps from
+/// the rim level of the existing lower mass down (toward +Y, the inverted
+/// viewer's down) to the fortress pad level, and dark walls on the
+/// outline up to the Overworld strata. The interior stays hollow.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackExpansion {
+    pub columns: Vec<LowerColumn>,
+    /// The underside cells (one per column).
+    pub underside: Vec<IVec3>,
+    /// The wall cells of the outline.
+    pub walls: Vec<IVec3>,
+}
+
+impl RedBlackExpansion {
+    pub fn column(&self, x: i32, z: i32) -> Option<&LowerColumn> {
+        self.columns.iter().find(|c| c.x == x && c.z == z)
+    }
+
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.underside
+            .iter()
+            .chain(self.walls.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// The underside level of lobe column `x`: the rim level of the existing
+/// lower mass west of the terrace, one cell lower (toward +Y) per terrace
+/// column, and the fortress pad level from the pad's west edge on.
+pub fn lower_bottom_y(layout: &WorldExpansionLayout, x: i32) -> i32 {
+    let pad = layout.fortress_pad_bottom_y;
+    let steps = layout.fortress_terrace_max_x - layout.fortress_terrace_min_x + 1;
+    if x > layout.fortress_terrace_max_x {
+        pad
+    } else if x < layout.fortress_terrace_min_x {
+        pad - steps - 1
+    } else {
+        pad - (layout.fortress_terrace_max_x - x) - 1
+    }
+}
+
+/// The easternmost cell of the existing lower mass at the rim level for
+/// row `z`, so the lower shell starts right after it and its underside
+/// continues the rim.
+pub fn lower_rim_x(layout: &WorldExpansionLayout, world: &VoxelWorld, z: i32) -> Option<i32> {
+    let rim = lower_bottom_y(layout, layout.fortress_terrace_min_x - 1);
+    (0..layout.red_black_extension.min_x)
+        .rev()
+        .find(|&x| ((rim - 2)..=(rim + 3)).any(|y| world.contains(IVec3::new(x, y, z))))
+}
+
+/// Builds the lobe's lower shell under the upper terrain of
+/// `expansion`: for every lower column an underside cell at
+/// `lower_bottom_y`, and on the outline a wall of the same deepslate,
+/// basalt and polished blackstone mix as the certified lower mass, from the
+/// underside up to the island's own cells or the Overworld strata. All
+/// cells are `Down`-oriented (the inverted realm's functional up is -Y).
+pub fn build_red_black_expansion(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    layout: &WorldExpansionLayout,
+    upper: &OverworldExpansion,
+    world: &mut VoxelWorld,
+) -> RedBlackExpansion {
+    let mut lower = RedBlackExpansion::default();
+    let ext = layout.red_black_extension;
+    // Plan: row `z` runs from the lower rim (or the upper row's first
+    // column, whichever is further west) to the upper row's last column.
+    let mut rows: Vec<(i32, i32, i32)> = Vec::new();
+    for z in ext.min_z..=ext.max_z {
+        let upper_cols: Vec<i32> = upper
+            .columns
+            .iter()
+            .filter(|c| c.z == z)
+            .map(|c| c.x)
+            .collect();
+        let Some(&last) = upper_cols.iter().max() else {
+            continue;
+        };
+        let upper_first = *upper_cols.iter().min().unwrap();
+        let first = lower_rim_x(layout, world, z).map_or(upper_first, |x| (x + 1).min(upper_first));
+        rows.push((z, first, last));
+    }
+    let row_of = |z: i32| rows.iter().find(|r| r.0 == z).map(|r| (r.1, r.2));
+    let top_cap = terrain.deepslate_level;
+    for &(z, first, last) in &rows {
+        for x in first..=last {
+            let bottom_y = lower_bottom_y(layout, x);
+            let ring = x == first
+                || x == last
+                || row_of(z - 1).is_none_or(|(f, l)| x < f || x > l)
+                || row_of(z + 1).is_none_or(|(f, l)| x < f || x > l);
+            lower.columns.push(LowerColumn {
+                x,
+                z,
+                bottom_y,
+                ring,
+            });
+            let underside = IVec3::new(x, bottom_y, z);
+            if !world.contains(underside) {
+                let (block_type, material) = lower_mass_block(terrain, rhombus, x, bottom_y, z);
+                world.insert(
+                    underside,
+                    BlockInstance::new(block_type, material, Orientation::Down),
+                );
+                lower.underside.push(underside);
+            }
+            if !ring {
+                continue;
+            }
+            // Wall: from above the underside up to the cell below the
+            // column's lowest existing cell (island skirt or Overworld
+            // strata), capped at the deepslate level.
+            let lowest_existing =
+                ((bottom_y + 1)..=(top_cap + 8)).find(|&y| world.contains(IVec3::new(x, y, z)));
+            let wall_top = lowest_existing.map_or(top_cap, |y| (y - 1).min(top_cap));
+            for y in (bottom_y + 1)..=wall_top {
+                let cell = IVec3::new(x, y, z);
+                if world.contains(cell) {
+                    continue;
+                }
+                let (block_type, material) = lower_mass_block(terrain, rhombus, x, y, z);
+                world.insert(
+                    cell,
+                    BlockInstance::new(block_type, material, Orientation::Down),
+                );
+                lower.walls.push(cell);
+            }
+        }
+    }
+    lower
 }
