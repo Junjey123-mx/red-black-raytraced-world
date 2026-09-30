@@ -332,6 +332,8 @@ fn the_overworld_surface_is_unchanged_outside_the_cut_and_the_pit() {
     let trees = plant_trees(&config, &mut reference, &pond);
     lay_path(&config, &mut reference, &pond, &trees);
     let dug: Vec<IVec3> = scene.upper_descent().dug.clone();
+    // Gate 15 grows the east lobe: its cells are new by design.
+    let grown = |cell: &IVec3| scene.overworld_expansion().cells.contains(cell);
     for z in 0..24 {
         for x in 0..24 {
             if r.cutaway.contains_column(x, z) {
@@ -341,6 +343,7 @@ fn the_overworld_surface_is_unchanged_outside_the_cut_and_the_pit() {
                 let cell = IVec3::new(x, y, z);
                 if dug.contains(&cell)
                     || scene.upper_descent().treads.iter().any(|(c, _)| *c == cell)
+                    || grown(&cell)
                 {
                     continue;
                 }

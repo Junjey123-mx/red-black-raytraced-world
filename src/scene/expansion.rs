@@ -12,14 +12,21 @@
 #![allow(dead_code)]
 
 use crate::core::math::IVec3;
+use crate::scene::block::BlockInstance;
+use crate::scene::block_type::BlockType;
 use crate::scene::descent::InvertedRouteLayout;
+use crate::scene::orientation::Orientation;
+use crate::scene::overworld::column_top;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basin_columns};
+use crate::scene::overworld_blocks::deepslate_material_id;
 use crate::scene::rhombus::RhombusConfig;
 use crate::scene::terrain::TerrainConfig;
+use crate::scene::terrain::generator::stratum_material;
 use crate::scene::voxel_world::VoxelWorld;
 
-/// Columns the lobe adds east of the current bounds.
-pub const EXPANSION_WIDTH: i32 = 12;
+/// Columns the lobe adds east of the current bounds (the last one is the
+/// ragged edge, present only where the outline hash says so).
+pub const EXPANSION_WIDTH: i32 = 13;
 /// Rows of the lobe (it ends at the portal wall row, never in the cutaway).
 pub const EXPANSION_DEPTH: i32 = 12;
 /// Side of the reserved architecture pads, in navigable columns.
@@ -67,10 +74,11 @@ impl WorldExpansionLayout {
         path: &PathLayout,
         world: &VoxelWorld,
     ) -> Self {
-        let east = world
-            .bounds()
-            .map(|b| b.max_exclusive.x)
-            .unwrap_or(terrain.width);
+        // The terrain footprint ends at `width`; the lobe starts right
+        // after it (independent of anything built later, so the layout is
+        // the same before and after the lobe exists).
+        let east = terrain.width;
+        let _ = world;
         let wall_z = rhombus.portal.wall_z;
         let overworld_extension = ColumnRect::new(
             east,
@@ -80,9 +88,9 @@ impl WorldExpansionLayout {
         );
         // The pads keep one column of terrain around them inside the lobe.
         let pad = ColumnRect::new(
-            overworld_extension.max_x - PAD_SIDE + 1,
+            overworld_extension.max_x - PAD_SIDE,
             overworld_extension.min_z + 1,
-            overworld_extension.max_x,
+            overworld_extension.max_x - 1,
             overworld_extension.min_z + PAD_SIDE,
         );
         let mid_z = (pad.min_z + pad.max_z) / 2;
@@ -177,4 +185,193 @@ impl WorldExpansionLayout {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------
+// Overworld mass (C177)
+// ---------------------------------------------------------------------
+
+/// Deterministic hash in `[0, 1)` for a column (the expansion's own salt,
+/// independent from the terrain's noise).
+pub fn expansion_hash(seed: u32, x: i32, z: i32, salt: u32) -> f32 {
+    let mut h =
+        seed ^ salt ^ (x as u32).wrapping_mul(0x9E37_79B1) ^ (z as u32).wrapping_mul(0x85EB_CA77);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    h = h.wrapping_mul(0x297A_2D39);
+    h ^= h >> 15;
+    (h & 0x00FF_FFFF) as f32 / 16_777_216.0
+}
+
+const OUTLINE_SALT: u32 = 0x1500_0001;
+const RELIEF_SALT: u32 = 0x1500_0002;
+
+/// Layers of the lobe's upper geology: the grass, the dirt below it and
+/// the stone under that. Deepslate follows below on the visible ring.
+pub const UPPER_STRATA_DEPTH: i32 = 4;
+
+/// One column of the new upper terrain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExpansionColumn {
+    pub x: i32,
+    pub z: i32,
+    /// The grass cell.
+    pub surface_y: i32,
+    /// On the lobe's outline (its side faces are visible).
+    pub ring: bool,
+    /// Touches the existing island (the seam).
+    pub seam: bool,
+}
+
+/// The upper mass as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OverworldExpansion {
+    pub columns: Vec<ExpansionColumn>,
+    pub cells: Vec<IVec3>,
+}
+
+impl OverworldExpansion {
+    pub fn column(&self, x: i32, z: i32) -> Option<&ExpansionColumn> {
+        self.columns.iter().find(|c| c.x == x && c.z == z)
+    }
+
+    pub fn surface_cells(&self) -> Vec<IVec3> {
+        self.columns
+            .iter()
+            .map(|c| IVec3::new(c.x, c.surface_y, c.z))
+            .collect()
+    }
+}
+
+/// The easternmost island column of row `z` at the top layers, so the lobe
+/// starts one cell beyond it and touches it face to face.
+pub fn island_edge_x(layout: &WorldExpansionLayout, world: &VoxelWorld, z: i32) -> Option<i32> {
+    let s = layout.castle_pad_surface_y;
+    (0..layout.overworld_extension.min_x)
+        .rev()
+        .find(|&x| ((s - 6)..=(s + 8)).any(|y| world.contains(IVec3::new(x, y, z))))
+}
+
+/// The lobe's plan for row `z`: `(first_x, last_x)`. The west end is the
+/// seam with the island; the east end is ragged (the last column exists
+/// only where the outline hash says so, and the corner rows are shorter).
+pub fn lobe_row(
+    terrain: &TerrainConfig,
+    layout: &WorldExpansionLayout,
+    world: &VoxelWorld,
+    z: i32,
+) -> Option<(i32, i32)> {
+    let ext = layout.overworld_extension;
+    if z < ext.min_z || z > ext.max_z {
+        return None;
+    }
+    let first = island_edge_x(layout, world, z).map_or(ext.min_x, |x| x + 1);
+    let corner = if z == ext.min_z || z == ext.max_z {
+        2
+    } else if z == ext.min_z + 1 || z == ext.max_z - 1 {
+        1
+    } else {
+        0
+    };
+    let ragged = if expansion_hash(terrain.seed, ext.max_x, z, OUTLINE_SALT) < 0.5 {
+        1
+    } else {
+        0
+    };
+    let last = (ext.max_x - corner - ragged)
+        .max(layout.overworld_castle_pad.max_x.min(ext.max_x - corner));
+    let last = if layout.overworld_castle_pad.min_z <= z && z <= layout.overworld_castle_pad.max_z {
+        last.max(layout.overworld_castle_pad.max_x)
+    } else {
+        last
+    };
+    Some((first, last))
+}
+
+/// Grows the upper island toward the castle site: for every column of the
+/// lobe, grass at the surface, dirt and stone below, and deepslate on the
+/// ring columns whose flanks are visible. The pad columns are level at
+/// `castle_pad_surface_y`; the rest of the lobe varies by one cell around
+/// it, and the seam matches the island's own edge height where the island
+/// is lower. The interior of the shell is left hollow: nothing there can
+/// ever be seen.
+pub fn build_overworld_expansion(
+    terrain: &TerrainConfig,
+    layout: &WorldExpansionLayout,
+    world: &mut VoxelWorld,
+) -> OverworldExpansion {
+    let mut expansion = OverworldExpansion::default();
+    let ext = layout.overworld_extension;
+    let s = layout.castle_pad_surface_y;
+    let mut rows: Vec<(i32, i32, i32)> = Vec::new();
+    for z in ext.min_z..=ext.max_z {
+        if let Some((first, last)) = lobe_row(terrain, layout, world, z) {
+            rows.push((z, first, last));
+        }
+    }
+    let row_of = |z: i32| rows.iter().find(|r| r.0 == z).map(|r| (r.1, r.2));
+    let top = terrain.max_surface_height() + 16;
+    let bottom = terrain.deepslate_level - 8;
+    for &(z, first, last) in &rows {
+        for x in first..=last {
+            let pad = layout.overworld_castle_pad.contains(x, z);
+            let seam = x == first;
+            let ring = seam
+                || x == last
+                || row_of(z - 1).is_none_or(|(f, l)| x < f || x > l)
+                || row_of(z + 1).is_none_or(|(f, l)| x < f || x > l);
+            // Height: the pad is level; elsewhere one cell of variation,
+            // and the seam follows a lower island neighbour.
+            let mut surface_y = if pad {
+                s
+            } else if expansion_hash(terrain.seed, x, z, RELIEF_SALT) < 0.3 {
+                s - 1
+            } else {
+                s
+            };
+            if seam && let Some(neighbour) = column_top(world, x - 1, z, top, bottom) {
+                surface_y = surface_y.min(neighbour + 1).max(s - 1);
+            }
+            expansion.columns.push(ExpansionColumn {
+                x,
+                z,
+                surface_y,
+                ring,
+                seam,
+            });
+            let depth = if ring {
+                UPPER_STRATA_DEPTH + 1
+            } else {
+                UPPER_STRATA_DEPTH
+            };
+            for d in 0..depth {
+                let y = surface_y - d;
+                let cell = IVec3::new(x, y, z);
+                if world.contains(cell) {
+                    continue;
+                }
+                let block_type = if d == 0 {
+                    BlockType::Grass
+                } else if d <= 2 {
+                    BlockType::Dirt
+                } else if d == 3 {
+                    BlockType::Stone
+                } else {
+                    BlockType::Deepslate
+                };
+                let material = if block_type == BlockType::Deepslate {
+                    deepslate_material_id()
+                } else {
+                    stratum_material(block_type)
+                };
+                world.insert(
+                    cell,
+                    BlockInstance::new(block_type, material, Orientation::Up),
+                );
+                expansion.cells.push(cell);
+            }
+        }
+    }
+    expansion
 }

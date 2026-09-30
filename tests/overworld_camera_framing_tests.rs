@@ -179,8 +179,12 @@ fn the_target_is_the_volumetric_center_of_the_scene() {
         .max()
         .unwrap();
     assert!(target.y >= r.lower_tip_y as f32 && target.y <= roof_top as f32);
+    // Gate 15: the plan grew east, so the focus is the middle of the whole
+    // world box (terrain plus lobe), not of the original terrain alone.
+    let b = scene.world().bounds().unwrap();
+    let center_x = (b.min.x + b.max_exclusive.x) as f32 / 2.0;
     let center = scene.center();
-    assert!((target.x - center.x).abs() <= 2.0 && (target.z - center.z).abs() <= 2.0);
+    assert!((target.x - center_x).abs() <= 2.0 && (target.z - center.z).abs() <= 2.0);
 }
 
 #[test]

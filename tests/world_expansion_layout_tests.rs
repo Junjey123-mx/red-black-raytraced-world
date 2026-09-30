@@ -159,11 +159,8 @@ fn the_layout_is_deterministic_and_derived_from_the_world() {
         a.world(),
     );
     assert_eq!(l, derived);
-    // The lobe starts exactly where the current mass ends (one landform).
-    assert_eq!(
-        l.overworld_extension.min_x,
-        a.world().bounds().unwrap().max_exclusive.x
-    );
+    // The lobe starts exactly where the terrain footprint ends (one landform).
+    assert_eq!(l.overworld_extension.min_x, a.config().width);
     assert_eq!(l.overworld_extension.max_z, a.rhombus().portal.wall_z);
     assert_eq!(
         l.overworld_extension.max_x - l.overworld_extension.min_x + 1,
@@ -321,23 +318,13 @@ fn the_pads_have_useful_footprints() {
 fn the_expansion_lives_in_the_one_world_next_to_the_current_mass() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
+    // Adjacent to the terrain footprint, never a detached island: the
+    // first column of the lobe is the one right after the footprint's east
+    // edge, and the lobe's rows lie inside the footprint's rows.
+    assert_eq!(l.overworld_extension.min_x, scene.config().width);
+    assert!(l.overworld_extension.min_z >= 0 && l.overworld_extension.max_z < scene.config().depth);
+    // The world box ends where the lobe ends.
     let bounds = scene.world().bounds().unwrap();
-    // Adjacent to the current box, never a detached island: the first
-    // column of the lobe is the column right after the current east edge.
-    assert_eq!(l.overworld_extension.min_x, bounds.max_exclusive.x);
-    assert!(
-        l.overworld_extension.min_z >= bounds.min.z
-            && l.overworld_extension.max_z < bounds.max_exclusive.z
-    );
-    // Nothing of the lobe exists yet: this commit only reserves it.
-    let mut occupied = 0;
-    for z in l.overworld_extension.min_z..=l.overworld_extension.max_z {
-        for x in l.overworld_extension.min_x..=l.overworld_extension.max_x {
-            for y in -30..30 {
-                occupied += scene.world().contains(IVec3::new(x, y, z)) as usize;
-            }
-        }
-    }
-    assert_eq!(occupied, 0);
-    assert_eq!(scene.world().len(), 6783);
+    assert_eq!(bounds.max_exclusive.x, l.overworld_extension.max_x + 1);
+    assert_eq!(bounds.max_exclusive.z, scene.config().depth);
 }

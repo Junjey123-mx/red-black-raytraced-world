@@ -340,7 +340,12 @@ fn world_bounds_clipping_is_active_and_exact() {
     let rig = Rig::new();
     let bounds = rig.scene.world().bounds().expect("the world has a box");
     assert_eq!(bounds.min, IVec3::new(0, -22, 0));
-    assert_eq!(bounds.max_exclusive, IVec3::new(24, 13, 24));
+    // Gate 15 grew the lobe east: the box ends at the lobe's last column.
+    assert_eq!(
+        bounds.max_exclusive.x,
+        rig.scene.expansion_layout().overworld_extension.max_x + 1
+    );
+    assert_eq!((bounds.max_exclusive.y, bounds.max_exclusive.z), (13, 24));
     let src = std::fs::read_to_string("src/renderer/raytracer.rs").unwrap();
     assert!(src.contains("bounds.clip_distance(ray.origin, ray.direction, max_distance)?"));
     let reference = unclipped_copy(rig.scene.world());

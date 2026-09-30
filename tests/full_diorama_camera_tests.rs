@@ -175,7 +175,13 @@ fn the_target_lies_inside_the_full_bounds() {
     let r = scene.rhombus();
     let target = world_camera(ASPECT).target;
     assert!(target.y > r.lower_tip_y as f32 && target.y < r.upper_surface_reference as f32);
-    assert!((target.x - r.center_x as f32).abs() <= 2.0);
+    // Gate 15: the focus is the middle of the whole plan, lobe included.
+    let plan_mid_x = scene.expansion_layout().overworld_extension.max_x as f32 / 2.0;
+    assert!(
+        (target.x - plan_mid_x).abs() <= 2.0,
+        "{} vs {plan_mid_x}",
+        target.x
+    );
     assert!((target.z - r.center_z as f32).abs() <= 2.0);
     // Halfway between the surface and the tip: not the upper scene alone.
     let mid = (r.upper_surface_reference + r.lower_tip_y) as f32 / 2.0;

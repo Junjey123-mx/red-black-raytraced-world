@@ -16,7 +16,9 @@ use crate::scene::descent::{
     InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
 };
 use crate::scene::environment::WorldEnvironmentProfile;
-use crate::scene::expansion::WorldExpansionLayout;
+use crate::scene::expansion::{
+    EXPANSION_WIDTH, OverworldExpansion, WorldExpansionLayout, build_overworld_expansion,
+};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -73,6 +75,7 @@ pub struct WorldScene {
     families: Vec<FamilyLayout>,
     transitions: FamilyTransitions,
     expansion_layout: WorldExpansionLayout,
+    overworld_expansion: OverworldExpansion,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -112,6 +115,7 @@ impl WorldScene {
         // Gate 15: where both worlds grow (derived from what stands so far).
         let expansion_layout =
             WorldExpansionLayout::derive(&config, &rhombus, &inverted_route.layout, &path, &world);
+        let overworld_expansion = build_overworld_expansion(&config, &expansion_layout, &mut world);
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -133,6 +137,7 @@ impl WorldScene {
             families,
             transitions,
             expansion_layout,
+            overworld_expansion,
             silhouette,
             world,
         }
@@ -193,6 +198,11 @@ impl WorldScene {
     /// Where both worlds grow and where the castles will stand (Gate 15).
     pub fn expansion_layout(&self) -> &WorldExpansionLayout {
         &self.expansion_layout
+    }
+
+    /// The new upper terrain of the east lobe (Gate 15).
+    pub fn overworld_expansion(&self) -> &OverworldExpansion {
+        &self.overworld_expansion
     }
 
     pub fn silhouette(&self) -> &Silhouette {
@@ -376,7 +386,7 @@ pub fn world_focus() -> Vec3 {
     let config = TerrainConfig::official();
     let rhombus = RhombusConfig::derive(&config);
     Vec3::new(
-        config.width as f32 / 2.0,
+        (config.width + EXPANSION_WIDTH) as f32 / 2.0,
         (rhombus.upper_surface_reference + rhombus.lower_tip_y) as f32 / 2.0 + 1.0,
         config.depth as f32 / 2.0,
     )
@@ -388,9 +398,9 @@ pub fn world_focus() -> Vec3 {
 /// complete floating diamond from the tree crowns to the lower tip, and
 /// low enough that the exposed layers, portal and underside all read.
 pub const WORLD_CAMERA_OFFSET: Vec3 = Vec3 {
-    x: 11.0,
-    y: 19.0,
-    z: 35.0,
+    x: 12.0,
+    y: 20.0,
+    z: 38.0,
 };
 
 /// The World's free-fly camera at the official framing: the presentation

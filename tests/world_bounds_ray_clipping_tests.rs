@@ -549,7 +549,12 @@ fn the_world_box_is_exact_and_maintained_through_edits() {
     });
     assert_eq!(Some(bounds), brute);
     assert_eq!(bounds.min, IVec3::new(0, -22, 0));
-    assert_eq!(bounds.max_exclusive, IVec3::new(24, 13, 24));
+    // Gate 15 grew the lobe east: the box ends at the lobe's last column.
+    assert_eq!(
+        bounds.max_exclusive.x,
+        scene.expansion_layout().overworld_extension.max_x + 1
+    );
+    assert_eq!((bounds.max_exclusive.y, bounds.max_exclusive.z), (13, 24));
     // Shrinks when the only cell on a face goes away, stays otherwise.
     let block = any_block(world);
     let mut w = VoxelWorld::new();
