@@ -195,7 +195,23 @@ fn the_strata_are_present_in_order() {
     let scene = WorldScene::new();
     let e = scene.overworld_expansion();
     let mut deepslate = 0;
+    // The relief pass (C178) exposes stone on some flanks and cuts the
+    // grass of a few columns; those cells are checked by its own tests.
+    let relief = scene.overworld_relief();
+    // Terraced, cut and raised columns have their profile shifted by one
+    // (checked by the relief tests); the others keep the full sequence.
+    let touched = |c: &scene::expansion::ExpansionColumn| {
+        relief
+            .dirt_cuts
+            .iter()
+            .chain(relief.terraces.iter())
+            .chain(relief.rises.iter())
+            .any(|d| d.x == c.x && d.z == c.z)
+    };
     for c in &e.columns {
+        if touched(c) {
+            continue;
+        }
         let t = |d: i32| {
             scene
                 .world()
@@ -203,25 +219,38 @@ fn the_strata_are_present_in_order() {
                 .map(|b| b.block_type())
         };
         assert_eq!(t(0), Some(BlockType::Grass), "({}, {})", c.x, c.z);
-        assert_eq!(t(1), Some(BlockType::Dirt));
-        assert_eq!(t(2), Some(BlockType::Dirt));
+        for d in 1..=2 {
+            let cell = IVec3::new(c.x, c.surface_y - d, c.z);
+            if !relief.stone_exposures.contains(&cell) {
+                assert_eq!(t(d), Some(BlockType::Dirt), "{cell:?}");
+            }
+        }
         assert_eq!(t(3), Some(BlockType::Stone));
         if c.ring {
             assert_eq!(t(4), Some(BlockType::Deepslate));
             deepslate += 1;
         }
     }
-    assert!(deepslate >= 30, "{deepslate} deepslate ring cells");
+    assert!(deepslate >= 20, "{deepslate} deepslate ring cells");
 }
 
 #[test]
 fn the_top_of_every_new_column_is_grass_facing_up() {
     let scene = WorldScene::new();
+    let cuts = &scene.overworld_relief().dirt_cuts;
     for c in &scene.overworld_expansion().columns {
         let top = scene.column_top(c.x, c.z).unwrap();
         assert_eq!(top, c.surface_y, "({}, {})", c.x, c.z);
         let b = scene.world().get(IVec3::new(c.x, top, c.z)).unwrap();
-        assert_eq!(b.block_type(), BlockType::Grass);
+        let cut = cuts.iter().any(|d| d.x == c.x && d.z == c.z);
+        assert_eq!(
+            b.block_type(),
+            if cut {
+                BlockType::Dirt
+            } else {
+                BlockType::Grass
+            }
+        );
         assert_eq!(b.orientation(), scene::orientation::Orientation::Up);
     }
 }

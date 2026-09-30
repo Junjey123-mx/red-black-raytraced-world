@@ -206,6 +206,9 @@ pub fn expansion_hash(seed: u32, x: i32, z: i32, salt: u32) -> f32 {
 
 const OUTLINE_SALT: u32 = 0x1500_0001;
 const RELIEF_SALT: u32 = 0x1500_0002;
+const CUT_SALT: u32 = 0x1500_0003;
+const EXPOSURE_SALT: u32 = 0x1500_0004;
+const RISE_SALT: u32 = 0x1500_0005;
 
 /// Layers of the lobe's upper geology: the grass, the dirt below it and
 /// the stone under that. Deepslate follows below on the visible ring.
@@ -374,4 +377,184 @@ pub fn build_overworld_expansion(
         }
     }
     expansion
+}
+
+// ---------------------------------------------------------------------
+// Relief and edges (C178)
+// ---------------------------------------------------------------------
+
+/// The columns of the approach corridor from the existing path to the
+/// castle pad: two rows east along the cutaway's north edge, then two
+/// columns north along the pad's west side, ending at the pad's west edge
+/// mid row. Kept free of relief so it stays a navigable route (C179 paves
+/// it).
+pub fn approach_columns(layout: &WorldExpansionLayout) -> Vec<(i32, i32)> {
+    let mut cols = Vec::new();
+    let anchor = layout.overworld_path_anchor;
+    let pad = layout.overworld_castle_pad;
+    let target = layout.overworld_path_target;
+    // Segment A: east along rows `anchor.z - 1 ..= anchor.z`.
+    for x in (anchor.x + 1)..pad.min_x {
+        for z in (anchor.z - 1)..=anchor.z {
+            cols.push((x, z));
+        }
+    }
+    // Segment B: north along the two columns west of the pad, from the
+    // corridor rows up to the target row (plus one for the forecourt).
+    for x in (pad.min_x - 2)..pad.min_x {
+        for z in (target.z - 1)..(anchor.z - 1) {
+            if !cols.contains(&(x, z)) {
+                cols.push((x, z));
+            }
+        }
+    }
+    cols
+}
+
+/// What the relief pass did.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OverworldRelief {
+    /// Ring columns lowered by one (stepped edge).
+    pub terraces: Vec<IVec3>,
+    /// Columns whose grass was removed to expose the dirt (the new top).
+    pub dirt_cuts: Vec<IVec3>,
+    /// Dirt cells of visible flanks replaced by stone.
+    pub stone_exposures: Vec<IVec3>,
+    /// Columns raised by one grass cell (a small rise).
+    pub rises: Vec<IVec3>,
+}
+
+fn is_corridor(layout: &WorldExpansionLayout, x: i32, z: i32) -> bool {
+    approach_columns(layout).contains(&(x, z))
+}
+
+/// Sculpts the new upper terrain: the outer ring steps down one cell
+/// (terraces along the edges), a few columns lose their grass to a dirt
+/// cut, the visible flanks show stone where the dirt was, and a handful of
+/// interior columns rise by one. The castle pad and the approach corridor
+/// are never touched, no column ends more than one cell above all of its
+/// neighbours, and every top keeps open air above it.
+pub fn shape_overworld_relief(
+    terrain: &TerrainConfig,
+    layout: &WorldExpansionLayout,
+    expansion: &mut OverworldExpansion,
+    world: &mut VoxelWorld,
+) -> OverworldRelief {
+    let mut relief = OverworldRelief::default();
+    let pad = layout.overworld_castle_pad;
+    let s = layout.castle_pad_surface_y;
+    let n = expansion.columns.len();
+    for i in 0..n {
+        let c = expansion.columns[i];
+        if pad.contains(c.x, c.z) || is_corridor(layout, c.x, c.z) {
+            continue;
+        }
+        let top = IVec3::new(c.x, c.surface_y, c.z);
+        // 1. Terraces: the ring (not the seam) steps down to `s - 1`.
+        if c.ring && !c.seam && c.surface_y > s - 1 {
+            world.remove(top);
+            // The cell below becomes the new grass top.
+            let below = IVec3::new(c.x, c.surface_y - 1, c.z);
+            world.insert(
+                below,
+                BlockInstance::new(
+                    BlockType::Grass,
+                    stratum_material(BlockType::Grass),
+                    Orientation::Up,
+                ),
+            );
+            expansion.cells.retain(|cell| *cell != top);
+            expansion.columns[i].surface_y = c.surface_y - 1;
+            relief.terraces.push(below);
+            continue;
+        }
+        // 2. Dirt cuts: a few interior columns lose their grass.
+        if !c.ring && expansion_hash(terrain.seed, c.x, c.z, CUT_SALT) < 0.2 {
+            world.remove(top);
+            expansion.cells.retain(|cell| *cell != top);
+            let below = IVec3::new(c.x, c.surface_y - 1, c.z);
+            expansion.columns[i].surface_y = c.surface_y - 1;
+            relief.dirt_cuts.push(below);
+            continue;
+        }
+        // 3. Rises: a few interior columns at the pad level gain a grass cell.
+        if !c.ring && c.surface_y == s && expansion_hash(terrain.seed, c.x, c.z, RISE_SALT) < 0.12 {
+            world.insert(
+                top,
+                BlockInstance::new(
+                    BlockType::Dirt,
+                    stratum_material(BlockType::Dirt),
+                    Orientation::Up,
+                ),
+            );
+            let above = IVec3::new(c.x, c.surface_y + 1, c.z);
+            world.insert(
+                above,
+                BlockInstance::new(
+                    BlockType::Grass,
+                    stratum_material(BlockType::Grass),
+                    Orientation::Up,
+                ),
+            );
+            expansion.cells.push(above);
+            expansion.columns[i].surface_y = c.surface_y + 1;
+            relief.rises.push(above);
+        }
+    }
+    // 4. Stone exposures on the visible flanks: dirt one or two below the
+    //    grass of ring columns becomes stone where the hash says so.
+    for c in expansion.columns.clone() {
+        if !c.ring || pad.contains(c.x, c.z) {
+            continue;
+        }
+        let roll = expansion_hash(terrain.seed, c.x, c.z, EXPOSURE_SALT);
+        if roll < 0.35 {
+            let d = if roll < 0.15 { 1 } else { 2 };
+            let cell = IVec3::new(c.x, c.surface_y - d, c.z);
+            if world.get(cell).map(|b| b.block_type()) == Some(BlockType::Dirt) {
+                world.insert(
+                    cell,
+                    BlockInstance::new(
+                        BlockType::Stone,
+                        stratum_material(BlockType::Stone),
+                        Orientation::Up,
+                    ),
+                );
+                relief.stone_exposures.push(cell);
+            }
+        }
+    }
+    // 5. No column may stand two above every neighbour: lower such spikes.
+    let heights: std::collections::HashMap<(i32, i32), i32> = expansion
+        .columns
+        .iter()
+        .map(|c| ((c.x, c.z), c.surface_y))
+        .collect();
+    for i in 0..n {
+        let c = expansion.columns[i];
+        if pad.contains(c.x, c.z) {
+            continue;
+        }
+        let neighbours: Vec<i32> = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .filter_map(|(dx, dz)| heights.get(&(c.x + dx, c.z + dz)).copied())
+            .collect();
+        if !neighbours.is_empty() && neighbours.iter().all(|h| c.surface_y >= h + 2) {
+            let top = IVec3::new(c.x, c.surface_y, c.z);
+            world.remove(top);
+            expansion.cells.retain(|cell| *cell != top);
+            let below = IVec3::new(c.x, c.surface_y - 1, c.z);
+            world.insert(
+                below,
+                BlockInstance::new(
+                    BlockType::Grass,
+                    stratum_material(BlockType::Grass),
+                    Orientation::Up,
+                ),
+            );
+            expansion.columns[i].surface_y = c.surface_y - 1;
+            relief.terraces.push(below);
+        }
+    }
+    relief
 }

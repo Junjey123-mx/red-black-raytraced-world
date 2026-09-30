@@ -17,7 +17,8 @@ use crate::scene::descent::{
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
-    EXPANSION_WIDTH, OverworldExpansion, WorldExpansionLayout, build_overworld_expansion,
+    EXPANSION_WIDTH, OverworldExpansion, OverworldRelief, WorldExpansionLayout,
+    build_overworld_expansion, shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -76,6 +77,7 @@ pub struct WorldScene {
     transitions: FamilyTransitions,
     expansion_layout: WorldExpansionLayout,
     overworld_expansion: OverworldExpansion,
+    overworld_relief: OverworldRelief,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -115,7 +117,14 @@ impl WorldScene {
         // Gate 15: where both worlds grow (derived from what stands so far).
         let expansion_layout =
             WorldExpansionLayout::derive(&config, &rhombus, &inverted_route.layout, &path, &world);
-        let overworld_expansion = build_overworld_expansion(&config, &expansion_layout, &mut world);
+        let mut overworld_expansion =
+            build_overworld_expansion(&config, &expansion_layout, &mut world);
+        let overworld_relief = shape_overworld_relief(
+            &config,
+            &expansion_layout,
+            &mut overworld_expansion,
+            &mut world,
+        );
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -138,6 +147,7 @@ impl WorldScene {
             transitions,
             expansion_layout,
             overworld_expansion,
+            overworld_relief,
             silhouette,
             world,
         }
@@ -203,6 +213,11 @@ impl WorldScene {
     /// The new upper terrain of the east lobe (Gate 15).
     pub fn overworld_expansion(&self) -> &OverworldExpansion {
         &self.overworld_expansion
+    }
+
+    /// The relief sculpted into the east lobe (Gate 15).
+    pub fn overworld_relief(&self) -> &OverworldRelief {
+        &self.overworld_relief
     }
 
     pub fn silhouette(&self) -> &Silhouette {
