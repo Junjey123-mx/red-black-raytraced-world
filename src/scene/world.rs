@@ -16,6 +16,7 @@ use crate::scene::descent::{
     InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
 };
 use crate::scene::environment::WorldEnvironmentProfile;
+use crate::scene::expansion::WorldExpansionLayout;
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -71,6 +72,7 @@ pub struct WorldScene {
     lower_surface: RedBlackSurface,
     families: Vec<FamilyLayout>,
     transitions: FamilyTransitions,
+    expansion_layout: WorldExpansionLayout,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -107,6 +109,9 @@ impl WorldScene {
             compose_violet(&config, &rhombus, &lower_surface, &mut world),
         ];
         let transitions = blend_family_transitions(&config, &rhombus, &lower_surface, &mut world);
+        // Gate 15: where both worlds grow (derived from what stands so far).
+        let expansion_layout =
+            WorldExpansionLayout::derive(&config, &rhombus, &inverted_route.layout, &path, &world);
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -127,6 +132,7 @@ impl WorldScene {
             lower_surface,
             families,
             transitions,
+            expansion_layout,
             silhouette,
             world,
         }
@@ -184,6 +190,11 @@ impl WorldScene {
     }
 
     /// The final silhouette pass (voids filled, fragments removed, tip).
+    /// Where both worlds grow and where the castles will stand (Gate 15).
+    pub fn expansion_layout(&self) -> &WorldExpansionLayout {
+        &self.expansion_layout
+    }
+
     pub fn silhouette(&self) -> &Silhouette {
         &self.silhouette
     }
