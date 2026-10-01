@@ -569,3 +569,168 @@ pub fn build_fortress_foundation(
     }
     built
 }
+
+// ---------------------------------------------------------------------
+// Coloured Red-Black bricks (C197)
+// ---------------------------------------------------------------------
+
+/// The family's glowing structural brick.
+pub fn family_brick(family: Family) -> BlockInstance {
+    let (block_type, material) = family.bricks();
+    down(block_type, material)
+}
+
+/// Whether a block is one of the three coloured structural bricks.
+pub fn is_family_brick(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::RedBlackDeepslateBricksCrimson
+            | BlockType::RedBlackDeepslateBricksOrange
+            | BlockType::RedBlackDeepslateBricksViolet
+    )
+}
+
+/// The coloured bricks woven into the dark body, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressColoredBricks {
+    /// Corner columns of the curtain in the family of the tower they carry.
+    pub edges: Vec<IVec3>,
+    /// Alternating cells of the curtain's top course between the towers.
+    pub bands: Vec<IVec3>,
+    /// Jambs and lintel of the gate: Crimson left, Violet right, Orange above.
+    pub gate_accents: Vec<IVec3>,
+    /// The curtain cells of each tower's outer corners at the top course.
+    pub tower_markers: Vec<IVec3>,
+}
+
+impl FortressColoredBricks {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.edges
+            .iter()
+            .chain(self.bands.iter())
+            .chain(self.gate_accents.iter())
+            .chain(self.tower_markers.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// The family whose colour a curtain cell takes: the nearest tower's.
+pub fn curtain_family(layout: &RedBlackFortressLayout, x: i32, z: i32) -> Family {
+    let f = layout.footprint;
+    let mid_x = (f.min_x + f.max_x) / 2;
+    let mid_z = (f.min_z + f.max_z) / 2;
+    if z > mid_z {
+        Family::Violet
+    } else if x > mid_x {
+        Family::Orange
+    } else {
+        Family::Crimson
+    }
+}
+
+/// Weaves the three coloured bricks into the curtain: the footprint's
+/// corner columns under the towers, every other cell of the top course
+/// between the towers, the gate's jambs and lintel, and the tower corners
+/// on the curtain's top course. Only existing dark cells are recoloured,
+/// so the body stays the majority and nothing is added.
+pub fn weave_colored_bricks(
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressColoredBricks {
+    let mut built = FortressColoredBricks::default();
+    let lv = layout.levels;
+    let f = layout.footprint;
+    let recolour = |world: &mut VoxelWorld, cell: IVec3, family: Family, list: &mut Vec<IVec3>| {
+        let dark = world
+            .get(cell)
+            .is_some_and(|b| is_dark_structure(b.block_type()));
+        if dark {
+            world.insert(cell, family_brick(family));
+            list.push(cell);
+        }
+    };
+    // Edges: the corner columns that carry a tower.
+    for t in layout.towers() {
+        let r = t.bounds;
+        for (x, z) in [
+            (r.min_x, r.min_z),
+            (r.max_x, r.min_z),
+            (r.min_x, r.max_z),
+            (r.max_x, r.max_z),
+        ] {
+            if !layout.is_curtain_column(x, z)
+                || !((x == f.min_x || x == f.max_x) && (z == f.min_z || z == f.max_z))
+            {
+                continue;
+            }
+            for y in (lv.wall_top_y..=lv.base_y).rev() {
+                recolour(world, IVec3::new(x, y, z), t.family, &mut built.edges);
+            }
+        }
+        // Tower markers: the tower's other corners on the curtain, top course.
+        for (x, z) in [
+            (r.min_x, r.min_z),
+            (r.max_x, r.min_z),
+            (r.min_x, r.max_z),
+            (r.max_x, r.max_z),
+        ] {
+            let footprint_corner = (x == f.min_x || x == f.max_x) && (z == f.min_z || z == f.max_z);
+            if layout.is_curtain_column(x, z) && !footprint_corner {
+                recolour(
+                    world,
+                    IVec3::new(x, lv.wall_top_y, z),
+                    t.family,
+                    &mut built.tower_markers,
+                );
+            }
+        }
+    }
+    // Bands: the top course between towers, every other cell.
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            if !layout.is_curtain_column(x, z)
+                || layout.tower_at(x, z).is_some()
+                || layout.gatehouse.contains(x, z)
+            {
+                continue;
+            }
+            let along = if z == f.min_z || z == f.max_z { x } else { z };
+            if along % 2 != f.min_x % 2 {
+                continue;
+            }
+            let family = curtain_family(layout, x, z);
+            recolour(
+                world,
+                IVec3::new(x, lv.wall_top_y, z),
+                family,
+                &mut built.bands,
+            );
+        }
+    }
+    // Gate accents: left jamb Crimson, right jamb Violet, lintel Orange.
+    let g = layout.gate;
+    for dy in 0..2 {
+        recolour(
+            world,
+            IVec3::new(g.base.x, g.base.y - dy, g.base.z - 1),
+            Family::Crimson,
+            &mut built.gate_accents,
+        );
+        recolour(
+            world,
+            IVec3::new(g.base.x, g.base.y - dy, g.base.z + g.width),
+            Family::Violet,
+            &mut built.gate_accents,
+        );
+    }
+    for dz in 0..g.width {
+        recolour(
+            world,
+            IVec3::new(g.base.x, g.base.y - 2, g.base.z + dz),
+            Family::Orange,
+            &mut built.gate_accents,
+        );
+    }
+    built
+}
