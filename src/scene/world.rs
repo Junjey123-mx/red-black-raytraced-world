@@ -30,8 +30,8 @@ use crate::scene::expansion::{
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::fortress::{
-    FortressColoredBricks, FortressFoundation, RedBlackFortressLayout, build_fortress_foundation,
-    weave_colored_bricks,
+    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, RedBlackFortressLayout,
+    build_family_tower, build_fortress_foundation, weave_colored_bricks,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -46,7 +46,7 @@ use crate::scene::overworld::{
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
 use crate::scene::red_black_maze::{
-    FamilyLayout, FamilyTransitions, LowerMass, RedBlackSurface, blend_family_transitions,
+    Family, FamilyLayout, FamilyTransitions, LowerMass, RedBlackSurface, blend_family_transitions,
     build_lower_mass, build_red_black_surface, compose_crimson, compose_orange, compose_violet,
     family_lights,
 };
@@ -109,6 +109,7 @@ pub struct WorldScene {
     fortress_layout: RedBlackFortressLayout,
     fortress_foundation: FortressFoundation,
     fortress_bricks: FortressColoredBricks,
+    fortress_towers: Vec<FamilyTowerBuild>,
     world: VoxelWorld,
 }
 
@@ -209,6 +210,12 @@ impl WorldScene {
         let fortress_layout = RedBlackFortressLayout::derive(&expansion_layout);
         let fortress_foundation = build_fortress_foundation(&config, &fortress_layout, &mut world);
         let fortress_bricks = weave_colored_bricks(&fortress_layout, &mut world);
+        let fortress_towers = vec![build_family_tower(
+            &config,
+            &fortress_layout,
+            &fortress_layout.crimson_tower,
+            &mut world,
+        )];
         Self {
             config,
             field,
@@ -249,6 +256,7 @@ impl WorldScene {
             fortress_layout,
             fortress_foundation,
             fortress_bricks,
+            fortress_towers,
             world,
         }
     }
@@ -415,9 +423,15 @@ impl WorldScene {
     pub fn fortress_cells(&self) -> Vec<IVec3> {
         let mut seen = std::collections::HashSet::new();
         let ground = self.fortress_layout.levels.ground_y;
+        let tower_cells: Vec<IVec3> = self
+            .fortress_towers
+            .iter()
+            .flat_map(|t| t.cells())
+            .collect();
         self.fortress_foundation
             .walls
             .iter()
+            .chain(tower_cells.iter())
             .filter(|c| c.y < ground && seen.insert(**c))
             .copied()
             .collect()
@@ -432,6 +446,16 @@ impl WorldScene {
     /// of the Gate 15 masses.
     pub fn architecture_voxels(&self) -> usize {
         self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The family towers built so far (Gate 17).
+    pub fn fortress_towers(&self) -> &[FamilyTowerBuild] {
+        &self.fortress_towers
+    }
+
+    /// The tower of one family, if built.
+    pub fn fortress_tower(&self, family: Family) -> Option<&FamilyTowerBuild> {
+        self.fortress_towers.iter().find(|t| t.family == family)
     }
 
     /// The coloured bricks woven into the fortress (Gate 17).

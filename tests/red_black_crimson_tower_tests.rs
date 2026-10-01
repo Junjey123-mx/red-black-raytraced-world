@@ -145,8 +145,9 @@ use camera::world_collision::{
 };
 use core::math::{IVec3, Vec3};
 use scene::block_type::BlockType;
-use scene::fortress::{FORTRESS_WALL_COURSES, is_dark_structure};
+use scene::fortress::{is_dark_structure, is_family_brick};
 use scene::orientation::Orientation;
+use scene::red_black_maze::Family;
 use scene::world::WorldScene;
 
 fn v(x: f32, y: f32, z: f32) -> Vec3 {
@@ -214,198 +215,166 @@ fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, &back);
 }
 
+fn count(scene: &WorldScene, cells: &[IVec3], t: BlockType) -> usize {
+    cells
+        .iter()
+        .filter(|c| scene.world().get(**c).unwrap().block_type() == t)
+        .count()
+}
+
 #[test]
-fn the_foundation_replaces_the_pad_and_is_connected() {
+fn hearts_and_diamonds_are_heraldic_focal_blocks() {
     let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    let g = l.levels.ground_y;
-    let pad = l.footprint;
-    assert_eq!(
-        f.footings.len() + f.floors.len(),
-        (pad.width() * pad.depth()) as usize
+    let t = scene
+        .fortress_tower(Family::Crimson)
+        .expect("the Crimson tower");
+    let cells = t.cells();
+    let hearts = count(&scene, &cells, BlockType::CrimsonHeart);
+    let diamonds = count(&scene, &cells, BlockType::CrimsonDiamond);
+    assert!(
+        hearts >= 1 && diamonds >= 1,
+        "hearts {hearts} diamonds {diamonds}"
     );
-    for cell in f.footings.iter().chain(f.floors.iter()) {
-        assert_eq!(cell.y, g);
-        assert!(pad.contains(cell.x, cell.z));
-        let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.orientation(), Orientation::Down);
-        // Dark, or the organic core floor a family tower lays later.
+    assert!(
+        hearts + diamonds <= 6,
+        "symbols as wall fill: {}",
+        hearts + diamonds
+    );
+    let l = scene.fortress_layout();
+    let f = l.footprint;
+    for (cell, bt) in &t.crests {
+        assert!(matches!(
+            bt,
+            BlockType::CrimsonHeart | BlockType::CrimsonDiamond
+        ));
+        assert_eq!(scene.world().get(*cell).unwrap().block_type(), *bt);
+        // On an outward face, surrounded by dark structure or band, never
+        // next to another symbol.
         assert!(
-            is_dark_structure(b.block_type())
-                || matches!(
-                    b.block_type(),
-                    BlockType::NetherWartBlock | BlockType::Mycelium
-                ),
-            "{cell:?}"
+            cell.x == f.min_x || cell.z == f.min_z,
+            "{cell:?} is not on an outward face"
         );
-        // Each pad column is a Gate 15 lower-shell column (the one connected
-        // world is certified by the closure tests).
-        assert!(
-            scene.red_black_expansion().column(cell.x, cell.z).is_some(),
-            "{cell:?}"
-        );
-    }
-    for cell in &f.footings {
-        assert_eq!(
-            scene.world().get(*cell).unwrap().block_type(),
-            BlockType::PolishedBlackstoneBricks
-        );
+        for (dx, dy, dz) in [
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+        ] {
+            let n = IVec3::new(cell.x + dx, cell.y + dy, cell.z + dz);
+            if let Some(b) = scene.world().get(n) {
+                assert!(
+                    !matches!(
+                        b.block_type(),
+                        BlockType::CrimsonHeart | BlockType::CrimsonDiamond
+                    ),
+                    "{cell:?} touches {n:?}"
+                );
+            }
+        }
     }
     println!(
-        "GATE17 foundation: footings={} floors={} walls={} gate_opening={} fortress_voxels={} voxels={}",
-        f.footings.len(),
-        f.floors.len(),
-        f.walls.len(),
-        f.gate_opening.len(),
+        "GATE17 crimson tower: shell={} band={} crests={} finials={} extras={} fortress_voxels={} voxels={}",
+        t.shell.len(),
+        t.band.len(),
+        t.crests.len(),
+        t.finials.len(),
+        t.extras.len(),
         scene.fortress_voxels(),
         scene.world().len()
     );
 }
 
 #[test]
-fn the_courtyard_is_paved_and_clear() {
+fn crimson_obsidian_and_structural_brick_are_present() {
     let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let g = l.levels.ground_y;
-    for (x, z) in l.courtyard.iter().chain(l.gate_corridor().iter()) {
-        let ground = IVec3::new(*x, g, *z);
+    let t = scene.fortress_tower(Family::Crimson).unwrap();
+    let cells = t.cells();
+    assert_eq!(count(&scene, &cells, BlockType::CryingObsidianCrimson), 4);
+    for cell in &t.finials {
+        assert_eq!(cell.y, scene.fortress_layout().levels.max_y);
+        assert!(
+            scene
+                .world()
+                .contains(IVec3::new(cell.x, cell.y + 1, cell.z)),
+            "finial floats"
+        );
+    }
+    assert!(count(&scene, &cells, BlockType::RedBlackDeepslateBricksCrimson) >= 8);
+    for cell in &t.band {
         assert_eq!(
-            scene.world().get(ground).unwrap().block_type(),
-            BlockType::SmoothBasalt,
-            "({x},{z})"
+            scene.world().get(*cell).unwrap().block_type(),
+            BlockType::RedBlackDeepslateBricksCrimson
         );
-        // Head room functionally above the floor: the two cells below in world y.
-        for dy in 1..=2 {
-            let open = scene
-                .world()
-                .get(IVec3::new(*x, g - dy, *z))
-                .is_none_or(|b| !is_camera_solid(b));
-            assert!(open, "({x},{z}) - {dy}");
+    }
+    // Every coloured cell of the tower is Crimson-family: no other family leaks in.
+    for cell in &cells {
+        let bt = scene.world().get(*cell).unwrap().block_type();
+        if is_family_brick(bt) {
+            assert_eq!(bt, BlockType::RedBlackDeepslateBricksCrimson, "{cell:?}");
         }
-        assert!(clear(&scene, eye(ground)), "({x},{z})");
     }
 }
 
 #[test]
-fn the_curtain_is_anchored_and_hollow() {
+fn nether_wart_is_used_with_restraint() {
+    let scene = WorldScene::new();
+    let t = scene.fortress_tower(Family::Crimson).unwrap();
+    let wart: Vec<IVec3> = t
+        .extras
+        .iter()
+        .filter(|(_, bt)| *bt == BlockType::NetherWartBlock)
+        .map(|(c, _)| *c)
+        .collect();
+    assert!(!wart.is_empty() && wart.len() <= 4, "{}", wart.len());
+    for cell in &wart {
+        assert_eq!(
+            scene.world().get(*cell).unwrap().block_type(),
+            BlockType::NetherWartBlock
+        );
+    }
+    // The core floor is wart: organic ground inside the tower.
+    let (cx, cz) = t.core;
+    assert!(wart.contains(&IVec3::new(cx, scene.fortress_layout().levels.ground_y, cz)));
+    // Dark structure still dominates the tower.
+    let cells = t.cells();
+    let dark = cells
+        .iter()
+        .filter(|c| is_dark_structure(scene.world().get(**c).unwrap().block_type()))
+        .count();
+    assert!(dark * 2 > cells.len(), "dark {dark} of {}", cells.len());
+}
+
+#[test]
+fn the_tower_is_hollow_down_oriented_and_navigable() {
     let scene = WorldScene::new();
     let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    let pad = l.footprint;
-    let perimeter = (2 * (pad.width() + pad.depth()) - 4) as usize;
-    assert_eq!(
-        f.walls.len(),
-        perimeter * FORTRESS_WALL_COURSES as usize - f.gate_opening.len()
-    );
-    let mut basalt = 0;
-    for cell in &f.walls {
-        assert!(l.is_curtain_column(cell.x, cell.z));
-        assert!(cell.y <= l.levels.base_y && cell.y >= l.levels.wall_top_y);
-        let b = scene.world().get(*cell).unwrap();
-        assert!(is_camera_solid(b));
-        assert_eq!(b.orientation(), Orientation::Down);
-        if b.block_type() == BlockType::SmoothBasalt {
-            basalt += 1;
-        }
-        // Anchored toward the ground (world +y), through the opening's lintel too.
-        let support = IVec3::new(cell.x, cell.y + 1, cell.z);
+    let t = scene.fortress_tower(Family::Crimson).unwrap();
+    let (cx, cz) = t.core;
+    for y in (l.levels.tower_top_y..=l.levels.base_y).rev() {
         assert!(
-            scene.world().contains(support) || f.gate_opening.contains(&support),
-            "{cell:?} floats"
+            !scene.world().contains(IVec3::new(cx, y, cz)),
+            "({cx},{y},{cz}) fills the core"
         );
     }
-    assert!(
-        basalt > f.walls.len() / 6 && basalt < f.walls.len() / 2,
-        "{basalt}"
-    );
-    for (x, z) in &l.courtyard {
-        for y in l.levels.wall_top_y..=l.levels.base_y {
-            let open = scene
-                .world()
-                .get(IVec3::new(*x, y, *z))
-                .is_none_or(|b| !is_camera_solid(b));
-            assert!(open, "({x},{y},{z}) fills the courtyard");
-        }
-    }
-}
-
-#[test]
-fn the_gate_opening_is_valid() {
-    let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    assert_eq!(f.gate_opening, l.gate.cells());
-    for cell in &f.gate_opening {
-        let open = scene.world().get(*cell).is_none_or(|b| !is_camera_solid(b));
-        assert!(open, "{cell:?} blocked");
-    }
-    let g = l.gate;
-    // Lintel functionally above (world y - 2), jambs beside.
-    let lintel = IVec3::new(g.base.x, g.base.y - 2, g.base.z);
-    assert!(
-        scene
-            .world()
-            .get(lintel)
-            .is_some_and(|b| is_camera_solid(b))
-    );
-    for j in [
-        IVec3::new(g.base.x, g.base.y, g.base.z - 1),
-        IVec3::new(g.base.x, g.base.y, g.base.z + g.width),
-    ] {
-        assert!(
-            scene.world().get(j).is_some_and(|b| is_camera_solid(b)),
-            "{j:?}"
-        );
-    }
-    assert!(clear(
-        &scene,
-        v(
-            g.base.x as f32 + 0.5,
-            g.base.y as f32 - 0.5,
-            g.base.z as f32 + 1.0
-        )
-    ));
-}
-
-#[test]
-fn everything_is_down_oriented() {
-    let scene = WorldScene::new();
-    for cell in scene.fortress_foundation().cells() {
+    for cell in t.cells() {
         assert_eq!(
             scene.world().get(cell).unwrap().orientation(),
             Orientation::Down,
             "{cell:?}"
         );
+        assert!(l.crimson_tower.bounds.contains(cell.x, cell.z));
     }
-    for cell in scene.fortress_cells() {
-        assert!(cell.y < scene.fortress_layout().levels.ground_y);
-        assert_eq!(
-            scene.world().get(cell).unwrap().orientation(),
-            Orientation::Down
+    for cell in &t.entrance {
+        assert!(
+            !scene.world().contains(*cell),
+            "{cell:?} blocks the entrance"
         );
     }
-}
-
-#[test]
-fn the_approach_is_unobstructed() {
-    let scene = WorldScene::new();
-    let a = scene.red_black_approach();
-    for cell in &a.main {
-        assert!(clear(&scene, eye(*cell)), "{cell:?}");
-    }
-    let l = scene.fortress_layout();
-    for cell in scene.fortress_foundation().cells() {
-        assert!(l.footprint.contains(cell.x, cell.z));
-    }
-    // From the approach through the gate into the courtyard and back.
-    let mut points: Vec<Vec3> = a.main.iter().map(|c| eye(*c)).collect();
-    let end = l.central_keep.min_x;
-    points.extend(
-        l.main_route()
-            .iter()
-            .take_while(|r| r.x < end)
-            .map(|r| eye(*r)),
-    );
-    walk_both_ways(&scene, &points);
+    // Courtyard -> entrance -> core, and back, with collision on.
+    let route: Vec<Vec3> = l.interior_routes[1].iter().map(|c| eye(*c)).collect();
+    assert_eq!(l.interior_routes[1].last().unwrap().x, cx);
+    walk_both_ways(&scene, &route);
+    assert!(clear(&scene, eye(IVec3::new(cx, l.levels.ground_y, cz))));
 }

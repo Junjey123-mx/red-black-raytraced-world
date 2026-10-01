@@ -16,7 +16,13 @@ use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_bottom
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::ColumnRect;
 use crate::scene::overworld_blocks::{
-    deepslate_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
+    amethyst_cluster_material_id, budding_amethyst_material_id, crimson_diamond_material_id,
+    crimson_heart_material_id, crying_obsidian_crimson_material_id,
+    crying_obsidian_orange_material_id, crying_obsidian_violet_material_id, deepslate_material_id,
+    mycelium_material_id, nether_wart_block_material_id, orange_club_material_id,
+    orange_spade_material_id, polished_blackstone_bricks_material_id, purple_club_material_id,
+    purple_diamond_material_id, purple_heart_material_id, purple_spade_material_id,
+    smooth_basalt_material_id,
 };
 use crate::scene::red_black_maze::Family;
 use crate::scene::terrain::TerrainConfig;
@@ -731,6 +737,271 @@ pub fn weave_colored_bricks(
             Family::Orange,
             &mut built.gate_accents,
         );
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Family towers (C198 Crimson, C199 Orange, C200 Violet)
+// ---------------------------------------------------------------------
+
+/// Course (functionally above the ground) of the coloured band ring.
+pub const TOWER_BAND_COURSE: i32 = 5;
+/// Courses of the two heraldic motifs on each outward face.
+pub const TOWER_CREST_COURSES: [i32; 2] = [4, 7];
+
+/// The materials a family tower is dressed with.
+#[derive(Debug, Clone, Copy)]
+pub struct TowerPalette {
+    pub family: Family,
+    /// Share of the shell body laid in smooth basalt (Orange is heavier).
+    pub basalt_share: f32,
+    /// The crest motifs, lower course then upper, per outward face.
+    pub crests: [(BlockType, fn() -> MaterialId); 2],
+    /// Second pair of motifs for the second face (Violet shows four suits).
+    pub crests_second_face: [(BlockType, fn() -> MaterialId); 2],
+    /// The glowing finial on each corner.
+    pub finial: (BlockType, fn() -> MaterialId),
+}
+
+pub fn tower_palette(family: Family) -> TowerPalette {
+    match family {
+        Family::Crimson => TowerPalette {
+            family,
+            basalt_share: BASALT_SHARE,
+            crests: [
+                (BlockType::CrimsonHeart, crimson_heart_material_id),
+                (BlockType::CrimsonDiamond, crimson_diamond_material_id),
+            ],
+            crests_second_face: [
+                (BlockType::CrimsonHeart, crimson_heart_material_id),
+                (BlockType::CrimsonDiamond, crimson_diamond_material_id),
+            ],
+            finial: (
+                BlockType::CryingObsidianCrimson,
+                crying_obsidian_crimson_material_id,
+            ),
+        },
+        Family::Orange => TowerPalette {
+            family,
+            basalt_share: 0.55,
+            crests: [
+                (BlockType::OrangeClub, orange_club_material_id),
+                (BlockType::OrangeSpade, orange_spade_material_id),
+            ],
+            crests_second_face: [
+                (BlockType::OrangeSpade, orange_spade_material_id),
+                (BlockType::OrangeClub, orange_club_material_id),
+            ],
+            finial: (
+                BlockType::CryingObsidianOrange,
+                crying_obsidian_orange_material_id,
+            ),
+        },
+        Family::Violet => TowerPalette {
+            family,
+            basalt_share: BASALT_SHARE,
+            crests: [
+                (BlockType::PurpleHeart, purple_heart_material_id),
+                (BlockType::PurpleDiamond, purple_diamond_material_id),
+            ],
+            crests_second_face: [
+                (BlockType::PurpleClub, purple_club_material_id),
+                (BlockType::PurpleSpade, purple_spade_material_id),
+            ],
+            finial: (
+                BlockType::CryingObsidianViolet,
+                crying_obsidian_violet_material_id,
+            ),
+        },
+    }
+}
+
+fn dark_masonry_with(seed: u32, cell: IVec3, basalt_share: f32) -> BlockInstance {
+    if expansion_hash(
+        seed,
+        cell.x * 3 + cell.y,
+        cell.z * 5 - cell.y,
+        DARK_MASONRY_SALT,
+    ) < basalt_share
+    {
+        down(BlockType::SmoothBasalt, smooth_basalt_material_id())
+    } else {
+        down(
+            BlockType::PolishedBlackstoneBricks,
+            polished_blackstone_bricks_material_id(),
+        )
+    }
+}
+
+/// A family tower, as built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyTowerBuild {
+    pub family: Family,
+    /// Dark shell cells (basalt base course, masonry body).
+    pub shell: Vec<IVec3>,
+    /// The coloured band ring.
+    pub band: Vec<IVec3>,
+    /// Heraldic motifs set into the two outward faces.
+    pub crests: Vec<(IVec3, BlockType)>,
+    /// Crying-obsidian finials on the corners.
+    pub finials: Vec<IVec3>,
+    /// Family extras (nether wart, mycelium, amethyst), with their type.
+    pub extras: Vec<(IVec3, BlockType)>,
+    /// The entrance cells, left open.
+    pub entrance: Vec<IVec3>,
+    /// The core column `(x, z)`.
+    pub core: (i32, i32),
+}
+
+impl FamilyTowerBuild {
+    /// Every cell placed (functionally above the ground).
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.shell
+            .iter()
+            .chain(self.band.iter())
+            .chain(self.crests.iter().map(|(c, _)| c))
+            .chain(self.finials.iter())
+            .chain(self.extras.iter().map(|(c, _)| c))
+            .copied()
+            .collect()
+    }
+}
+
+/// Builds one family tower on its layout bounds: a one-cell shell from the
+/// base course (smooth basalt) to `tower_top_y` in dark masonry, with a
+/// coloured band ring at `TOWER_BAND_COURSE`, two heraldic motifs on each
+/// of its two outward faces, a glowing finial on every corner one course
+/// further, an open core and an entrance from the courtyard. Coloured
+/// curtain cells woven earlier are kept. Family extras: Crimson grows
+/// nether wart on the core floor and beside its entrance; Violet turns its
+/// core floor to mycelium and closes the shaft with budding amethyst whose
+/// cluster grows on toward `-Y`; Orange is plain heavier masonry.
+pub fn build_family_tower(
+    terrain: &TerrainConfig,
+    layout: &RedBlackFortressLayout,
+    tower: &FortressTower,
+    world: &mut VoxelWorld,
+) -> FamilyTowerBuild {
+    let palette = tower_palette(tower.family);
+    let lv = layout.levels;
+    let f = layout.footprint;
+    let r = tower.bounds;
+    let (cx, cz) = tower.core();
+    let entrance = tower.entrance.cells();
+    let mut built = FamilyTowerBuild {
+        family: tower.family,
+        shell: Vec::new(),
+        band: Vec::new(),
+        crests: Vec::new(),
+        finials: Vec::new(),
+        extras: Vec::new(),
+        entrance: entrance.clone(),
+        core: (cx, cz),
+    };
+    // Outward faces: the footprint edges the tower sits on.
+    let face_x = if r.min_x == f.min_x { r.min_x } else { r.max_x };
+    let face_z = if r.min_z == f.min_z { r.min_z } else { r.max_z };
+    let mut crest_cells = Vec::new();
+    for (i, course) in TOWER_CREST_COURSES.iter().enumerate() {
+        let y = lv.ground_y - course;
+        crest_cells.push((IVec3::new(cx, y, face_z), palette.crests[i]));
+        crest_cells.push((IVec3::new(face_x, y, cz), palette.crests_second_face[i]));
+    }
+    for z in r.min_z..=r.max_z {
+        for x in r.min_x..=r.max_x {
+            if !tower.is_shell(x, z) {
+                for y in (lv.tower_top_y..=lv.base_y).rev() {
+                    world.remove(IVec3::new(x, y, z));
+                }
+                continue;
+            }
+            for y in (lv.tower_top_y..=lv.base_y).rev() {
+                let cell = IVec3::new(x, y, z);
+                if entrance.contains(&cell) {
+                    world.remove(cell);
+                    continue;
+                }
+                if world
+                    .get(cell)
+                    .is_some_and(|b| is_family_brick(b.block_type()))
+                {
+                    continue; // woven earlier (C197)
+                }
+                if let Some((_, (block_type, material))) =
+                    crest_cells.iter().find(|(c, _)| *c == cell)
+                {
+                    world.insert(cell, down(*block_type, material()));
+                    built.crests.push((cell, *block_type));
+                } else if y == lv.ground_y - TOWER_BAND_COURSE {
+                    world.insert(cell, family_brick(tower.family));
+                    built.band.push(cell);
+                } else if y == lv.base_y {
+                    world.insert(
+                        cell,
+                        down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+                    );
+                    built.shell.push(cell);
+                } else {
+                    world.insert(
+                        cell,
+                        dark_masonry_with(terrain.seed, cell, palette.basalt_share),
+                    );
+                    built.shell.push(cell);
+                }
+            }
+            if tower.is_corner(x, z) {
+                let cell = IVec3::new(x, lv.max_y, z);
+                world.insert(cell, down(palette.finial.0, (palette.finial.1)()));
+                built.finials.push(cell);
+            }
+        }
+    }
+    let core_floor = IVec3::new(cx, lv.ground_y, cz);
+    match tower.family {
+        Family::Crimson => {
+            world.insert(
+                core_floor,
+                down(BlockType::NetherWartBlock, nether_wart_block_material_id()),
+            );
+            built.extras.push((core_floor, BlockType::NetherWartBlock));
+            let e = tower.entrance.base;
+            for dz in [-1, 1] {
+                let cell = IVec3::new(e.x, lv.base_y, e.z + dz);
+                if tower.is_shell(cell.x, cell.z)
+                    && !world
+                        .get(cell)
+                        .is_some_and(|b| is_family_brick(b.block_type()))
+                {
+                    world.insert(
+                        cell,
+                        down(BlockType::NetherWartBlock, nether_wart_block_material_id()),
+                    );
+                    built.shell.retain(|c| *c != cell);
+                    built.extras.push((cell, BlockType::NetherWartBlock));
+                }
+            }
+        }
+        Family::Violet => {
+            world.insert(
+                core_floor,
+                down(BlockType::Mycelium, mycelium_material_id()),
+            );
+            built.extras.push((core_floor, BlockType::Mycelium));
+            let budding = IVec3::new(cx, lv.tower_top_y, cz);
+            world.insert(
+                budding,
+                down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
+            );
+            built.extras.push((budding, BlockType::BuddingAmethyst));
+            let cluster = above(budding, 1);
+            world.insert(
+                cluster,
+                down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
+            );
+            built.extras.push((cluster, BlockType::AmethystCluster));
+        }
+        Family::Orange => {}
     }
     built
 }

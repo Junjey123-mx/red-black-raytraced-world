@@ -990,6 +990,8 @@ fn pad_is_fortress_ground(scene: &WorldScene) {
                     BlockType::PolishedBlackstoneBricks
                         | BlockType::SmoothBasalt
                         | BlockType::Deepslate
+                        | BlockType::NetherWartBlock
+                        | BlockType::Mycelium
                 ),
                 "({x},{z}) is {:?}",
                 b.block_type()
