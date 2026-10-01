@@ -37,15 +37,16 @@ pub const COLLISION_SUBSTEP: f32 = 0.2;
 pub const COLLISION_SKIN: f32 = 1e-4;
 
 /// The camera passability contract: every placed block stops the camera
-/// except the two it must be able to go through. The portal membrane
+/// except the ones it must be able to go through. The portal membrane
 /// (`PortalCoreDarkCrimson`) stays visible, raytraced, emissive and the
-/// crossing trigger, but the camera passes it; the house `WoodDoor` stays
-/// visible and closed, but the camera enters through it. The portal frame,
-/// walls, glass, fences, terrain and every other block remain solid.
+/// crossing trigger, but the camera passes it; both door variants (the
+/// Overworld `WoodDoor` and its Red-Black twin `RedBlackWoodDoor`) stay
+/// visible and closed, but the camera enters through them. The portal
+/// frame, walls, glass, fences, terrain and every other block remain solid.
 pub fn is_camera_passable(block_type: BlockType) -> bool {
     matches!(
         block_type,
-        BlockType::PortalCoreDarkCrimson | BlockType::WoodDoor
+        BlockType::PortalCoreDarkCrimson | BlockType::WoodDoor | BlockType::RedBlackWoodDoor
     )
 }
 

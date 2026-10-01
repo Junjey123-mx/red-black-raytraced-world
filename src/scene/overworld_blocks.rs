@@ -12,7 +12,8 @@ use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::red_black_timber::{
     RED_BLACK_TIMBER_DIR, red_black_fence_material_id, red_black_leaves_material_id,
-    red_black_log_material_id, red_black_wood_planks_material_id,
+    red_black_log_material_id, red_black_wood_door_bottom_material_id,
+    red_black_wood_door_top_material_id, red_black_wood_planks_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -214,6 +215,10 @@ pub struct OverworldBlockTextures {
     pub red_black_log: FaceTextures,
     /// Corinto planks: the lower realm's path, floor and trim timber.
     pub red_black_wood_planks: FaceTextures,
+    /// Corinto door halves, laid out exactly like the Overworld door's
+    /// (broad faces on +/-Z, narrow edges elsewhere).
+    pub red_black_wood_door_bottom: FaceTextures,
+    pub red_black_wood_door_top: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -331,6 +336,12 @@ impl OverworldBlockTextures {
         let rb_log_end = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/end.png"))?;
         let rb_log_side = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/side.png"))?;
         let rb_planks = manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_planks.png"))?;
+        let rb_door_bottom =
+            manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_door/bottom.png"))?;
+        let rb_door_top = manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_door/top.png"))?;
+        let rb_edge_bottom =
+            manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_door/edge_bottom.png"))?;
+        let rb_edge_top = manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_door/edge_top.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
@@ -409,6 +420,8 @@ impl OverworldBlockTextures {
                 rb_log_side,
             ),
             red_black_wood_planks: FaceTextures::uniform(rb_planks),
+            red_black_wood_door_bottom: thin(rb_door_bottom, rb_edge_bottom),
+            red_black_wood_door_top: thin(rb_door_top, rb_edge_top),
         })
     }
 }
@@ -862,6 +875,26 @@ pub fn insert_overworld_materials(
             .with_reflectivity(0.02)
             .with_face_textures(textures.red_black_wood_planks),
     );
+    // Red-Black wood door: the Overworld door's wood profile and window
+    // cutout over dark corinto panels and black-red framing; never emissive.
+    for (id, faces) in [
+        (
+            red_black_wood_door_bottom_material_id(),
+            textures.red_black_wood_door_bottom,
+        ),
+        (
+            red_black_wood_door_top_material_id(),
+            textures.red_black_wood_door_top,
+        ),
+    ] {
+        library.insert(
+            id,
+            Material::new(Color::new(0.42, 0.11, 0.14, 1.0), 0.10, 18.0)
+                .with_reflectivity(0.02)
+                .with_face_textures(faces)
+                .with_alpha_mode(AlphaMode::Cutout),
+        );
+    }
     // Nether wart block: dense fungal red, matte (specular 0.04, shininess 6,
     // reflectivity 0.01), opaque and never a light source of its own.
     library.insert(
