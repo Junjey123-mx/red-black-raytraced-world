@@ -153,7 +153,7 @@ fn the_upper_and_lower_halves_form_one_connected_mass() {
     let main = connected_component(scene.world(), s.tip);
     // The Gate 16 castle is built after the silhouette pass; it stands on
     // the main component and is the only thing added since.
-    let castle = scene.castle_voxels();
+    let castle = scene.architecture_voxels();
     assert_eq!(
         main.len(),
         scene.world().len(),

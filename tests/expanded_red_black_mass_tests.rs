@@ -206,18 +206,10 @@ fn the_fortress_pad_is_supported_and_open_below() {
                 .unwrap_or_else(|| panic!("pad column ({x}, {z}) missing"));
             assert_eq!(c.bottom_y, l.fortress_pad_bottom_y);
             assert!(scene.world().contains(IVec3::new(x, c.bottom_y, z)));
-            for dy in 1..=4 {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, c.bottom_y - dy, z)),
-                    "({x}, {z}) blocked below"
-                );
-            }
-            assert!(clear(
-                &scene,
-                v(x as f32 + 0.5, c.bottom_y as f32 - 1.5, z as f32 + 0.5)
-            ));
         }
     }
+    // Gate 17 built the fortress on it: the pad row is its foundation.
+    pad_is_fortress_ground(&scene);
 }
 
 #[test]
@@ -354,11 +346,40 @@ fn the_voxel_budget_is_respected() {
     let n = scene.world().len();
     println!("GATE15 voxels after the lower mass: {n}");
     assert!(
-        n - scene.castle_voxels() <= VOXEL_BUDGET_SOFT_MAX,
+        n - scene.architecture_voxels() <= VOXEL_BUDGET_SOFT_MAX,
         "{n} over the soft maximum"
     );
     assert!(
-        n - scene.castle_voxels() <= VOXEL_BUDGET_TARGET + 150,
+        n - scene.architecture_voxels() <= VOXEL_BUDGET_TARGET + 150,
         "{n} far over the target"
     );
+}
+
+/// Gate 17 built the fortress on the lower pad: its ground row is the dark
+/// foundation, level with the pad surface, on the Gate 15 shell columns.
+fn pad_is_fortress_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.red_black_fortress_pad;
+    assert_eq!(scene.fortress_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.fortress_pad_bottom_y, z);
+            let b = scene
+                .world()
+                .get(ground)
+                .unwrap_or_else(|| panic!("({x},{z}) missing"));
+            assert_eq!(b.orientation(), Orientation::Down, "({x},{z})");
+            assert!(
+                matches!(
+                    b.block_type(),
+                    BlockType::PolishedBlackstoneBricks
+                        | BlockType::SmoothBasalt
+                        | BlockType::Deepslate
+                ),
+                "({x},{z}) is {:?}",
+                b.block_type()
+            );
+            assert!(scene.red_black_expansion().column(x, z).is_some());
+        }
+    }
 }

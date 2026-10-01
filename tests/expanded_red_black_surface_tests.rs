@@ -179,12 +179,15 @@ fn the_functional_top_faces_minus_y() {
     let s = scene.red_black_surface_extension();
     assert!(s.cells.len() >= 150, "{}", s.cells.len());
     // Columns with scenery hanging below (C183) are covered by its tests.
+    // ... and the fortress pad (Gate 17) carries the fortress below it.
+    let pad = scene.fortress_layout().footprint;
     let hung: Vec<(i32, i32)> = scene
         .expansion_scenery()
         .lower
         .added_cells()
         .iter()
         .map(|c| (c.x, c.z))
+        .chain((pad.min_z..=pad.max_z).flat_map(|z| (pad.min_x..=pad.max_x).map(move |x| (x, z))))
         .collect();
     for cell in &s.cells {
         let b = scene.world().get(*cell).unwrap();
@@ -275,19 +278,21 @@ fn the_fortress_pad_is_navigable_and_level() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
     let pad = l.red_black_fortress_pad;
-    let y = l.fortress_pad_bottom_y as f32 - 1.5;
     for z in pad.min_z..=pad.max_z {
         for x in pad.min_x..=pad.max_x {
             assert_eq!(
                 scene.red_black_expansion().column(x, z).unwrap().bottom_y,
                 l.fortress_pad_bottom_y
             );
-            assert!(clear(&scene, v(x as f32 + 0.5, y, z as f32 + 0.5)));
         }
     }
-    let mid_z = (pad.min_z + pad.max_z) as f32 / 2.0 + 0.5;
-    let from = v(pad.min_x as f32 + 0.5, y, mid_z);
-    let to = v(pad.max_x as f32 + 0.5, y, mid_z);
+    // Gate 17 built the fortress on the pad: the walk from the approach
+    // goes through its gate corridor into the courtyard.
+    let f = scene.fortress_layout();
+    let y = l.fortress_pad_bottom_y as f32 - 1.5;
+    let row = f.gate.base.z as f32 + f.gate.width as f32 / 2.0;
+    let from = v(pad.min_x as f32 - 0.5, y, row);
+    let to = v(f.gatehouse.max_x as f32 + 1.5, y, row);
     let reached = resolve_camera_motion(
         scene.world(),
         from,
@@ -296,15 +301,6 @@ fn the_fortress_pad_is_navigable_and_level() {
         &is_camera_solid,
     );
     assert!((reached - to).length() < 1e-3, "{reached:?}");
-    let across = v(from.x, y, pad.max_z as f32 + 0.5);
-    let reached = resolve_camera_motion(
-        scene.world(),
-        from,
-        across - from,
-        &CameraCollisionConfig::default(),
-        &is_camera_solid,
-    );
-    assert!((reached - across).length() < 1e-3, "{reached:?}");
 }
 
 #[test]
@@ -318,9 +314,11 @@ fn family_accents_are_balanced_and_restrained() {
         }
     }
     println!("GATE15 family bricks on the new surface: {counts:?}");
+    // The fortress pad (Gate 17) replaced the bricks scattered over it;
+    // every family still shows on the open part of the new surface.
     for f in ["crimson", "orange", "violet"] {
         assert!(
-            counts.get(f).copied().unwrap_or(0) >= 2,
+            counts.get(f).copied().unwrap_or(0) >= 1,
             "{f} missing: {counts:?}"
         );
     }

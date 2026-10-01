@@ -156,9 +156,7 @@ use renderer::preview::AdaptivePreview;
 use renderer::raytracer::{RenderQuality, VoxelScene};
 use scene::block_type::{BlockType, OFFICIAL_BLOCK_COUNT};
 use scene::catalog::{CatalogScene, official_entries};
-use scene::expansion::{
-    PAD_SIDE, VOXEL_BUDGET_SOFT_MAX, VOXEL_BUDGET_TARGET, ground_cell, lower_ground_cell,
-};
+use scene::expansion::{PAD_SIDE, VOXEL_BUDGET_SOFT_MAX, VOXEL_BUDGET_TARGET};
 use scene::material_library::MaterialLibrary;
 use scene::orientation::Orientation;
 use scene::texture_manager::TextureManager;
@@ -490,23 +488,8 @@ fn the_fortress_pad_is_reserved() {
     assert_eq!(pad.width(), PAD_SIDE);
     assert_eq!(pad.depth(), PAD_SIDE);
     assert_eq!(l.fortress_pad_area(), PAD_SIDE * PAD_SIDE);
-    for z in pad.min_z..=pad.max_z {
-        for x in pad.min_x..=pad.max_x {
-            let ground = lower_ground_cell(scene.world(), x, z, -60, 0).unwrap();
-            assert_eq!(ground.y, l.fortress_pad_bottom_y, "({x},{z})");
-            assert_eq!(
-                scene.world().get(ground).unwrap().orientation(),
-                Orientation::Down
-            );
-            for y in -60..ground.y {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
-                    "({x},{y},{z})"
-                );
-            }
-            assert!(clear(&scene, eye_under(ground)));
-        }
-    }
+    // Gate 17 built the fortress on it: the pad row is its foundation.
+    pad_is_fortress_ground(&scene);
     println!(
         "GATE15 fortress pad x {}..={} z {}..={} bottom y={}",
         pad.min_x, pad.max_x, pad.min_z, pad.max_z, l.fortress_pad_bottom_y
@@ -737,7 +720,7 @@ fn the_voxel_budget_is_respected() {
     let n = scene.world().len();
     let decoration = decoration_cells(&scene);
     assert!(n > GATE_14_VOXELS);
-    let castle = scene.castle_voxels();
+    let castle = scene.architecture_voxels();
     assert!(
         n - decoration - castle <= VOXEL_BUDGET_TARGET,
         "{n} - {decoration} - {castle}"
@@ -983,6 +966,35 @@ fn pad_is_castle_ground(scene: &WorldScene) {
                 "({x},{z}) is {t:?}"
             );
             assert!(scene.world().contains(IVec3::new(x, ground.y - 1, z)));
+        }
+    }
+}
+
+/// Gate 17 built the fortress on the lower pad: its ground row is the dark
+/// foundation, level with the pad surface, on the Gate 15 shell columns.
+fn pad_is_fortress_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.red_black_fortress_pad;
+    assert_eq!(scene.fortress_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.fortress_pad_bottom_y, z);
+            let b = scene
+                .world()
+                .get(ground)
+                .unwrap_or_else(|| panic!("({x},{z}) missing"));
+            assert_eq!(b.orientation(), Orientation::Down, "({x},{z})");
+            assert!(
+                matches!(
+                    b.block_type(),
+                    BlockType::PolishedBlackstoneBricks
+                        | BlockType::SmoothBasalt
+                        | BlockType::Deepslate
+                ),
+                "({x},{z}) is {:?}",
+                b.block_type()
+            );
+            assert!(scene.red_black_expansion().column(x, z).is_some());
         }
     }
 }

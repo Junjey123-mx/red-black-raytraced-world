@@ -8,11 +8,19 @@
 
 #![allow(dead_code)]
 
+use crate::core::material::MaterialId;
 use crate::core::math::IVec3;
-use crate::scene::expansion::WorldExpansionLayout;
+use crate::scene::block::BlockInstance;
+use crate::scene::block_type::BlockType;
+use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_bottom_y};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::ColumnRect;
+use crate::scene::overworld_blocks::{
+    deepslate_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
+};
 use crate::scene::red_black_maze::Family;
+use crate::scene::terrain::TerrainConfig;
+use crate::scene::voxel_world::VoxelWorld;
 
 /// Side of each square tower (columns).
 pub const FORTRESS_TOWER_SIDE: i32 = 3;
@@ -256,9 +264,12 @@ impl RedBlackFortressLayout {
 
         // Main route: forecourt, gate corridor, courtyard, keep door, hall
         // (south row), stair, landing, upper room.
+        // The two forecourt cells stand on the Gate 15 terrace, whose
+        // ground steps with x.
         let mut main = Vec::new();
-        main.push(IVec3::new(target.x - 2, ground_y, target.z));
-        main.push(IVec3::new(target.x - 1, ground_y, target.z));
+        for x in [target.x - 2, target.x - 1] {
+            main.push(IVec3::new(x, lower_bottom_y(expansion, x), target.z));
+        }
         for x in gatehouse.min_x..=gatehouse.max_x {
             main.push(IVec3::new(x, ground_y, target.z));
         }
@@ -424,4 +435,137 @@ impl RedBlackFortressLayout {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------
+// Dark foundation, courtyard and curtain (C196)
+// ---------------------------------------------------------------------
+
+const DARK_MASONRY_SALT: u32 = 0x17C0_0001;
+/// Share of structural cells laid in smooth basalt instead of polished
+/// blackstone bricks.
+pub const BASALT_SHARE: f32 = 0.35;
+
+/// A `Down` block of the inverted world.
+pub fn down(block_type: BlockType, material: MaterialId) -> BlockInstance {
+    BlockInstance::new(block_type, material, Orientation::Down)
+}
+
+/// Polished blackstone bricks or smooth basalt for a structural cell, by
+/// hash, so the dark body reads as masonry rather than a flat colour.
+pub fn dark_masonry(seed: u32, cell: IVec3) -> BlockInstance {
+    if expansion_hash(
+        seed,
+        cell.x * 3 + cell.y,
+        cell.z * 5 - cell.y,
+        DARK_MASONRY_SALT,
+    ) < BASALT_SHARE
+    {
+        down(BlockType::SmoothBasalt, smooth_basalt_material_id())
+    } else {
+        down(
+            BlockType::PolishedBlackstoneBricks,
+            polished_blackstone_bricks_material_id(),
+        )
+    }
+}
+
+/// Whether a block is part of the fortress's dark structural body.
+pub fn is_dark_structure(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::PolishedBlackstoneBricks | BlockType::SmoothBasalt | BlockType::Deepslate
+    )
+}
+
+/// The fortress base, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressFoundation {
+    /// Pad cells under every outline (polished blackstone bricks).
+    pub footings: Vec<IVec3>,
+    /// Pad cells of the courtyard and corridor (smooth basalt) and of the
+    /// hall and tower cores (deepslate).
+    pub floors: Vec<IVec3>,
+    /// Curtain-wall cells, hollow behind, counted functionally upward.
+    pub walls: Vec<IVec3>,
+    /// The gate opening, left as air.
+    pub gate_opening: Vec<IVec3>,
+}
+
+impl FortressFoundation {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.footings
+            .iter()
+            .chain(self.floors.iter())
+            .chain(self.walls.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Lays the dark foundation and raises (functionally) the curtain wall.
+///
+/// The pad row becomes the floor plan: polished blackstone footings under
+/// every outline, smooth basalt across the courtyard and gate corridor,
+/// deepslate inside the keep and the tower cores. The curtain wall runs
+/// `FORTRESS_WALL_COURSES` courses toward `-Y` on the footprint's outline,
+/// one cell thick with nothing behind it; the gate opening stays open.
+/// Every block is `Down`.
+pub fn build_fortress_foundation(
+    terrain: &TerrainConfig,
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressFoundation {
+    let mut built = FortressFoundation::default();
+    let f = layout.footprint;
+    let g = layout.levels.ground_y;
+    let corridor = layout.gate_corridor();
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            let cell = IVec3::new(x, g, z);
+            let outline = !corridor.contains(&(x, z))
+                && (layout.is_curtain_column(x, z)
+                    || layout.is_tower_shell(x, z)
+                    || layout.is_keep_shell(x, z)
+                    || layout.gatehouse.contains(x, z));
+            if outline {
+                world.insert(
+                    cell,
+                    down(
+                        BlockType::PolishedBlackstoneBricks,
+                        polished_blackstone_bricks_material_id(),
+                    ),
+                );
+                built.footings.push(cell);
+            } else if layout.hall.contains(x, z) || layout.tower_at(x, z).is_some() {
+                world.insert(cell, down(BlockType::Deepslate, deepslate_material_id()));
+                built.floors.push(cell);
+            } else {
+                world.insert(
+                    cell,
+                    down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+                );
+                built.floors.push(cell);
+            }
+        }
+    }
+    let gate_cells = layout.gate.cells();
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            if !layout.is_curtain_column(x, z) {
+                continue;
+            }
+            for y in (layout.levels.wall_top_y..=layout.levels.base_y).rev() {
+                let cell = IVec3::new(x, y, z);
+                if gate_cells.contains(&cell) {
+                    world.remove(cell);
+                    built.gate_opening.push(cell);
+                    continue;
+                }
+                world.insert(cell, dark_masonry(terrain.seed, cell));
+                built.walls.push(cell);
+            }
+        }
+    }
+    built
 }

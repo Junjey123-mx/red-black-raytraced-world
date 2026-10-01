@@ -395,7 +395,7 @@ fn the_voxel_budget_is_respected() {
     let scenery = scene.expansion_scenery();
     let decoration = scenery.upper.cells().len() + scenery.lower.added_cells().len();
     // Gate 16's castle has its own budget on top of the Gate 15 masses.
-    let castle = scene.castle_voxels();
+    let castle = scene.architecture_voxels();
     assert!(
         n - decoration - castle <= VOXEL_BUDGET_TARGET,
         "{n} - {decoration} - {castle} over the target"

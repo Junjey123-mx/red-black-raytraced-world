@@ -714,10 +714,11 @@ fn the_voxel_budget_is_respected() {
     let scene = WorldScene::new();
     let n = scene.world().len();
     let castle = scene.castle_voxels();
+    // Gate 17's fortress adds its own cells below the lower pad.
     assert_eq!(
         n,
-        GATE_15_VOXELS + castle,
-        "cells outside the castle changed"
+        GATE_15_VOXELS + scene.architecture_voxels(),
+        "cells outside the castle and fortress changed"
     );
     assert!(castle > 0 && castle <= CASTLE_BUDGET_MAX, "{castle}");
     assert_eq!(castle, scene.castle_cells().len());

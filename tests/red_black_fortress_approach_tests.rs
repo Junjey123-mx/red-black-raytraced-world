@@ -236,10 +236,13 @@ fn route(scene: &WorldScene) -> Vec<Vec3> {
         y,
         e.red_black_path_target.z as f32 + 0.5,
     ));
+    // Gate 17 built the fortress here: the walk ends in its courtyard,
+    // just past the gate corridor, instead of the built-over pad centre.
+    let fortress = scene.fortress_layout();
     points.push(v(
-        (pad.min_x + pad.max_x) as f32 / 2.0 + 0.5,
+        fortress.gatehouse.max_x as f32 + 1.5,
         y,
-        (pad.min_z + pad.max_z) as f32 / 2.0 + 0.5,
+        e.red_black_path_target.z as f32 + 0.5,
     ));
     points
 }

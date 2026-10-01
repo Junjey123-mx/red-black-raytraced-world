@@ -146,8 +146,7 @@ use scene::block_type::BlockType;
 use scene::expansion::{
     FOCAL_CLEARANCE, SCENERY_MAX_AMETHYST, SCENERY_MAX_BASALT_OUTCROPS,
     SCENERY_MAX_CRYING_OBSIDIAN, SCENERY_MAX_LEDGES, SCENERY_MAX_MYCELIUM,
-    SCENERY_MAX_STONE_CLUSTERS, SCENERY_MAX_TREES, VOXEL_BUDGET_SOFT_MAX, ground_cell,
-    lower_ground_cell,
+    SCENERY_MAX_STONE_CLUSTERS, SCENERY_MAX_TREES, VOXEL_BUDGET_SOFT_MAX,
 };
 use scene::light::Light;
 use scene::orientation::Orientation;
@@ -208,22 +207,8 @@ fn the_fortress_pad_remains_open() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
     let pad = l.red_black_fortress_pad;
-    for z in pad.min_z..=pad.max_z {
-        for x in pad.min_x..=pad.max_x {
-            let ground = lower_ground_cell(scene.world(), x, z, -60, 0).unwrap();
-            assert_eq!(ground.y, l.fortress_pad_bottom_y, "({x},{z})");
-            assert_eq!(
-                scene.world().get(ground).unwrap().orientation(),
-                Orientation::Down
-            );
-            for y in -60..ground.y {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
-                    "({x},{y},{z}) under the pad"
-                );
-            }
-        }
-    }
+    // Gate 17 built the fortress on it: the pad row is its foundation.
+    pad_is_fortress_ground(&scene);
     for c in lower_cells(&scene) {
         assert!(!pad.contains(c.x, c.z), "{c:?} under the pad");
     }
@@ -382,7 +367,7 @@ fn the_scenery_is_deterministic() {
     assert!(added <= 80, "{added} scenery cells");
     // The Gate 16 castle has its own budget on top of the Gate 15 masses.
     assert!(
-        a.world().len() - a.castle_voxels() <= VOXEL_BUDGET_SOFT_MAX,
+        a.world().len() - a.architecture_voxels() <= VOXEL_BUDGET_SOFT_MAX,
         "{}",
         a.world().len()
     );
@@ -473,6 +458,35 @@ fn pad_is_castle_ground(scene: &WorldScene) {
                 "({x},{z}) is {t:?}"
             );
             assert!(scene.world().contains(IVec3::new(x, ground.y - 1, z)));
+        }
+    }
+}
+
+/// Gate 17 built the fortress on the lower pad: its ground row is the dark
+/// foundation, level with the pad surface, on the Gate 15 shell columns.
+fn pad_is_fortress_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.red_black_fortress_pad;
+    assert_eq!(scene.fortress_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.fortress_pad_bottom_y, z);
+            let b = scene
+                .world()
+                .get(ground)
+                .unwrap_or_else(|| panic!("({x},{z}) missing"));
+            assert_eq!(b.orientation(), Orientation::Down, "({x},{z})");
+            assert!(
+                matches!(
+                    b.block_type(),
+                    BlockType::PolishedBlackstoneBricks
+                        | BlockType::SmoothBasalt
+                        | BlockType::Deepslate
+                ),
+                "({x},{z}) is {:?}",
+                b.block_type()
+            );
+            assert!(scene.red_black_expansion().column(x, z).is_some());
         }
     }
 }

@@ -29,7 +29,9 @@ use crate::scene::expansion::{
     decorate_red_black_expansion, extend_red_black_surface, pave_fortress_approach,
     pave_overworld_approach, shape_overworld_relief,
 };
-use crate::scene::fortress::RedBlackFortressLayout;
+use crate::scene::fortress::{
+    FortressFoundation, RedBlackFortressLayout, build_fortress_foundation,
+};
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -104,6 +106,7 @@ pub struct WorldScene {
     castle_furniture: CastleFurniture,
     castle_details: CastleDetails,
     fortress_layout: RedBlackFortressLayout,
+    fortress_foundation: FortressFoundation,
     world: VoxelWorld,
 }
 
@@ -202,6 +205,7 @@ impl WorldScene {
         let castle_details = detail_castle(&config, &castle_layout, &mut world);
         // Gate 17: the inverted fortress contract on the lower pad.
         let fortress_layout = RedBlackFortressLayout::derive(&expansion_layout);
+        let fortress_foundation = build_fortress_foundation(&config, &fortress_layout, &mut world);
         Self {
             config,
             field,
@@ -240,6 +244,7 @@ impl WorldScene {
             castle_furniture,
             castle_details,
             fortress_layout,
+            fortress_foundation,
             world,
         }
     }
@@ -399,6 +404,35 @@ impl WorldScene {
     /// Lamps, parapets and courtyard details (Gate 16).
     pub fn castle_details(&self) -> &CastleDetails {
         &self.castle_details
+    }
+
+    /// Every fortress cell functionally above the lower pad's ground row
+    /// (more negative `y`), each once.
+    pub fn fortress_cells(&self) -> Vec<IVec3> {
+        let mut seen = std::collections::HashSet::new();
+        let ground = self.fortress_layout.levels.ground_y;
+        self.fortress_foundation
+            .walls
+            .iter()
+            .filter(|c| c.y < ground && seen.insert(**c))
+            .copied()
+            .collect()
+    }
+
+    /// Cells the Gate 17 fortress added below the lower pad.
+    pub fn fortress_voxels(&self) -> usize {
+        self.fortress_cells().len()
+    }
+
+    /// Cells added by both architecture gates (castle and fortress) on top
+    /// of the Gate 15 masses.
+    pub fn architecture_voxels(&self) -> usize {
+        self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The fortress's footings, floors and curtain (Gate 17).
+    pub fn fortress_foundation(&self) -> &FortressFoundation {
+        &self.fortress_foundation
     }
 
     /// The inverted Red-Black fortress contract on the lower pad (Gate 17).
