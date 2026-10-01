@@ -18,10 +18,19 @@ use crate::scene::block_type::BlockType;
 use crate::scene::expansion::RedBlackApproach;
 use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_ground_cell};
 use crate::scene::fortress::RedBlackFortressLayout;
-use crate::scene::fortress::{is_dark_structure, is_family_brick};
+use crate::scene::fortress::{
+    TOWER_BAND_COURSE, TOWER_CREST_COURSES, dark_masonry, family_brick, is_dark_structure,
+    is_family_brick,
+};
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld::ColumnRect;
 use crate::scene::overworld::Tree;
 use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
+use crate::scene::overworld_blocks::{
+    crimson_diamond_material_id, crying_obsidian_crimson_material_id,
+    crying_obsidian_orange_material_id, orange_spade_material_id,
+};
+use crate::scene::red_black_maze::Family;
 use crate::scene::red_black_timber::{
     red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
     red_black_wood_door_bottom_material_id, red_black_wood_door_top_material_id,
@@ -571,6 +580,237 @@ pub fn build_red_black_gatehouse(
     built
 }
 
+// ---------------------------------------------------------------------
+// Fourth tower (C217)
+// ---------------------------------------------------------------------
+
+/// The fourth tower, as built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FourthTower {
+    /// The corner the Gate 17 layout left without a tower.
+    pub bounds: ColumnRect,
+    /// Dark shell cells placed (keep and curtain cells are reused as seam).
+    pub shell: Vec<IVec3>,
+    /// Existing fortress cells the tower shares on its outline (the keep's
+    /// south wall, the curtain corner), left as they were.
+    pub seam: Vec<IVec3>,
+    /// The two-colour band ring (Crimson and Orange alternating).
+    pub band: Vec<IVec3>,
+    /// Heraldic motifs on the two outward faces, with their type.
+    pub crests: Vec<(IVec3, BlockType)>,
+    /// Crying-obsidian finials on the corners.
+    pub finials: Vec<IVec3>,
+    /// The corinto cap closing the core at the tower top.
+    pub cap: Vec<IVec3>,
+    /// The entrance from the courtyard, left open.
+    pub entrance: Vec<IVec3>,
+    /// The open core column.
+    pub core: (i32, i32),
+    /// Gate 17 accent cells the tower replaced (the corner crystal).
+    pub replaced: Vec<IVec3>,
+}
+
+impl Default for FourthTower {
+    /// No tower: an empty outline (every corner already had one).
+    fn default() -> Self {
+        Self {
+            bounds: ColumnRect::new(0, 0, -1, -1),
+            shell: Vec::new(),
+            seam: Vec::new(),
+            band: Vec::new(),
+            crests: Vec::new(),
+            finials: Vec::new(),
+            cap: Vec::new(),
+            entrance: Vec::new(),
+            core: (0, 0),
+            replaced: Vec::new(),
+        }
+    }
+}
+
+impl FourthTower {
+    /// Cells new to the world (the replaced Gate 17 crystal cells already
+    /// counted as fortress cells are left out).
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.placed_cells()
+            .into_iter()
+            .filter(|c| !self.replaced.contains(c))
+            .collect()
+    }
+
+    /// Every cell this stage wrote.
+    pub fn placed_cells(&self) -> Vec<IVec3> {
+        self.shell
+            .iter()
+            .chain(self.band.iter())
+            .chain(self.crests.iter().map(|(c, _)| c))
+            .chain(self.finials.iter())
+            .chain(self.cap.iter())
+            .copied()
+            .collect()
+    }
+
+    /// Every cell of the tower's outline above the ground, placed or shared.
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.placed_cells()
+            .into_iter()
+            .chain(self.seam.iter().copied())
+            .collect()
+    }
+
+    pub fn is_shell(&self, x: i32, z: i32) -> bool {
+        let r = self.bounds;
+        r.contains(x, z) && (x == r.min_x || x == r.max_x || z == r.min_z || z == r.max_z)
+    }
+}
+
+/// The footprint corner that carries no Gate 17 tower.
+pub fn missing_tower_corner(fortress: &RedBlackFortressLayout) -> Option<ColumnRect> {
+    let f = fortress.footprint;
+    let side = fortress.crimson_tower.bounds.width();
+    let t = side - 1;
+    [
+        ColumnRect::new(f.min_x, f.min_z, f.min_x + t, f.min_z + t),
+        ColumnRect::new(f.max_x - t, f.min_z, f.max_x, f.min_z + t),
+        ColumnRect::new(f.min_x, f.max_z - t, f.min_x + t, f.max_z),
+        ColumnRect::new(f.max_x - t, f.max_z - t, f.max_x, f.max_z),
+    ]
+    .into_iter()
+    .find(|r| fortress.towers().iter().all(|tw| tw.bounds != *r))
+}
+
+/// Completes the fortress's fourth corner with a dark mixed tower.
+///
+/// The tower stands on the corner the Gate 17 layout left free, with the
+/// same section, courses and Down orientation as the three family towers.
+/// Its outline reuses the existing keep and curtain cells it meets as seam
+/// (only the Gate 17 corner crystal gives way), adds dark masonry
+/// elsewhere, a band alternating Crimson and Orange bricks (the two
+/// families with the fewest coloured bricks), a CrimsonDiamond and an
+/// OrangeSpade on its outward faces, alternating crying-obsidian finials
+/// and a corinto cap over its open core. It opens onto the courtyard
+/// through a two-cell entrance on its west face. No new colour family.
+pub fn build_fourth_tower(
+    seed: u32,
+    fortress: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FourthTower {
+    let Some(bounds) = missing_tower_corner(fortress) else {
+        return FourthTower::default();
+    };
+    let lv = fortress.levels;
+    let f = fortress.footprint;
+    let core = (
+        (bounds.min_x + bounds.max_x) / 2,
+        (bounds.min_z + bounds.max_z) / 2,
+    );
+    let mut built = FourthTower {
+        bounds,
+        core,
+        ..Default::default()
+    };
+    // Entrance: the west face, middle row, from the courtyard.
+    let entrance_x = bounds.min_x;
+    let entrance_z = core.1;
+    built.entrance = vec![
+        IVec3::new(entrance_x, lv.base_y, entrance_z),
+        IVec3::new(entrance_x, lv.base_y - 1, entrance_z),
+    ];
+    let face_x = if bounds.max_x == f.max_x {
+        bounds.max_x
+    } else {
+        bounds.min_x
+    };
+    let face_z = if bounds.max_z == f.max_z {
+        bounds.max_z
+    } else {
+        bounds.min_z
+    };
+    let crests = [
+        (
+            IVec3::new(core.0, lv.ground_y - TOWER_CREST_COURSES[0], face_z),
+            (BlockType::CrimsonDiamond, crimson_diamond_material_id()),
+        ),
+        (
+            IVec3::new(face_x, lv.ground_y - TOWER_CREST_COURSES[1], core.1),
+            (BlockType::OrangeSpade, orange_spade_material_id()),
+        ),
+    ];
+    let accent = |b: &BlockInstance| {
+        matches!(
+            b.block_type(),
+            BlockType::BuddingAmethyst | BlockType::AmethystCluster
+        )
+    };
+    for z in bounds.min_z..=bounds.max_z {
+        for x in bounds.min_x..=bounds.max_x {
+            let shell = built.is_shell(x, z);
+            if !shell {
+                for y in (lv.tower_top_y + 1)..=lv.base_y {
+                    world.remove(IVec3::new(x, y, z));
+                }
+                continue;
+            }
+            for y in (lv.tower_top_y..=lv.base_y).rev() {
+                let cell = IVec3::new(x, y, z);
+                if built.entrance.contains(&cell) {
+                    world.remove(cell);
+                    continue;
+                }
+                match world.get(cell) {
+                    Some(b) if accent(b) => {
+                        built.replaced.push(cell);
+                    }
+                    Some(_) => {
+                        built.seam.push(cell);
+                        continue;
+                    }
+                    None => {}
+                }
+                if let Some((_, (bt, material))) = crests.iter().find(|(c, _)| *c == cell) {
+                    world.insert(cell, down(*bt, *material));
+                    built.crests.push((cell, *bt));
+                } else if y == lv.ground_y - TOWER_BAND_COURSE {
+                    let family = if (x + z) % 2 == 0 {
+                        Family::Crimson
+                    } else {
+                        Family::Orange
+                    };
+                    world.insert(cell, family_brick(family));
+                    built.band.push(cell);
+                } else {
+                    world.insert(cell, dark_masonry(seed, cell));
+                    built.shell.push(cell);
+                }
+            }
+            let corner = (x == bounds.min_x || x == bounds.max_x)
+                && (z == bounds.min_z || z == bounds.max_z);
+            let finial = IVec3::new(x, lv.max_y, z);
+            if corner && !world.contains(finial) {
+                let (bt, material) = if (x + z) % 2 == 0 {
+                    (
+                        BlockType::CryingObsidianCrimson,
+                        crying_obsidian_crimson_material_id(),
+                    )
+                } else {
+                    (
+                        BlockType::CryingObsidianOrange,
+                        crying_obsidian_orange_material_id(),
+                    )
+                };
+                world.insert(finial, down(bt, material));
+                built.finials.push(finial);
+            }
+        }
+    }
+    let cap = IVec3::new(core.0, lv.tower_top_y, core.1);
+    if !world.contains(cap) {
+        world.insert(cap, planks());
+        built.cap.push(cap);
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -578,6 +818,7 @@ pub struct RedBlackIdentity {
     pub timber: FortressTimber,
     pub path: CorintoPath,
     pub gatehouse: RedBlackGatehouse,
+    pub fourth_tower: FourthTower,
 }
 
 impl RedBlackIdentity {
@@ -591,6 +832,7 @@ impl RedBlackIdentity {
             .chain(self.timber.added_cells())
             .chain(self.path.added_cells())
             .chain(self.gatehouse.added_cells())
+            .chain(self.fourth_tower.added_cells())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -619,10 +861,12 @@ pub fn build_red_black_identity(
     let timber = weave_fortress_timber(fortress, world);
     let path = lay_corinto_path(approach, fortress, &clearance, &grove, world);
     let gatehouse = build_red_black_gatehouse(fortress, world);
+    let fourth_tower = build_fourth_tower(seed, fortress, world);
     RedBlackIdentity {
         grove,
         timber,
         path,
         gatehouse,
+        fourth_tower,
     }
 }

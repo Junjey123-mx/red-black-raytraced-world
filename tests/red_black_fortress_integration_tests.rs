@@ -334,25 +334,32 @@ fn accents_are_present_and_restrained() {
         ));
         assert_eq!(cell.y, l.levels.keep_roof_y - 1);
     }
+    // The corner crystal stood where Gate 17.5 completed the fourth tower;
+    // the tower records the two cells it took over.
+    let replaced = &scene.red_black_identity().fourth_tower.replaced;
     let budding = c.crystal[0];
     let cluster = c.crystal[1];
     assert_eq!(
-        scene.world().get(budding).unwrap().block_type(),
-        BlockType::BuddingAmethyst
-    );
-    assert_eq!(
-        scene.world().get(cluster).unwrap().block_type(),
-        BlockType::AmethystCluster
-    );
-    assert_eq!(
         cluster,
         IVec3::new(budding.x, budding.y - 1, budding.z),
-        "the cluster grows toward -Y"
+        "the cluster grew toward -Y"
     );
-    assert_eq!(
-        scene.world().get(cluster).unwrap().orientation(),
-        Orientation::Down
-    );
+    if replaced.contains(&budding) {
+        assert!(replaced.contains(&cluster));
+    } else {
+        assert_eq!(
+            scene.world().get(budding).unwrap().block_type(),
+            BlockType::BuddingAmethyst
+        );
+        assert_eq!(
+            scene.world().get(cluster).unwrap().block_type(),
+            BlockType::AmethystCluster
+        );
+        assert_eq!(
+            scene.world().get(cluster).unwrap().orientation(),
+            Orientation::Down
+        );
+    }
     for (cell, t) in &c.patches {
         assert_eq!(scene.world().get(*cell).unwrap().block_type(), *t);
         assert_eq!(cell.y, l.levels.ground_y);

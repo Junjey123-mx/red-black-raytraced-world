@@ -337,10 +337,12 @@ fn the_curtain_is_anchored_and_hollow() {
     // The keep's small timber balconies (Gate 17.5) hang over the alleys
     // above head room; nothing else fills the courtyard.
     let balconies = scene.red_black_identity().timber.added_cells();
+    // ... and the Gate 17.5 fourth tower took the free south-east corner.
+    let fourth = scene.red_black_identity().fourth_tower.bounds;
     for (x, z) in &l.courtyard {
         for y in l.levels.wall_top_y..=l.levels.base_y {
             let cell = IVec3::new(*x, y, *z);
-            if balconies.contains(&cell) {
+            if balconies.contains(&cell) || fourth.contains(cell.x, cell.z) {
                 continue;
             }
             let open = scene.world().get(cell).is_none_or(|b| !is_camera_solid(b));
