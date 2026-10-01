@@ -1005,3 +1005,204 @@ pub fn build_family_tower(
     }
     built
 }
+
+// ---------------------------------------------------------------------
+// Central symbolic keep (C201)
+// ---------------------------------------------------------------------
+
+/// The suit blocks the keep shows for each family, as façade panel and as
+/// interior heraldry.
+pub fn keep_symbols(family: Family) -> [(BlockType, fn() -> MaterialId); 2] {
+    match family {
+        Family::Crimson => [
+            (BlockType::CrimsonDiamond, crimson_diamond_material_id),
+            (BlockType::CrimsonHeart, crimson_heart_material_id),
+        ],
+        Family::Orange => [
+            (BlockType::OrangeSpade, orange_spade_material_id),
+            (BlockType::OrangeClub, orange_club_material_id),
+        ],
+        Family::Violet => [
+            (BlockType::PurpleHeart, purple_heart_material_id),
+            (BlockType::PurpleDiamond, purple_diamond_material_id),
+        ],
+    }
+}
+
+/// Whether a block is one of the eight suit (symbol) blocks.
+pub fn is_symbol(block_type: BlockType) -> bool {
+    matches!(
+        block_type,
+        BlockType::CrimsonHeart
+            | BlockType::CrimsonDiamond
+            | BlockType::OrangeClub
+            | BlockType::OrangeSpade
+            | BlockType::PurpleHeart
+            | BlockType::PurpleDiamond
+            | BlockType::PurpleClub
+            | BlockType::PurpleSpade
+    )
+}
+
+/// The central keep, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressKeep {
+    /// Dark masonry of the shell.
+    pub shell: Vec<IVec3>,
+    /// Smooth-basalt pillars on the corners not shared with a tower.
+    pub pillars: Vec<IVec3>,
+    /// The door cells, left open.
+    pub door: Vec<IVec3>,
+    /// Hall floor (polished blackstone) in the pad row.
+    pub floor: Vec<IVec3>,
+    /// Upper floor: basalt beams on the edge rows, blackstone between, the
+    /// stair well open.
+    pub upper_floor: Vec<IVec3>,
+    /// The roof.
+    pub roof: Vec<IVec3>,
+    /// Façade panels: one suit per family on the courtyard face.
+    pub facade: Vec<(IVec3, BlockType)>,
+    /// Interior heraldry: one suit per family in the upper room's east wall.
+    pub heraldry: Vec<(IVec3, BlockType)>,
+}
+
+impl FortressKeep {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.shell
+            .iter()
+            .chain(self.pillars.iter())
+            .chain(self.floor.iter())
+            .chain(self.upper_floor.iter())
+            .chain(self.roof.iter())
+            .chain(self.facade.iter().map(|(c, _)| c))
+            .chain(self.heraldry.iter().map(|(c, _)| c))
+            .copied()
+            .collect()
+    }
+
+    /// The upper floor's walkable cells.
+    pub fn upper_deck(&self) -> Vec<IVec3> {
+        self.upper_floor.clone()
+    }
+
+    /// Every symbol the keep shows.
+    pub fn symbols(&self) -> Vec<(IVec3, BlockType)> {
+        self.facade
+            .iter()
+            .chain(self.heraldry.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Builds the central keep: a hollow dark shell from the base course to
+/// the roof with smooth-basalt pillars on its free corners, a door onto
+/// the courtyard, a polished-blackstone hall floor, a timber-free upper
+/// floor of basalt beams and blackstone with the stair well open, and a
+/// blackstone roof. Three suit blocks, one per family, panel the
+/// courtyard façade at the upper level; three more face the upper room
+/// from its east wall. Tower cells and woven bricks are kept.
+pub fn build_symbol_keep(
+    terrain: &TerrainConfig,
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressKeep {
+    let mut built = FortressKeep::default();
+    let k = layout.central_keep;
+    let h = layout.hall;
+    let lv = layout.levels;
+    let door_cells = layout.keep_door.cells();
+    let panel_y = lv.upper_floor_y - 1;
+    let families = [Family::Crimson, Family::Orange, Family::Violet];
+    let mut facade = Vec::new();
+    let mut heraldry = Vec::new();
+    for (i, family) in families.iter().enumerate() {
+        let [panel, inner] = keep_symbols(*family);
+        facade.push((IVec3::new(k.min_x, panel_y, h.min_z + i as i32), panel));
+        heraldry.push((IVec3::new(k.max_x, panel_y, h.min_z + 1 + i as i32), inner));
+    }
+    for z in k.min_z..=k.max_z {
+        for x in k.min_x..=k.max_x {
+            if !layout.is_keep_shell(x, z) || layout.tower_at(x, z).is_some() {
+                continue;
+            }
+            let pillar = layout.is_keep_corner(x, z);
+            for y in (lv.keep_roof_y..=lv.base_y).rev() {
+                let cell = IVec3::new(x, y, z);
+                if door_cells.contains(&cell) {
+                    world.remove(cell);
+                    continue;
+                }
+                if world
+                    .get(cell)
+                    .is_some_and(|b| is_family_brick(b.block_type()))
+                {
+                    continue;
+                }
+                if let Some((_, (bt, material))) = facade.iter().find(|(c, _)| *c == cell) {
+                    world.insert(cell, down(*bt, material()));
+                    built.facade.push((cell, *bt));
+                } else if let Some((_, (bt, material))) = heraldry.iter().find(|(c, _)| *c == cell)
+                {
+                    world.insert(cell, down(*bt, material()));
+                    built.heraldry.push((cell, *bt));
+                } else if pillar {
+                    world.insert(
+                        cell,
+                        down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+                    );
+                    built.pillars.push(cell);
+                } else {
+                    world.insert(cell, dark_masonry(terrain.seed, cell));
+                    built.shell.push(cell);
+                }
+            }
+        }
+    }
+    built.door = door_cells;
+    for z in h.min_z..=h.max_z {
+        for x in h.min_x..=h.max_x {
+            let floor = IVec3::new(x, lv.ground_y, z);
+            world.insert(
+                floor,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+            built.floor.push(floor);
+            for y in ((lv.upper_floor_y + 1)..=lv.base_y).rev() {
+                world.remove(IVec3::new(x, y, z));
+            }
+            if !layout.stair_well.contains(&(x, z)) {
+                let cell = IVec3::new(x, lv.upper_floor_y, z);
+                let beam = z == h.min_z || z == h.max_z;
+                world.insert(
+                    cell,
+                    if beam {
+                        down(BlockType::SmoothBasalt, smooth_basalt_material_id())
+                    } else {
+                        down(
+                            BlockType::PolishedBlackstoneBricks,
+                            polished_blackstone_bricks_material_id(),
+                        )
+                    },
+                );
+                built.upper_floor.push(cell);
+            }
+            for y in ((lv.keep_roof_y + 1)..lv.upper_floor_y).rev() {
+                world.remove(IVec3::new(x, y, z));
+            }
+            let roof = IVec3::new(x, lv.keep_roof_y, z);
+            world.insert(
+                roof,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+            built.roof.push(roof);
+        }
+    }
+    built
+}

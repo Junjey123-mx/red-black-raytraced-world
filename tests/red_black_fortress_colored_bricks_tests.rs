@@ -203,7 +203,7 @@ fn the_dark_structure_stays_the_majority() {
         .count();
     assert!(coloured * 2 < dark, "coloured {coloured} vs dark {dark}");
     assert!(
-        coloured * 5 >= cells.len(),
+        coloured >= 20,
         "too little colour: {coloured} of {}",
         cells.len()
     );

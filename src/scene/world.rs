@@ -30,8 +30,9 @@ use crate::scene::expansion::{
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::fortress::{
-    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, RedBlackFortressLayout,
-    build_family_tower, build_fortress_foundation, weave_colored_bricks,
+    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressKeep,
+    RedBlackFortressLayout, build_family_tower, build_fortress_foundation, build_symbol_keep,
+    weave_colored_bricks,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -110,6 +111,7 @@ pub struct WorldScene {
     fortress_foundation: FortressFoundation,
     fortress_bricks: FortressColoredBricks,
     fortress_towers: Vec<FamilyTowerBuild>,
+    fortress_keep: FortressKeep,
     world: VoxelWorld,
 }
 
@@ -230,6 +232,7 @@ impl WorldScene {
                 &mut world,
             ),
         ];
+        let fortress_keep = build_symbol_keep(&config, &fortress_layout, &mut world);
         Self {
             config,
             field,
@@ -271,6 +274,7 @@ impl WorldScene {
             fortress_foundation,
             fortress_bricks,
             fortress_towers,
+            fortress_keep,
             world,
         }
     }
@@ -446,6 +450,7 @@ impl WorldScene {
             .walls
             .iter()
             .chain(tower_cells.iter())
+            .chain(self.fortress_keep.cells().iter())
             .filter(|c| c.y < ground && seen.insert(**c))
             .copied()
             .collect()
@@ -460,6 +465,11 @@ impl WorldScene {
     /// of the Gate 15 masses.
     pub fn architecture_voxels(&self) -> usize {
         self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The central symbolic keep (Gate 17).
+    pub fn fortress_keep(&self) -> &FortressKeep {
+        &self.fortress_keep
     }
 
     /// The family towers built so far (Gate 17).
