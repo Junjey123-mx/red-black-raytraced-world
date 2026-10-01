@@ -12,7 +12,7 @@ use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::expansion::{WorldExpansionLayout, expansion_hash};
-use crate::scene::material_gallery::deepslate_bricks_material_id;
+use crate::scene::material_gallery::{deepslate_bricks_material_id, glass_material_id};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
 use crate::scene::overworld_blocks::{
@@ -218,20 +218,19 @@ impl OverworldCastleLayout {
         let mut windows = Vec::new();
         let eye_low = base_y + 1;
         let eye_high = levels.upper_floor_y + 2;
-        // Keep west wall (courtyard side), away from the door row.
+        // Keep west wall (courtyard side): one low bay away from the door
+        // row, two high bays a wall cell apart.
         windows.push(IVec3::new(keep.min_x, eye_low, hall.max_z - 1));
         windows.push(IVec3::new(keep.min_x, eye_high, hall.min_z + 1));
-        windows.push(IVec3::new(keep.min_x, eye_high, hall.max_z - 1));
-        // Keep north and south walls, between the towers.
-        for x in [hall.min_x, hall.min_x + 1] {
-            windows.push(IVec3::new(x, eye_low, keep.min_z));
-            windows.push(IVec3::new(x, eye_low, keep.max_z));
-            windows.push(IVec3::new(x, eye_high, keep.min_z));
-            windows.push(IVec3::new(x, eye_high, keep.max_z));
-        }
+        windows.push(IVec3::new(keep.min_x, eye_high, hall.max_z));
+        // Keep north and south walls, the free bay between the towers.
+        windows.push(IVec3::new(hall.min_x, eye_low, keep.min_z));
+        windows.push(IVec3::new(hall.min_x, eye_low, keep.max_z));
+        windows.push(IVec3::new(hall.min_x, eye_high, keep.min_z));
+        windows.push(IVec3::new(hall.min_x, eye_high, keep.max_z));
         // Keep east wall (the curtain wall), upper floor only.
         windows.push(IVec3::new(keep.max_x, eye_high, hall.min_z + 1));
-        windows.push(IVec3::new(keep.max_x, eye_high, hall.max_z - 1));
+        windows.push(IVec3::new(keep.max_x, eye_high, hall.max_z));
         // Towers: the middle of each outward face.
         for r in &towers {
             let mid_x = (r.min_x + r.max_x) / 2;
@@ -813,6 +812,46 @@ pub fn build_castle_keep(
             );
             built.roof.push(roof);
         }
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Windows (C190)
+// ---------------------------------------------------------------------
+
+/// The castle's glazing, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleWindows {
+    /// Glass cells set into the keep and tower shells.
+    pub glass: Vec<IVec3>,
+}
+
+/// Sets glass into the window bays of the layout: each listed shell cell
+/// becomes `Glass` (visible, refractive, camera-solid) provided it is a
+/// masonry cell with masonry above and below, so no opening weakens a
+/// corner post, a door or a wall top.
+pub fn glaze_castle_windows(
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleWindows {
+    let mut built = CastleWindows::default();
+    let is_masonry = |world: &VoxelWorld, cell: IVec3| {
+        world.get(cell).is_some_and(|b| {
+            matches!(
+                b.block_type(),
+                BlockType::Stone | BlockType::Cobblestone | BlockType::DeepslateBricks
+            )
+        })
+    };
+    for cell in &layout.windows {
+        let above = IVec3::new(cell.x, cell.y + 1, cell.z);
+        let below = IVec3::new(cell.x, cell.y - 1, cell.z);
+        if !is_masonry(world, *cell) || !world.contains(above) || !is_masonry(world, below) {
+            continue;
+        }
+        world.insert(*cell, up(BlockType::Glass, glass_material_id()));
+        built.glass.push(*cell);
     }
     built
 }
