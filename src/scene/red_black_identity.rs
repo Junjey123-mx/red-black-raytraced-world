@@ -25,10 +25,12 @@ use crate::scene::fortress::{
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::ColumnRect;
 use crate::scene::overworld::Tree;
-use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
 use crate::scene::overworld_blocks::{
     crimson_diamond_material_id, crying_obsidian_crimson_material_id,
     crying_obsidian_orange_material_id, orange_spade_material_id,
+};
+use crate::scene::overworld_blocks::{
+    mycelium_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
 };
 use crate::scene::red_black_maze::Family;
 use crate::scene::red_black_timber::{
@@ -811,6 +813,120 @@ pub fn build_fourth_tower(
     built
 }
 
+// ---------------------------------------------------------------------
+// North shoulder of the lower lobe (C218)
+// ---------------------------------------------------------------------
+
+const SHOULDER_RELIEF_SALT: u32 = 0x175E_0003;
+const SHOULDER_EDGE_SALT: u32 = 0x175E_0004;
+const SHOULDER_GROUND_SALT: u32 = 0x175E_0005;
+
+/// The landscape added around the fortress, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LandscapeExpansion {
+    /// New columns `(x, z)`.
+    pub columns: Vec<(i32, i32)>,
+    /// Their ground cells (the lowest cell; its -Y face is the floor).
+    pub ground: Vec<IVec3>,
+    /// Every cell added (ground and body).
+    pub cells: Vec<IVec3>,
+}
+
+/// Grows a narrow, irregular shoulder along the lower lobe's north ring:
+/// one full row (`z = min_z - 1` of the lobe) from just past the Gate 14
+/// landing to the fortress's last column, and a ragged second row further
+/// out. Each new column hangs beside its ring neighbour, three cells thick
+/// on the inner row and two on the outer, with a hashed one-course relief;
+/// its ground is basalt, mycelium or blackstone and its body dark masonry,
+/// all `Down`. It gives the corinto path a walkable north shoulder and the
+/// grove behind the fortress room, stays attached to the one lower mass,
+/// and never reaches past the world box.
+pub fn expand_red_black_landscape(
+    seed: u32,
+    expansion: &WorldExpansionLayout,
+    fortress: &RedBlackFortressLayout,
+    protected: &HashSet<IVec3>,
+    floor_y: i32,
+    world: &mut VoxelWorld,
+) -> LandscapeExpansion {
+    let mut built = LandscapeExpansion::default();
+    let lobe = expansion.red_black_extension;
+    let inner_z = lobe.min_z - 1;
+    let outer_z = lobe.min_z - 2;
+    let x_from = expansion.red_black_path_anchor.x + 2;
+    let x_to = fortress.footprint.max_x - 1;
+    let ground_block = |cell: IVec3| {
+        let roll = expansion_hash(seed, cell.x, cell.z, SHOULDER_GROUND_SALT);
+        if roll < 0.45 {
+            down(BlockType::SmoothBasalt, smooth_basalt_material_id())
+        } else if roll < 0.75 {
+            down(BlockType::Mycelium, mycelium_material_id())
+        } else {
+            down(
+                BlockType::PolishedBlackstoneBricks,
+                polished_blackstone_bricks_material_id(),
+            )
+        }
+    };
+    let grow = |world: &mut VoxelWorld,
+                built: &mut LandscapeExpansion,
+                x: i32,
+                z: i32,
+                ground_y: i32,
+                thickness: i32| {
+        let cells: Vec<IVec3> = (0..thickness)
+            .map(|d| IVec3::new(x, ground_y + d, z))
+            .collect();
+        if ground_y < floor_y
+            || cells
+                .iter()
+                .any(|c| world.contains(*c) || protected.contains(c))
+        {
+            return false;
+        }
+        for (i, c) in cells.iter().enumerate() {
+            let block = if i == 0 {
+                ground_block(*c)
+            } else {
+                crate::scene::fortress::dark_masonry(seed, *c)
+            };
+            world.insert(*c, block);
+            built.cells.push(*c);
+        }
+        built.ground.push(cells[0]);
+        built.columns.push((x, z));
+        true
+    };
+    for x in x_from..=x_to {
+        // The ring neighbour's ground sets the level (trees ignored).
+        let Some(ring) = (floor_y..=0)
+            .map(|y| IVec3::new(x, y, lobe.min_z))
+            .find(|c| {
+                world.get(*c).is_some_and(|b| {
+                    !matches!(
+                        b.block_type(),
+                        BlockType::RedBlackLog | BlockType::RedBlackLeaves
+                    )
+                })
+            })
+        else {
+            continue;
+        };
+        let relief = (expansion_hash(seed, x, inner_z, SHOULDER_RELIEF_SALT) < 0.3) as i32;
+        let inner_y = ring.y + relief;
+        if !grow(world, &mut built, x, inner_z, inner_y, 3) {
+            continue;
+        }
+        let ragged = expansion_hash(seed, x, outer_z, SHOULDER_EDGE_SALT) < 0.65;
+        if ragged && x > x_from + 1 && x < x_to - 1 {
+            let outer_y =
+                inner_y + (expansion_hash(seed, x, outer_z, SHOULDER_RELIEF_SALT) < 0.5) as i32;
+            grow(world, &mut built, x, outer_z, outer_y, 2);
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -819,6 +935,7 @@ pub struct RedBlackIdentity {
     pub path: CorintoPath,
     pub gatehouse: RedBlackGatehouse,
     pub fourth_tower: FourthTower,
+    pub landscape: LandscapeExpansion,
 }
 
 impl RedBlackIdentity {
@@ -833,6 +950,7 @@ impl RedBlackIdentity {
             .chain(self.path.added_cells())
             .chain(self.gatehouse.added_cells())
             .chain(self.fourth_tower.added_cells())
+            .chain(self.landscape.cells.iter().copied())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -850,7 +968,6 @@ pub fn build_red_black_identity(
     floor_y: i32,
     world: &mut VoxelWorld,
 ) -> RedBlackIdentity {
-    let _ = expansion;
     let clearance = TreeClearance {
         cells: protected,
         walk_columns,
@@ -862,11 +979,14 @@ pub fn build_red_black_identity(
     let path = lay_corinto_path(approach, fortress, &clearance, &grove, world);
     let gatehouse = build_red_black_gatehouse(fortress, world);
     let fourth_tower = build_fourth_tower(seed, fortress, world);
+    let landscape =
+        expand_red_black_landscape(seed, expansion, fortress, protected, floor_y, world);
     RedBlackIdentity {
         grove,
         timber,
         path,
         gatehouse,
         fourth_tower,
+        landscape,
     }
 }
