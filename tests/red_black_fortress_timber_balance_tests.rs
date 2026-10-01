@@ -347,12 +347,15 @@ fn critical_supports_are_unchanged() {
     for c in k.shell.iter().chain(k.pillars.iter()) {
         assert!(!timber.contains(c), "{c:?} keep");
     }
-    // The upper floor's beams stay basalt.
+    // The upper floor's beams stay structural: basalt, or the corinto log
+    // beams the final balance pass (C220) lays.
     for c in &k.upper_floor {
         if c.z == l.hall.min_z || c.z == l.hall.max_z {
-            assert_eq!(
-                scene.world().get(*c).unwrap().block_type(),
-                BlockType::SmoothBasalt,
+            assert!(
+                matches!(
+                    scene.world().get(*c).unwrap().block_type(),
+                    BlockType::SmoothBasalt | BlockType::RedBlackLog
+                ),
                 "{c:?}"
             );
         }

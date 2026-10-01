@@ -1036,6 +1036,94 @@ pub fn compose_fortress_approach(
     built
 }
 
+// ---------------------------------------------------------------------
+// Identity balance (C220)
+// ---------------------------------------------------------------------
+
+/// The final balance pass, as applied (every cell is a re-laid one).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IdentityBalance {
+    /// Dark top-course cells of the curtain between towers, now a corinto
+    /// hoarding.
+    pub hoardings: Vec<IVec3>,
+    /// Courtyard ground linking the walkway to the tower alleys.
+    pub walkways: Vec<IVec3>,
+    /// The keep's upper-floor beams, now corinto logs.
+    pub beams: Vec<IVec3>,
+}
+
+impl IdentityBalance {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.hoardings
+            .iter()
+            .chain(self.walkways.iter())
+            .chain(self.beams.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Rebalances the fortress so dark stone stays the structure while corinto
+/// timber clearly carries the routes and the woodwork: the curtain's dark
+/// top-course cells between the towers become a timber hoarding (coloured
+/// bands stay), the courtyard cells linking the walkway to both tower
+/// alleys become planks (the organic patches stay), and the keep's
+/// upper-floor beams become `RedBlackLog`. Only existing dark cells are
+/// re-laid; nothing is added, no suit block, brick, crystal or light moves.
+pub fn balance_red_black_identity(
+    fortress: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> IdentityBalance {
+    let mut built = IdentityBalance::default();
+    let lv = fortress.levels;
+    let f = fortress.footprint;
+    let dark = |world: &VoxelWorld, c: IVec3| {
+        world
+            .get(c)
+            .is_some_and(|b| is_dark_structure(b.block_type()))
+    };
+    for z in [f.min_z, f.max_z] {
+        for x in f.min_x..=f.max_x {
+            if fortress.tower_at(x, z).is_some()
+                || fortress.central_keep.contains(x, z)
+                || (x >= f.max_x - 2 && (z == f.max_z || z == f.min_z))
+            {
+                continue;
+            }
+            let cell = IVec3::new(x, lv.wall_top_y, z);
+            if dark(world, cell) {
+                world.insert(cell, planks());
+                built.hoardings.push(cell);
+            }
+        }
+    }
+    let walk_x = fortress.central_keep.min_x - 1;
+    for z in [f.min_z + 1, f.min_z + 2, f.max_z - 2, f.max_z - 1] {
+        if !fortress.courtyard.contains(&(walk_x, z)) {
+            continue;
+        }
+        let cell = IVec3::new(walk_x, lv.ground_y, z);
+        if dark(world, cell) {
+            world.insert(cell, planks());
+            built.walkways.push(cell);
+        }
+    }
+    let h = fortress.hall;
+    for x in h.min_x..=h.max_x {
+        for z in [h.min_z, h.max_z] {
+            let cell = IVec3::new(x, lv.upper_floor_y, z);
+            if dark(world, cell) {
+                world.insert(
+                    cell,
+                    down(BlockType::RedBlackLog, red_black_log_material_id()),
+                );
+                built.beams.push(cell);
+            }
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -1046,6 +1134,7 @@ pub struct RedBlackIdentity {
     pub fourth_tower: FourthTower,
     pub landscape: LandscapeExpansion,
     pub composition: ApproachComposition,
+    pub balance: IdentityBalance,
 }
 
 impl RedBlackIdentity {
@@ -1124,6 +1213,7 @@ pub fn build_red_black_identity(
     let composition = compose_fortress_approach(
         seed, expansion, approach, &landscape, &clearance, &mut grove, world,
     );
+    let balance = balance_red_black_identity(fortress, world);
     RedBlackIdentity {
         grove,
         timber,
@@ -1132,5 +1222,6 @@ pub fn build_red_black_identity(
         fourth_tower,
         landscape,
         composition,
+        balance,
     }
 }
