@@ -10,6 +10,7 @@ use crate::core::hit::Face;
 use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
+use crate::scene::red_black_timber::{RED_BLACK_TIMBER_DIR, red_black_leaves_material_id};
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
 pub fn dirt_material_id() -> MaterialId {
@@ -202,6 +203,9 @@ pub struct OverworldBlockTextures {
     pub cobblestone: FaceTextures,
     pub sand: FaceTextures,
     pub deepslate: FaceTextures,
+    /// Red-Black timber family (Gate 17.5): crimson foliage, same alpha
+    /// mask layout as the Overworld leaves.
+    pub red_black_leaves: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -315,6 +319,7 @@ impl OverworldBlockTextures {
         let sand = manager.load(format!("{overworld_dir}/sand.png"))?;
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
         let deepslate_side = manager.load(format!("{overworld_dir}/deepslate/side.png"))?;
+        let red_black_leaves = manager.load(format!("{RED_BLACK_TIMBER_DIR}/leaves.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
@@ -383,6 +388,7 @@ impl OverworldBlockTextures {
                 deepslate_side,
                 deepslate_side,
             ),
+            red_black_leaves: FaceTextures::uniform(red_black_leaves),
         })
     }
 }
@@ -802,6 +808,14 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.16, 0.14, 0.16, 1.0), 0.20, 38.0)
             .with_reflectivity(0.06)
             .with_face_textures(textures.polished_blackstone_bricks),
+    );
+    // Red-Black leaves: the Overworld leaves' profile (matte, alpha cutout,
+    // never refractive nor emissive) over burgundy and wine foliage.
+    library.insert(
+        red_black_leaves_material_id(),
+        Material::new(Color::new(0.36, 0.06, 0.10, 1.0), 0.03, 4.0)
+            .with_face_textures(textures.red_black_leaves)
+            .with_alpha_mode(AlphaMode::Cutout),
     );
     // Nether wart block: dense fungal red, matte (specular 0.04, shininess 6,
     // reflectivity 0.01), opaque and never a light source of its own.
