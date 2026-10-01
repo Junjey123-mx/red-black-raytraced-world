@@ -160,7 +160,11 @@ fn eye(c: IVec3) -> Vec3 {
 }
 
 fn masonry(t: BlockType) -> bool {
-    matches!(t, BlockType::Stone | BlockType::Cobblestone)
+    // Later stages (towers, keep) may re-lay a curtain cell in deepslate bricks.
+    matches!(
+        t,
+        BlockType::Stone | BlockType::Cobblestone | BlockType::DeepslateBricks
+    )
 }
 
 #[test]

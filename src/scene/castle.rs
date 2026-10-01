@@ -488,3 +488,104 @@ pub fn build_castle_foundation(
     }
     built
 }
+
+// ---------------------------------------------------------------------
+// Towers and battlements (C187)
+// ---------------------------------------------------------------------
+
+/// Merlons stand on every other wall cell.
+pub const MERLON_PERIOD: i32 = 2;
+
+/// The towers and crenellations, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleTowers {
+    /// Shell cells of the four towers (deepslate-brick base course, then
+    /// stone and cobblestone), hollow inside.
+    pub shells: Vec<IVec3>,
+    /// The open shaft of each tower: `(x, z)` of its core column.
+    pub cores: Vec<(i32, i32)>,
+    /// Merlons on the tower tops (the corners of each tower).
+    pub tower_merlons: Vec<IVec3>,
+    /// Merlons along the curtain wall between the towers.
+    pub wall_merlons: Vec<IVec3>,
+}
+
+impl CastleTowers {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.shells
+            .iter()
+            .chain(self.tower_merlons.iter())
+            .chain(self.wall_merlons.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Raises the four corner towers and the battlements.
+///
+/// Each tower is a one-cell-thick shell around an open core from the
+/// ground to `tower_top_y`, with a deepslate-brick base course and stone
+/// or cobblestone above; four merlons stand on its corners one course
+/// higher. The curtain wall between the towers carries a merlon on every
+/// other cell. Nothing is added inside the courtyard, the gate or the
+/// keep's footprint.
+pub fn build_castle_towers(
+    terrain: &TerrainConfig,
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleTowers {
+    let mut built = CastleTowers::default();
+    let lv = layout.levels;
+    for r in &layout.towers {
+        for z in r.min_z..=r.max_z {
+            for x in r.min_x..=r.max_x {
+                let shell = x == r.min_x || x == r.max_x || z == r.min_z || z == r.max_z;
+                if !shell {
+                    built.cores.push((x, z));
+                    for y in lv.base_y..=lv.max_y {
+                        world.remove(IVec3::new(x, y, z));
+                    }
+                    continue;
+                }
+                for y in lv.base_y..=lv.tower_top_y {
+                    let cell = IVec3::new(x, y, z);
+                    let block = if y == lv.base_y {
+                        up(BlockType::DeepslateBricks, deepslate_bricks_material_id())
+                    } else {
+                        masonry(terrain.seed, cell)
+                    };
+                    world.insert(cell, block);
+                    built.shells.push(cell);
+                }
+                let corner = (x == r.min_x || x == r.max_x) && (z == r.min_z || z == r.max_z);
+                if corner {
+                    let cell = IVec3::new(x, lv.tower_top_y + 1, z);
+                    world.insert(cell, masonry(terrain.seed, cell));
+                    built.tower_merlons.push(cell);
+                }
+            }
+        }
+    }
+    // Curtain merlons between the towers, skipping the keep and gatehouse
+    // (they carry their own tops).
+    let f = layout.footprint;
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            if !layout.is_curtain_column(x, z)
+                || layout.tower_at(x, z).is_some()
+                || layout.keep.contains(x, z)
+                || layout.gatehouse.contains(x, z)
+            {
+                continue;
+            }
+            let along = if z == f.min_z || z == f.max_z { x } else { z };
+            if along % MERLON_PERIOD != f.min_x % MERLON_PERIOD {
+                continue;
+            }
+            let cell = IVec3::new(x, lv.wall_top_y + 1, z);
+            world.insert(cell, masonry(terrain.seed, cell));
+            built.wall_merlons.push(cell);
+        }
+    }
+    built
+}

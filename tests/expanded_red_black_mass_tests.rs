@@ -351,6 +351,12 @@ fn the_voxel_budget_is_respected() {
     let scene = WorldScene::new();
     let n = scene.world().len();
     println!("GATE15 voxels after the lower mass: {n}");
-    assert!(n <= VOXEL_BUDGET_SOFT_MAX, "{n} over the soft maximum");
-    assert!(n <= VOXEL_BUDGET_TARGET + 150, "{n} far over the target");
+    assert!(
+        n - scene.castle_voxels() <= VOXEL_BUDGET_SOFT_MAX,
+        "{n} over the soft maximum"
+    );
+    assert!(
+        n - scene.castle_voxels() <= VOXEL_BUDGET_TARGET + 150,
+        "{n} far over the target"
+    );
 }

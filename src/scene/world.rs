@@ -9,9 +9,12 @@ use crate::camera::camera::Camera;
 use crate::camera::world_free_fly::{WorldFreeFlyCameraState, WorldRealm};
 use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
-use crate::core::math::Vec3;
+use crate::core::math::{IVec3, Vec3};
 use crate::renderer::skybox::{Background, SkyGradient};
-use crate::scene::castle::{CastleFoundation, OverworldCastleLayout, build_castle_foundation};
+use crate::scene::castle::{
+    CastleFoundation, CastleTowers, OverworldCastleLayout, build_castle_foundation,
+    build_castle_towers,
+};
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
     InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
@@ -90,6 +93,7 @@ pub struct WorldScene {
     silhouette: Silhouette,
     castle_layout: OverworldCastleLayout,
     castle_foundation: CastleFoundation,
+    castle_towers: CastleTowers,
     world: VoxelWorld,
 }
 
@@ -179,6 +183,7 @@ impl WorldScene {
         // so its hollow rooms are never taken for voids).
         let castle_layout = OverworldCastleLayout::derive(&expansion_layout);
         let castle_foundation = build_castle_foundation(&config, &castle_layout, &mut world);
+        let castle_towers = build_castle_towers(&config, &castle_layout, &mut world);
         Self {
             config,
             field,
@@ -209,6 +214,7 @@ impl WorldScene {
             silhouette,
             castle_layout,
             castle_foundation,
+            castle_towers,
             world,
         }
     }
@@ -318,7 +324,25 @@ impl WorldScene {
     /// Cells the Gate 16 castle added above the pad (its ground row only
     /// replaces Gate 15 cells).
     pub fn castle_voxels(&self) -> usize {
-        self.castle_foundation.walls.len()
+        self.castle_cells().len()
+    }
+
+    /// Every castle cell above the pad's ground row, each once.
+    pub fn castle_cells(&self) -> Vec<IVec3> {
+        let mut seen = std::collections::HashSet::new();
+        let ground = self.castle_layout.levels.ground_y;
+        self.castle_foundation
+            .walls
+            .iter()
+            .chain(self.castle_towers.cells().iter())
+            .filter(|c| c.y > ground && seen.insert(**c))
+            .copied()
+            .collect()
+    }
+
+    /// The towers and battlements (Gate 16).
+    pub fn castle_towers(&self) -> &CastleTowers {
+        &self.castle_towers
     }
 
     pub fn silhouette(&self) -> &Silhouette {

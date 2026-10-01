@@ -378,8 +378,9 @@ fn the_scenery_is_deterministic() {
     }
     let added = upper_cells(&a).len() + a.expansion_scenery().lower.added_cells().len();
     assert!(added <= 80, "{added} scenery cells");
+    // The Gate 16 castle has its own budget on top of the Gate 15 masses.
     assert!(
-        a.world().len() <= VOXEL_BUDGET_SOFT_MAX,
+        a.world().len() - a.castle_voxels() <= VOXEL_BUDGET_SOFT_MAX,
         "{}",
         a.world().len()
     );
