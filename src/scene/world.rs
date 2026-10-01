@@ -12,9 +12,10 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::{IVec3, Vec3};
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::castle::{
-    CastleFoundation, CastleGatehouse, CastleKeep, CastleStairs, CastleTowers, CastleWindows,
-    OverworldCastleLayout, build_castle_foundation, build_castle_gatehouse, build_castle_keep,
-    build_castle_stairs, build_castle_towers, glaze_castle_windows,
+    CastleFoundation, CastleFurniture, CastleGatehouse, CastleKeep, CastleStairs, CastleTowers,
+    CastleWindows, OverworldCastleLayout, build_castle_foundation, build_castle_gatehouse,
+    build_castle_keep, build_castle_stairs, build_castle_towers, furnish_castle_hall,
+    glaze_castle_windows,
 };
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
@@ -99,6 +100,7 @@ pub struct WorldScene {
     castle_keep: CastleKeep,
     castle_windows: CastleWindows,
     castle_stairs: CastleStairs,
+    castle_furniture: CastleFurniture,
     world: VoxelWorld,
 }
 
@@ -193,6 +195,7 @@ impl WorldScene {
         let castle_keep = build_castle_keep(&config, &castle_layout, &mut world);
         let castle_windows = glaze_castle_windows(&castle_layout, &mut world);
         let castle_stairs = build_castle_stairs(&castle_layout, &mut world);
+        let castle_furniture = furnish_castle_hall(&castle_layout, &mut world);
         Self {
             config,
             field,
@@ -228,6 +231,7 @@ impl WorldScene {
             castle_keep,
             castle_windows,
             castle_stairs,
+            castle_furniture,
             world,
         }
     }
@@ -352,6 +356,7 @@ impl WorldScene {
             .chain(self.castle_keep.cells().iter())
             .chain(self.castle_windows.glass.iter())
             .chain(self.castle_stairs.cells().iter())
+            .chain(self.castle_furniture.cells().iter())
             .filter(|c| c.y > ground && seen.insert(**c))
             .copied()
             .collect()
@@ -375,6 +380,11 @@ impl WorldScene {
     /// The interior stair (Gate 16).
     pub fn castle_stairs(&self) -> &CastleStairs {
         &self.castle_stairs
+    }
+
+    /// The great hall's furniture (Gate 16).
+    pub fn castle_furniture(&self) -> &CastleFurniture {
+        &self.castle_furniture
     }
 
     /// The towers and battlements (Gate 16).

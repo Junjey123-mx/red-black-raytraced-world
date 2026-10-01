@@ -206,6 +206,17 @@ fn walk(scene: &WorldScene, points: &[Vec3]) {
     }
 }
 
+fn reaches(scene: &WorldScene, points: &[Vec3]) -> bool {
+    let mut position = points[0];
+    for target in points.iter().skip(1) {
+        position = step(scene, position, *target);
+        if (position - *target).length() >= 1e-3 {
+            return false;
+        }
+    }
+    true
+}
+
 fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, points);
     let mut back = points.to_vec();
@@ -462,10 +473,28 @@ fn the_second_level_is_usable() {
         }
         assert!(clear(&scene, eye(*cell)), "{cell:?}");
     }
-    // The whole deck is walkable from its first cell.
-    let start = eye(deck[0]);
-    for cell in &deck[1..] {
-        walk(&scene, &[start, eye(*cell)]);
+    // The whole deck is reachable from its first cell: flood the room at
+    // eye height over the hall's columns (the open well included, since the
+    // camera flies), stepping only where collision lets the eye through.
+    let y = c.levels.upper_floor_y;
+    let mut seen = HashSet::from([(deck[0].x, deck[0].z)]);
+    let mut queue = VecDeque::from([(deck[0].x, deck[0].z)]);
+    while let Some((x, z)) = queue.pop_front() {
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (nx, nz) = (x + dx, z + dz);
+            if !c.hall.contains(nx, nz) || seen.contains(&(nx, nz)) {
+                continue;
+            }
+            let from = eye(IVec3::new(x, y, z));
+            let to = eye(IVec3::new(nx, y, nz));
+            if (resolve(&scene, from, to - from) - to).length() < 1e-3 {
+                seen.insert((nx, nz));
+                queue.push_back((nx, nz));
+            }
+        }
+    }
+    for cell in &deck {
+        assert!(seen.contains(&(cell.x, cell.z)), "{cell:?} unreachable");
     }
     // The ground floor is walkable from the door row across the hall.
     let g = c.levels.ground_y;

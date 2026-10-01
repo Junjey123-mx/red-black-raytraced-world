@@ -139,11 +139,11 @@ mod renderer {
 }
 
 use camera::world_collision::{
-    CameraCollisionConfig, CollisionState, is_camera_solid, is_position_clear,
-    resolve_camera_motion,
+    CameraCollisionConfig, is_camera_solid, is_position_clear, resolve_camera_motion,
 };
 use core::math::{IVec3, Vec3};
 use scene::block_type::BlockType;
+use scene::castle::seat_faces;
 use scene::orientation::Orientation;
 use scene::world::WorldScene;
 
@@ -204,17 +204,6 @@ fn walk(scene: &WorldScene, points: &[Vec3]) {
     }
 }
 
-fn reaches(scene: &WorldScene, points: &[Vec3]) -> bool {
-    let mut position = points[0];
-    for target in points.iter().skip(1) {
-        position = step(scene, position, *target);
-        if (position - *target).length() >= 1e-3 {
-            return false;
-        }
-    }
-    true
-}
-
 fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, points);
     let mut back = points.to_vec();
@@ -222,81 +211,139 @@ fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, &back);
 }
 
-/// The canonical castle route as eye points: forecourt, gate, courtyard,
-/// keep door, hall, stair, upper landing, upper room.
-fn castle_route(scene: &WorldScene) -> Vec<Vec3> {
-    scene
-        .castle_layout()
-        .interior_route
-        .iter()
-        .map(|c| eye(*c))
-        .collect()
-}
-
 #[test]
-fn the_stairs_are_contiguous_wood_stairs() {
+fn chairs_are_wood_stairs_facing_a_table() {
     let scene = WorldScene::new();
+    let f = scene.castle_furniture();
     let c = scene.castle_layout();
-    let s = scene.castle_stairs();
-    assert_eq!(s.treads.len(), c.stair.len());
-    assert!(s.treads.len() >= 2);
-    for (i, (cell, o)) in s.treads.iter().enumerate() {
+    assert!(
+        f.chairs.len() >= 4 && f.chairs.len() <= 8,
+        "{}",
+        f.chairs.len()
+    );
+    let tops: Vec<IVec3> = f.tables.iter().chain(f.benches.iter()).copied().collect();
+    for (cell, o) in &f.chairs {
         let b = scene.world().get(*cell).unwrap();
         assert_eq!(b.block_type(), BlockType::WoodStairs);
         assert_eq!(b.orientation(), *o);
-        assert_eq!(
-            *o,
-            Orientation::North,
-            "the climb runs south: raised half to the south"
-        );
+        assert_ne!(*o, Orientation::Up);
         assert!(c.hall.contains(cell.x, cell.z));
-        if i > 0 {
-            let (prev, _) = s.treads[i - 1];
-            assert_eq!(cell.y, prev.y + 1, "one riser per tread");
-            assert_eq!(
-                (cell.x - prev.x).abs() + (cell.z - prev.z).abs(),
-                1,
-                "treads touch"
-            );
-        }
-        // Resting on the floor or the tread below.
+        let (dx, dz) = seat_faces(*o);
+        let facing = IVec3::new(cell.x + dx, cell.y, cell.z + dz);
+        assert!(
+            tops.contains(&facing),
+            "{cell:?} faces {facing:?}, not a table"
+        );
+        // Standing on a floor (planks) or the upper deck.
         assert!(
             scene
                 .world()
                 .contains(IVec3::new(cell.x, cell.y - 1, cell.z))
-                || i > 0
         );
     }
-    let (first, _) = s.treads[0];
-    assert_eq!(first.y, c.levels.base_y);
-    let (last, _) = *s.treads.last().unwrap();
-    assert_eq!(last.y + 1, c.levels.upper_floor_y);
-    assert_eq!(s.landing.y, c.levels.upper_floor_y);
-    assert!(
-        scene.castle_keep().upper_deck().contains(&s.landing),
-        "{:?}",
-        s.landing
-    );
+    let ground = f
+        .chairs
+        .iter()
+        .filter(|(cell, _)| cell.y == c.levels.base_y)
+        .count();
+    assert!(ground >= 4, "{ground} chairs around the hall table");
     println!(
-        "GATE16 stairs: treads={} railing={} landing={:?} castle_voxels={} voxels={}",
-        s.treads.len(),
-        s.railing.len(),
-        s.landing,
+        "GATE16 furniture: chairs={} tables={} benches={} castle_voxels={} voxels={}",
+        f.chairs.len(),
+        f.tables.len(),
+        f.benches.len(),
         scene.castle_voxels(),
         scene.world().len()
     );
 }
 
 #[test]
-fn head_room_is_sufficient_over_every_tread() {
+fn tables_and_benches_use_existing_blocks() {
     let scene = WorldScene::new();
-    let s = scene.castle_stairs();
-    for (cell, _) in &s.treads {
+    let f = scene.castle_furniture();
+    assert!(f.tables.len() >= 2 && !f.benches.is_empty());
+    for cell in f.tables.iter().chain(f.benches.iter()) {
+        let b = scene.world().get(*cell).unwrap();
+        assert!(
+            matches!(
+                b.block_type(),
+                BlockType::DoubleWoodSlab | BlockType::WoodPlanks
+            ),
+            "{cell:?}"
+        );
+        assert!(is_camera_solid(b));
+        assert!(
+            scene
+                .world()
+                .contains(IVec3::new(cell.x, cell.y - 1, cell.z))
+        );
+    }
+    // Every furniture block is one of the certified catalog types.
+    for cell in f.cells() {
+        let t = scene.world().get(cell).unwrap().block_type();
+        assert!(matches!(
+            t,
+            BlockType::WoodStairs
+                | BlockType::DoubleWoodSlab
+                | BlockType::WoodPlanks
+                | BlockType::Fence
+        ));
+    }
+    let src = std::fs::read_to_string("src/scene/block_type.rs").unwrap();
+    assert!(
+        !src.contains("Chair") && !src.contains("Table"),
+        "a furniture BlockType was added"
+    );
+}
+
+#[test]
+fn the_walkway_remains_open() {
+    let scene = WorldScene::new();
+    let c = scene.castle_layout();
+    let g = c.levels.ground_y;
+    // The corridor row inside the door, wall to wall, two cells high.
+    for x in c.hall.min_x..=c.hall.max_x {
         for dy in 1..=2 {
-            let above = IVec3::new(cell.x, cell.y + dy, cell.z);
-            assert!(!scene.world().contains(above), "{above:?} over a tread");
+            let cell = IVec3::new(x, g + dy, c.hall.min_z);
+            assert!(
+                !scene.world().contains(cell),
+                "{cell:?} blocks the corridor"
+            );
         }
-        assert!(clear(&scene, eye(*cell)), "{cell:?}");
+    }
+    let row: Vec<Vec3> = (c.hall.min_x..=c.hall.max_x)
+        .map(|x| eye(IVec3::new(x, g, c.hall.min_z)))
+        .collect();
+    walk_both_ways(&scene, &row);
+    // The whole canonical route, both ways.
+    let route: Vec<Vec3> = c.interior_route.iter().map(|r| eye(*r)).collect();
+    walk_both_ways(&scene, &route);
+}
+
+#[test]
+fn the_door_and_the_stairs_are_not_obstructed() {
+    let scene = WorldScene::new();
+    let c = scene.castle_layout();
+    let f = scene.castle_furniture();
+    let d = c.keep_door.base;
+    for dy in 0..2 {
+        let inside = IVec3::new(d.x + 1, d.y + dy, d.z);
+        let outside = IVec3::new(d.x - 1, d.y + dy, d.z);
+        assert!(!scene.world().contains(inside) && !scene.world().contains(outside));
+    }
+    let s = scene.castle_stairs();
+    for (tread, _) in &s.treads {
+        for dy in 1..=2 {
+            assert!(
+                !scene
+                    .world()
+                    .contains(IVec3::new(tread.x, tread.y + dy, tread.z))
+            );
+        }
+        assert!(
+            !f.cells().iter().any(|m| m.x == tread.x && m.z == tread.z),
+            "furniture in the stair column"
+        );
     }
     for dy in 1..=2 {
         assert!(
@@ -306,110 +353,27 @@ fn head_room_is_sufficient_over_every_tread() {
         );
     }
     assert!(clear(&scene, eye(s.landing)));
-    // The well is open from the hall floor to the room above.
+}
+
+#[test]
+fn windows_are_not_blocked_by_furniture() {
+    let scene = WorldScene::new();
     let c = scene.castle_layout();
-    for (x, z) in &c.stair_well {
-        for y in (c.levels.base_y + 2)..c.levels.keep_roof_y {
-            let cell = IVec3::new(*x, y, *z);
-            assert!(
-                !scene.world().contains(cell) || s.treads.iter().any(|(t, _)| *t == cell),
-                "{cell:?}"
-            );
+    for g in &scene.castle_windows().glass {
+        if !c.is_keep_shell(g.x, g.z) {
+            continue;
         }
-    }
-}
-
-#[test]
-fn the_interior_route_is_walkable_with_collision_on() {
-    let scene = WorldScene::new();
-    assert!(CollisionState::new().collision_enabled());
-    let route = castle_route(&scene);
-    assert!(route.len() >= 12);
-    walk(&scene, &route);
-    // It ends on the upper floor, two above the deck.
-    let end = *route.last().unwrap();
-    assert_eq!(
-        end.y,
-        scene.castle_layout().levels.upper_floor_y as f32 + 2.0
-    );
-}
-
-#[test]
-fn the_interior_route_is_walkable_in_reverse() {
-    let scene = WorldScene::new();
-    let mut route = castle_route(&scene);
-    route.reverse();
-    walk(&scene, &route);
-}
-
-#[test]
-fn railings_guard_the_well_without_blocking() {
-    let scene = WorldScene::new();
-    let c = scene.castle_layout();
-    let s = scene.castle_stairs();
-    assert!(!s.railing.is_empty());
-    for cell in &s.railing {
-        let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.block_type(), BlockType::Fence);
-        assert!(is_camera_solid(b));
-        assert_eq!(cell.y, c.levels.upper_floor_y + 1);
-        assert!(c.hall.contains(cell.x, cell.z));
-        assert!(
-            !c.stair_well.contains(&(cell.x, cell.z)),
-            "a rail in the well"
-        );
-        assert!(
-            c.stair_well.contains(&(cell.x + 1, cell.z)),
-            "the rail edges the well"
-        );
-        assert!(
-            scene
-                .world()
-                .contains(IVec3::new(cell.x, cell.y - 1, cell.z)),
-            "rail floats"
-        );
-        assert!(
-            !c.interior_route
-                .iter()
-                .any(|r| r.x == cell.x && r.z == cell.z && r.y + 1 == cell.y),
-            "rail on the route"
-        );
-    }
-    // Every upper-deck cell (the two carrying the rail excepted) is
-    // reachable from the landing around the rail.
-    let landing = eye(s.landing);
-    // ... nor the ones carrying a fitting (a seat or a table).
-    let railed = |cell: &IVec3| {
-        scene
-            .world()
-            .contains(IVec3::new(cell.x, cell.y + 1, cell.z))
-    };
-    for cell in scene
-        .castle_keep()
-        .upper_deck()
-        .into_iter()
-        .filter(|c| !railed(c))
-    {
-        let target = eye(cell);
-        assert!(clear(&scene, target), "{cell:?}");
-        // Either along the landing row and up the west wall, or up the
-        // well column to the corridor row and along it (free-fly: the open
-        // well is no obstacle).
-        let a = [
-            landing,
-            eye(IVec3::new(c.hall.min_x, cell.y, s.landing.z)),
-            eye(IVec3::new(c.hall.min_x, cell.y, cell.z)),
-            target,
-        ];
-        let b = [
-            landing,
-            eye(IVec3::new(s.landing.x, cell.y, c.hall.min_z)),
-            eye(IVec3::new(cell.x, cell.y, c.hall.min_z)),
-            target,
-        ];
-        assert!(
-            reaches(&scene, &a) || reaches(&scene, &b),
-            "{cell:?} unreachable"
-        );
+        // The cell just inside the window, at the same height, is open.
+        let (dx, dz) = if g.x == c.keep.min_x {
+            (1, 0)
+        } else if g.x == c.keep.max_x {
+            (-1, 0)
+        } else if g.z == c.keep.min_z {
+            (0, 1)
+        } else {
+            (0, -1)
+        };
+        let inside = IVec3::new(g.x + dx, g.y, g.z + dz);
+        assert!(!scene.world().contains(inside), "{inside:?} blocks {g:?}");
     }
 }

@@ -923,3 +923,123 @@ pub fn build_castle_stairs(layout: &OverworldCastleLayout, world: &mut VoxelWorl
     }
     built
 }
+
+// ---------------------------------------------------------------------
+// Furniture (C192)
+// ---------------------------------------------------------------------
+
+/// A seat: a `WoodStairs` block whose raised half is the backrest, so its
+/// open side faces the table.
+pub type Seat = (IVec3, Orientation);
+
+/// The great hall's furniture, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleFurniture {
+    /// Chairs (`WoodStairs`), ground floor and upper room.
+    pub chairs: Vec<Seat>,
+    /// Table tops (`DoubleWoodSlab`).
+    pub tables: Vec<IVec3>,
+    /// Benches (`DoubleWoodSlab`) against the wall.
+    pub benches: Vec<IVec3>,
+}
+
+impl CastleFurniture {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.chairs
+            .iter()
+            .map(|(c, _)| *c)
+            .chain(self.tables.iter().copied())
+            .chain(self.benches.iter().copied())
+            .collect()
+    }
+}
+
+/// The direction a seat's open side faces (the raised half is opposite):
+/// canonical `South` stairs are raised to the north, so they face south.
+pub fn seat_faces(orientation: Orientation) -> (i32, i32) {
+    match orientation {
+        Orientation::South | Orientation::Up | Orientation::Down => (0, 1),
+        Orientation::North => (0, -1),
+        Orientation::East => (1, 0),
+        Orientation::West => (-1, 0),
+    }
+}
+
+/// Furnishes the keep as a great hall: a two-cell slab table in the middle
+/// of the ground floor with five stair chairs around it (west, east and
+/// south), a bench against the west wall, and upstairs a one-cell table
+/// with a chair. The corridor row inside the door, the stair, its landing
+/// and every window stay clear.
+pub fn furnish_castle_hall(
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleFurniture {
+    let mut built = CastleFurniture::default();
+    let h = layout.hall;
+    let lv = layout.levels;
+    let chair =
+        |world: &mut VoxelWorld, built: &mut CastleFurniture, cell: IVec3, o: Orientation| {
+            if world.contains(cell) {
+                return;
+            }
+            world.insert(
+                cell,
+                BlockInstance::new(BlockType::WoodStairs, wood_stairs_material_id(), o),
+            );
+            built.chairs.push((cell, o));
+        };
+    let slab = |world: &mut VoxelWorld, cell: IVec3| -> bool {
+        if world.contains(cell) {
+            return false;
+        }
+        world.insert(
+            cell,
+            up(BlockType::DoubleWoodSlab, double_wood_slab_material_id()),
+        );
+        true
+    };
+    // Ground floor: table along x = min + 1, rows min + 1 and min + 2.
+    let tx = h.min_x + 1;
+    let y = lv.base_y;
+    for z in [h.min_z + 1, h.min_z + 2] {
+        let cell = IVec3::new(tx, y, z);
+        if slab(world, cell) {
+            built.tables.push(cell);
+        }
+        chair(
+            world,
+            &mut built,
+            IVec3::new(tx - 1, y, z),
+            Orientation::East,
+        );
+        chair(
+            world,
+            &mut built,
+            IVec3::new(tx + 1, y, z),
+            Orientation::West,
+        );
+    }
+    chair(
+        world,
+        &mut built,
+        IVec3::new(tx, y, h.min_z + 3),
+        Orientation::North,
+    );
+    let bench = IVec3::new(h.min_x, y, h.max_z);
+    if slab(world, bench) {
+        built.benches.push(bench);
+    }
+    // Upper room: a small table with one chair, off the landing row.
+    let uy = lv.upper_floor_y + 1;
+    let table = IVec3::new(tx, uy, h.min_z + 2);
+    if world.contains(IVec3::new(table.x, table.y - 1, table.z)) && slab(world, table) {
+        built.tables.push(table);
+        chair(
+            world,
+            &mut built,
+            IVec3::new(tx - 1, uy, h.min_z + 2),
+            Orientation::East,
+        );
+    }
+    built
+}
