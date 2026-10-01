@@ -223,6 +223,12 @@ impl WorldScene {
                 &fortress_layout.orange_tower,
                 &mut world,
             ),
+            build_family_tower(
+                &config,
+                &fortress_layout,
+                &fortress_layout.violet_tower,
+                &mut world,
+            ),
         ];
         Self {
             config,
