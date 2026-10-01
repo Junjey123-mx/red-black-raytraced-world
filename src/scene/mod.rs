@@ -8,6 +8,7 @@ pub mod cutaway;
 pub mod descent;
 pub mod environment;
 pub mod expansion;
+pub mod fortress;
 pub mod geometry_orientation;
 pub mod light;
 pub mod material_gallery;

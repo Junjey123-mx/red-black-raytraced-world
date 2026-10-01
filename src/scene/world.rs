@@ -29,6 +29,7 @@ use crate::scene::expansion::{
     decorate_red_black_expansion, extend_red_black_surface, pave_fortress_approach,
     pave_overworld_approach, shape_overworld_relief,
 };
+use crate::scene::fortress::RedBlackFortressLayout;
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
     GalleryTextures, advanced_materials_library, deepslate_bricks_material_id, glass_material_id,
@@ -102,6 +103,7 @@ pub struct WorldScene {
     castle_stairs: CastleStairs,
     castle_furniture: CastleFurniture,
     castle_details: CastleDetails,
+    fortress_layout: RedBlackFortressLayout,
     world: VoxelWorld,
 }
 
@@ -198,6 +200,8 @@ impl WorldScene {
         let castle_stairs = build_castle_stairs(&castle_layout, &mut world);
         let castle_furniture = furnish_castle_hall(&castle_layout, &mut world);
         let castle_details = detail_castle(&config, &castle_layout, &mut world);
+        // Gate 17: the inverted fortress contract on the lower pad.
+        let fortress_layout = RedBlackFortressLayout::derive(&expansion_layout);
         Self {
             config,
             field,
@@ -235,6 +239,7 @@ impl WorldScene {
             castle_stairs,
             castle_furniture,
             castle_details,
+            fortress_layout,
             world,
         }
     }
@@ -394,6 +399,11 @@ impl WorldScene {
     /// Lamps, parapets and courtyard details (Gate 16).
     pub fn castle_details(&self) -> &CastleDetails {
         &self.castle_details
+    }
+
+    /// The inverted Red-Black fortress contract on the lower pad (Gate 17).
+    pub fn fortress_layout(&self) -> &RedBlackFortressLayout {
+        &self.fortress_layout
     }
 
     /// The towers and battlements (Gate 16).

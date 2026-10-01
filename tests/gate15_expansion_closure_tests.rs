@@ -76,6 +76,8 @@ mod scene {
     pub mod environment;
     #[path = "../src/scene/expansion.rs"]
     pub mod expansion;
+    #[path = "../src/scene/fortress.rs"]
+    pub mod fortress;
     #[path = "../src/scene/geometry_orientation.rs"]
     pub mod geometry_orientation;
     #[path = "../src/scene/light.rs"]
