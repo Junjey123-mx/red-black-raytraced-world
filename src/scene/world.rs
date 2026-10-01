@@ -210,12 +210,20 @@ impl WorldScene {
         let fortress_layout = RedBlackFortressLayout::derive(&expansion_layout);
         let fortress_foundation = build_fortress_foundation(&config, &fortress_layout, &mut world);
         let fortress_bricks = weave_colored_bricks(&fortress_layout, &mut world);
-        let fortress_towers = vec![build_family_tower(
-            &config,
-            &fortress_layout,
-            &fortress_layout.crimson_tower,
-            &mut world,
-        )];
+        let fortress_towers = vec![
+            build_family_tower(
+                &config,
+                &fortress_layout,
+                &fortress_layout.crimson_tower,
+                &mut world,
+            ),
+            build_family_tower(
+                &config,
+                &fortress_layout,
+                &fortress_layout.orange_tower,
+                &mut world,
+            ),
+        ];
         Self {
             config,
             field,
