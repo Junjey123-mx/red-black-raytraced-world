@@ -192,6 +192,15 @@ fn the_functional_top_faces_minus_y() {
         .iter()
         .map(|c| (c.x, c.z))
         .chain((pad.min_z..=pad.max_z).flat_map(|z| (pad.min_x..=pad.max_x).map(move |x| (x, z))))
+        // ... the Gate 17.5 path fences stand on it ...
+        .chain(
+            scene
+                .red_black_identity()
+                .path
+                .fences
+                .iter()
+                .map(|c| (c.x, c.z)),
+        )
         // ... and the Gate 17.5 trees hang their trunks from the surface.
         .chain(
             scene
@@ -219,6 +228,7 @@ fn the_functional_top_faces_minus_y() {
             matches!(
                 b.block_type(),
                 BlockType::Mycelium
+                    | BlockType::RedBlackWoodPlanks
                     | BlockType::SmoothBasalt
                     | BlockType::PolishedBlackstoneBricks
                     | BlockType::RedBlackDeepslateBricksCrimson
@@ -341,9 +351,31 @@ fn family_accents_are_balanced_and_restrained() {
         "the expansion is saturated with colour: {coloured} of {}",
         s.cells.len()
     );
+    // The fortress pad (Gate 17) and the corinto path (Gate 17.5) re-laid
+    // the cells under them; the open surface keeps its scattered accents.
+    let path: Vec<(i32, i32)> = scene
+        .red_black_identity()
+        .path
+        .columns()
+        .into_iter()
+        .chain(
+            scene
+                .red_black_identity()
+                .path
+                .borders
+                .iter()
+                .map(|c| (c.x, c.z)),
+        )
+        .collect();
+    let pad = scene.fortress_layout().footprint;
+    let open = s
+        .cells
+        .iter()
+        .filter(|c| !path.contains(&(c.x, c.z)) && !pad.contains(c.x, c.z))
+        .count();
     assert!(
-        coloured * 10 >= s.cells.len(),
-        "too few accents: {coloured}"
+        coloured * 10 >= open,
+        "too few accents: {coloured} of {open}"
     );
 }
 

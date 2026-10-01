@@ -15,11 +15,13 @@ use std::collections::HashSet;
 use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
+use crate::scene::expansion::RedBlackApproach;
 use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_ground_cell};
 use crate::scene::fortress::RedBlackFortressLayout;
-use crate::scene::fortress::is_dark_structure;
+use crate::scene::fortress::{is_dark_structure, is_family_brick};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::Tree;
+use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
 use crate::scene::red_black_timber::{
     red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
     red_black_wood_planks_material_id,
@@ -348,11 +350,135 @@ pub fn weave_fortress_timber(
     built
 }
 
+// ---------------------------------------------------------------------
+// Corinto path to the fortress (C215)
+// ---------------------------------------------------------------------
+
+/// Every how many border cells a fence post stands.
+pub const PATH_FENCE_PERIOD: usize = 2;
+
+/// The corinto path, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CorintoPath {
+    /// The walking surface, in walking order (Gate 15 approach cells now
+    /// laid in `RedBlackWoodPlanks`).
+    pub planks: Vec<IVec3>,
+    /// The two coloured-brick accents flanking the forecourt, kept.
+    pub accents: Vec<IVec3>,
+    /// Ground cells beside the path re-laid in polished blackstone.
+    pub borders: Vec<IVec3>,
+    /// `RedBlackFence` posts standing on selected border cells.
+    pub fences: Vec<IVec3>,
+}
+
+impl CorintoPath {
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.fences.clone()
+    }
+
+    pub fn columns(&self) -> Vec<(i32, i32)> {
+        self.planks
+            .iter()
+            .chain(self.accents.iter())
+            .map(|c| (c.x, c.z))
+            .collect()
+    }
+}
+
+/// Lays the corinto path: every Gate 15 approach cell (the coloured
+/// accents at the forecourt excepted) becomes `RedBlackWoodPlanks`; each
+/// ground cell beside it that belongs to no path, route, focal scene, tree
+/// or fortress becomes a polished-blackstone border; and every
+/// `PATH_FENCE_PERIOD`-th border cell, within one course of the path, carries a
+/// `RedBlackFence` post on its ground (functionally above it). The path
+/// cells, their head room and every route stay exactly where they were.
+pub fn lay_corinto_path(
+    approach: &RedBlackApproach,
+    fortress: &RedBlackFortressLayout,
+    clearance: &TreeClearance,
+    grove: &RedBlackGrove,
+    world: &mut VoxelWorld,
+) -> CorintoPath {
+    let mut built = CorintoPath::default();
+    for cell in &approach.main {
+        let accent = world
+            .get(*cell)
+            .is_some_and(|b| is_family_brick(b.block_type()));
+        if accent {
+            built.accents.push(*cell);
+        } else {
+            world.insert(*cell, planks());
+            built.planks.push(*cell);
+        }
+    }
+    let path: HashSet<(i32, i32)> = built.columns().into_iter().collect();
+    let trees: HashSet<(i32, i32)> = grove.cells().iter().map(|c| (c.x, c.z)).collect();
+    let pad = fortress.footprint;
+    let mut seen = HashSet::new();
+    for cell in approach.main.iter() {
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (x, z) = (cell.x + dx, cell.z + dz);
+            if path.contains(&(x, z))
+                || pad.contains(x, z)
+                || clearance.walk_columns.contains(&(x, z))
+                || trees.contains(&(x, z))
+                || !seen.insert((x, z))
+            {
+                continue;
+            }
+            let Some(ground) = lower_ground_cell(world, x, z, clearance.floor_y - 4, 0) else {
+                continue;
+            };
+            let near_focal = clearance.focal_columns.iter().any(|(fx, fz)| {
+                (fx - x).abs() < TREE_FOCAL_CLEARANCE && (fz - z).abs() < TREE_FOCAL_CLEARANCE
+            });
+            // Only plain terrain is re-laid: scenery (amethyst, outcrops),
+            // focal scenes and protected cells keep their blocks.
+            let plain = world.get(ground).is_some_and(|b| {
+                matches!(
+                    b.block_type(),
+                    BlockType::SmoothBasalt
+                        | BlockType::Deepslate
+                        | BlockType::Mycelium
+                        | BlockType::PolishedBlackstoneBricks
+                )
+            });
+            if clearance.cells.contains(&ground) || near_focal || !plain {
+                continue;
+            }
+            world.insert(
+                ground,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+            built.borders.push(ground);
+        }
+    }
+    for (i, border) in built.borders.iter().enumerate() {
+        if i % PATH_FENCE_PERIOD != 0 {
+            continue;
+        }
+        // Within one course of the path cell it edges.
+        let level = approach.main.iter().any(|p| {
+            (p.x - border.x).abs() + (p.z - border.z).abs() == 1 && (p.y - border.y).abs() <= 1
+        });
+        let post = IVec3::new(border.x, border.y - 1, border.z);
+        if level && !world.contains(post) && !clearance.cells.contains(&post) {
+            world.insert(post, fence());
+            built.fences.push(post);
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
     pub grove: RedBlackGrove,
     pub timber: FortressTimber,
+    pub path: CorintoPath,
 }
 
 impl RedBlackIdentity {
@@ -364,6 +490,7 @@ impl RedBlackIdentity {
             .cells()
             .into_iter()
             .chain(self.timber.added_cells())
+            .chain(self.path.added_cells())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -373,6 +500,7 @@ impl RedBlackIdentity {
 pub fn build_red_black_identity(
     seed: u32,
     expansion: &WorldExpansionLayout,
+    approach: &RedBlackApproach,
     fortress: &RedBlackFortressLayout,
     protected: &HashSet<IVec3>,
     walk_columns: &HashSet<(i32, i32)>,
@@ -389,5 +517,10 @@ pub fn build_red_black_identity(
     };
     let grove = plant_red_black_grove(seed, fortress, &clearance, world);
     let timber = weave_fortress_timber(fortress, world);
-    RedBlackIdentity { grove, timber }
+    let path = lay_corinto_path(approach, fortress, &clearance, &grove, world);
+    RedBlackIdentity {
+        grove,
+        timber,
+        path,
+    }
 }

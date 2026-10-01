@@ -272,6 +272,7 @@ fn the_landing_is_connected_to_the_fortress_pad() {
                 t,
                 BlockType::PolishedBlackstoneBricks
                     | BlockType::SmoothBasalt
+                    | BlockType::RedBlackWoodPlanks
                     | BlockType::RedBlackDeepslateBricksCrimson
                     | BlockType::RedBlackDeepslateBricksOrange
                     | BlockType::RedBlackDeepslateBricksViolet

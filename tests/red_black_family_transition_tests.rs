@@ -252,6 +252,7 @@ fn boundaries_use_bridge_materials_and_no_symbols() {
                 b.block_type(),
                 BlockType::SmoothBasalt
                     | BlockType::PolishedBlackstoneBricks
+                    | BlockType::RedBlackWoodPlanks
                     | BlockType::Mycelium
                     | BlockType::RedBlackDeepslateBricksCrimson
                     | BlockType::RedBlackDeepslateBricksOrange

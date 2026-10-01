@@ -256,6 +256,9 @@ impl WorldScene {
             for f in &families {
                 protected.extend(f.cells());
             }
+            // The Gate 15 lower scenery (outcrops, crystals, patches) stays.
+            protected.extend(expansion_scenery.lower.added_cells());
+            protected.extend(expansion_scenery.lower.mycelium.iter().copied());
             // Nothing grows against a symbol: every cell touching a suit
             // block (family scenes and fortress heraldry) stays open.
             let symbols: Vec<IVec3> = world
@@ -296,6 +299,7 @@ impl WorldScene {
             build_red_black_identity(
                 config.seed,
                 &expansion_layout,
+                &red_black_approach,
                 &fortress_layout,
                 &protected,
                 &walk_columns,
