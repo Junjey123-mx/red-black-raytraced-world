@@ -174,9 +174,20 @@ fn the_functional_top_faces_minus_y() {
     let scene = WorldScene::new();
     let s = scene.red_black_surface_extension();
     assert!(s.cells.len() >= 150, "{}", s.cells.len());
+    // Columns with scenery hanging below (C183) are covered by its tests.
+    let hung: Vec<(i32, i32)> = scene
+        .expansion_scenery()
+        .lower
+        .added_cells()
+        .iter()
+        .map(|c| (c.x, c.z))
+        .collect();
     for cell in &s.cells {
         let b = scene.world().get(*cell).unwrap();
         assert_eq!(b.orientation(), Orientation::Down, "{cell:?}");
+        if hung.contains(&(cell.x, cell.z)) {
+            continue;
+        }
         // The ground cell is the lowest of its column: its -Y face is open.
         assert!(
             !scene

@@ -17,9 +17,10 @@ use crate::scene::descent::{
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
-    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, RedBlackApproach,
-    RedBlackExpansion, RedBlackSurfaceExtension, WorldExpansionLayout, build_overworld_expansion,
-    build_red_black_expansion, extend_red_black_surface, pave_fortress_approach,
+    EXPANSION_WIDTH, ExpansionScenery, OverworldApproach, OverworldExpansion, OverworldRelief,
+    RedBlackApproach, RedBlackExpansion, RedBlackSurfaceExtension, WorldExpansionLayout,
+    build_overworld_expansion, build_red_black_expansion, decorate_overworld_expansion,
+    decorate_red_black_expansion, extend_red_black_surface, pave_fortress_approach,
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
@@ -84,6 +85,7 @@ pub struct WorldScene {
     red_black_expansion: RedBlackExpansion,
     red_black_surface_extension: RedBlackSurfaceExtension,
     red_black_approach: RedBlackApproach,
+    expansion_scenery: ExpansionScenery,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -148,6 +150,27 @@ impl WorldScene {
         );
         let red_black_approach =
             pave_fortress_approach(&config, &rhombus, &expansion_layout, &mut world);
+        let expansion_scenery = ExpansionScenery {
+            upper: decorate_overworld_expansion(
+                &config,
+                &expansion_layout,
+                &overworld_expansion,
+                &overworld_approach,
+                &mut world,
+            ),
+            lower: decorate_red_black_expansion(
+                &config,
+                &rhombus,
+                &expansion_layout,
+                &red_black_expansion,
+                &red_black_approach,
+                &families
+                    .iter()
+                    .flat_map(|f| f.symbols.iter().chain(f.accents.iter()).copied())
+                    .collect::<Vec<_>>(),
+                &mut world,
+            ),
+        };
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -175,6 +198,7 @@ impl WorldScene {
             red_black_expansion,
             red_black_surface_extension,
             red_black_approach,
+            expansion_scenery,
             silhouette,
             world,
         }
@@ -265,6 +289,11 @@ impl WorldScene {
     /// The paved lower approach to the fortress site (Gate 15).
     pub fn red_black_approach(&self) -> &RedBlackApproach {
         &self.red_black_approach
+    }
+
+    /// The restrained scenery of both expansions (Gate 15).
+    pub fn expansion_scenery(&self) -> &ExpansionScenery {
+        &self.expansion_scenery
     }
 
     pub fn silhouette(&self) -> &Silhouette {

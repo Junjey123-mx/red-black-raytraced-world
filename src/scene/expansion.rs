@@ -11,19 +11,26 @@
 //! Gate 14 landing.
 #![allow(dead_code)]
 
+use crate::core::material::MaterialId;
 use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::descent::InvertedRouteLayout;
+use crate::scene::material_gallery::leaves_material_id;
 use crate::scene::orientation::Orientation;
+use crate::scene::overworld::Tree;
 use crate::scene::overworld::column_top;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basin_columns};
 use crate::scene::overworld_blocks::{
-    cobblestone_material_id, deepslate_material_id, fence_material_id, log_material_id,
-    polished_blackstone_bricks_material_id, smooth_basalt_material_id,
+    amethyst_cluster_material_id, budding_amethyst_material_id, cobblestone_material_id,
+    crying_obsidian_crimson_material_id, crying_obsidian_orange_material_id,
+    crying_obsidian_violet_material_id, deepslate_material_id, fence_material_id, log_material_id,
+    mycelium_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
+    stone_block_material_id,
 };
-use crate::scene::red_black_maze::{Family, lower_mass_block, surface_block};
+use crate::scene::red_black_maze::{Family, family_zone, lower_mass_block, surface_block};
 use crate::scene::rhombus::RhombusConfig;
+use crate::scene::scene::grass_material_id;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::stratum_material;
 use crate::scene::voxel_world::VoxelWorld;
@@ -1021,4 +1028,508 @@ pub fn pave_fortress_approach(
         approach.main.push(cell);
     }
     approach
+}
+
+// ---------------------------------------------------------------------
+// Scenery (C183)
+// ---------------------------------------------------------------------
+
+const SCENERY_TREE_SALT: u32 = 0x15E0_0001;
+const SCENERY_STONE_SALT: u32 = 0x15E0_0002;
+const SCENERY_LEDGE_SALT: u32 = 0x15E0_0003;
+const SCENERY_BASALT_SALT: u32 = 0x15E0_0004;
+const SCENERY_MYCELIUM_SALT: u32 = 0x15E0_0005;
+const SCENERY_AMETHYST_SALT: u32 = 0x15E0_0006;
+const SCENERY_OBSIDIAN_SALT: u32 = 0x15E0_0007;
+
+/// Small trees planted in the expansion (fewer than the island's).
+pub const SCENERY_MAX_TREES: usize = 3;
+/// Trunk of a small expansion tree: its canopy sits three above the
+/// ground, clear of a walker's head on any neighbouring path cell.
+pub const SCENERY_TRUNK_HEIGHT: i32 = 3;
+/// Columns between two expansion trees.
+pub const SCENERY_TREE_SPACING: i32 = 3;
+pub const SCENERY_MAX_STONE_CLUSTERS: usize = 3;
+pub const SCENERY_MAX_LEDGES: usize = 4;
+pub const SCENERY_MAX_BASALT_OUTCROPS: usize = 3;
+pub const SCENERY_MAX_MYCELIUM: usize = 6;
+pub const SCENERY_MAX_AMETHYST: usize = 2;
+pub const SCENERY_MAX_CRYING_OBSIDIAN: usize = 3;
+/// Columns kept free around every family focal cell (symbols and accents).
+pub const FOCAL_CLEARANCE: i32 = 2;
+
+/// Restrained scenery on the enlarged Overworld.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OverworldScenery {
+    /// Small trees on the lobe (trunk and leaves).
+    pub trees: Vec<Tree>,
+    /// Stone cells resting on ring columns, in clusters of one or two.
+    pub stones: Vec<IVec3>,
+    /// Fence posts and a log marking the lobe's far edges.
+    pub markers: Vec<IVec3>,
+    /// Grass cells stepping outward below the ring.
+    pub ledges: Vec<IVec3>,
+}
+
+impl OverworldScenery {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.trees
+            .iter()
+            .flat_map(|t| t.trunk.iter().chain(t.leaves.iter()).copied())
+            .chain(self.stones.iter().copied())
+            .chain(self.markers.iter().copied())
+            .chain(self.ledges.iter().copied())
+            .collect()
+    }
+
+    /// Columns the scenery stands on or hangs over.
+    pub fn columns(&self) -> Vec<(i32, i32)> {
+        self.cells().iter().map(|c| (c.x, c.z)).collect()
+    }
+}
+
+/// Restrained scenery under the enlarged Red-Black surface (all `Down`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackScenery {
+    /// Smooth basalt cells hanging from ring columns.
+    pub basalt: Vec<IVec3>,
+    /// Ground cells turned to mycelium (replaced, not added).
+    pub mycelium: Vec<IVec3>,
+    /// Budding amethyst (and one cluster) hanging from the surface.
+    pub amethyst: Vec<IVec3>,
+    /// Crying obsidian in the sector's family colour.
+    pub crying_obsidian: Vec<IVec3>,
+}
+
+impl RedBlackScenery {
+    /// Cells added below the surface (the mycelium patches replace cells
+    /// and are not counted).
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.basalt
+            .iter()
+            .chain(self.amethyst.iter())
+            .chain(self.crying_obsidian.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Both halves of the expansion scenery.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ExpansionScenery {
+    pub upper: OverworldScenery,
+    pub lower: RedBlackScenery,
+}
+
+fn up(block_type: BlockType, material: MaterialId) -> BlockInstance {
+    BlockInstance::new(block_type, material, Orientation::Up)
+}
+
+fn down(block_type: BlockType, material: MaterialId) -> BlockInstance {
+    BlockInstance::new(block_type, material, Orientation::Down)
+}
+
+/// Canopy of a small tree: the eight cells around the trunk top, the cell
+/// above it and, by hash, one or two arms of that top cell.
+fn small_canopy(seed: u32, base: IVec3, top: i32) -> Vec<IVec3> {
+    let mut cells = Vec::new();
+    for dz in -1..=1 {
+        for dx in -1..=1 {
+            if dx != 0 || dz != 0 {
+                cells.push(IVec3::new(base.x + dx, top, base.z + dz));
+            }
+        }
+    }
+    cells.push(IVec3::new(base.x, top + 1, base.z));
+    for (i, (dx, dz)) in [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().enumerate() {
+        if expansion_hash(seed, base.x * 4 + i as i32, base.z, SCENERY_TREE_SALT) < 0.35 {
+            cells.push(IVec3::new(base.x + dx, top + 1, base.z + dz));
+        }
+    }
+    cells
+}
+
+/// Decorates the enlarged Overworld: up to three small trees whose
+/// canopies stay off the castle pad, one or two stone clusters on ring
+/// columns, two fence posts on the north edge and a log at the east tip,
+/// and a few grass ledges stepping outward below the ring. Pad columns and
+/// the paved approach are never touched and keep their head room.
+pub fn decorate_overworld_expansion(
+    terrain: &TerrainConfig,
+    layout: &WorldExpansionLayout,
+    expansion: &OverworldExpansion,
+    approach: &OverworldApproach,
+    world: &mut VoxelWorld,
+) -> OverworldScenery {
+    let mut scenery = OverworldScenery::default();
+    let top = terrain.max_surface_height() + 4;
+    let bottom = terrain.deepslate_level - 4;
+    let pad = layout.overworld_castle_pad;
+    let mut busy: Vec<(i32, i32)> = approach
+        .cells()
+        .iter()
+        .chain(approach.accents.iter())
+        .map(|c| (c.x, c.z))
+        .collect();
+    let free = |busy: &[(i32, i32)], x: i32, z: i32| {
+        !pad.contains(x, z) && !busy.contains(&(x, z)) && expansion.column(x, z).is_some()
+    };
+
+    // Trees: columns ordered by hash, canopy footprint off the pad.
+    let mut sites: Vec<&ExpansionColumn> = expansion.columns.iter().collect();
+    sites.sort_by(|a, b| {
+        let ka = expansion_hash(terrain.seed, a.x, a.z, SCENERY_TREE_SALT);
+        let kb = expansion_hash(terrain.seed, b.x, b.z, SCENERY_TREE_SALT);
+        kb.partial_cmp(&ka)
+            .unwrap()
+            .then((a.x, a.z).cmp(&(b.x, b.z)))
+    });
+    for column in sites {
+        if scenery.trees.len() >= SCENERY_MAX_TREES {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if !free(&busy, x, z) || column.seam {
+            continue;
+        }
+        let footprint_clear = (-1..=1).all(|dz| (-1..=1).all(|dx| !pad.contains(x + dx, z + dz)));
+        if !footprint_clear {
+            continue;
+        }
+        if scenery.trees.iter().any(|t| {
+            (t.base.x - x).abs() < SCENERY_TREE_SPACING
+                && (t.base.z - z).abs() < SCENERY_TREE_SPACING
+        }) {
+            continue;
+        }
+        let Some(base) = ground_cell(world, x, z, top, bottom) else {
+            continue;
+        };
+        if world.get(base).map(|b| b.block_type()) != Some(BlockType::Grass)
+            || world.contains(IVec3::new(x, base.y + 1, z))
+        {
+            continue;
+        }
+        let trunk_top = base.y + SCENERY_TRUNK_HEIGHT;
+        let trunk: Vec<IVec3> = (base.y + 1..=trunk_top)
+            .map(|y| IVec3::new(x, y, z))
+            .collect();
+        for cell in &trunk {
+            world.insert(*cell, up(BlockType::Log, log_material_id()));
+        }
+        let mut leaves = Vec::new();
+        for cell in small_canopy(terrain.seed, base, trunk_top) {
+            if world.contains(cell) {
+                continue;
+            }
+            world.insert(cell, up(BlockType::Leaves, leaves_material_id()));
+            leaves.push(cell);
+        }
+        busy.push((x, z));
+        scenery.trees.push(Tree {
+            base,
+            trunk_height: SCENERY_TRUNK_HEIGHT,
+            trunk,
+            leaves,
+        });
+    }
+    let near_tree = |scenery: &OverworldScenery, x: i32, z: i32| {
+        scenery
+            .trees
+            .iter()
+            .any(|t| (t.base.x - x).abs() <= 1 && (t.base.z - z).abs() <= 1)
+    };
+
+    // Stone clusters on the ring, away from the seam and the trees.
+    let mut clusters = 0;
+    for column in &expansion.columns {
+        if clusters >= SCENERY_MAX_STONE_CLUSTERS {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if !column.ring
+            || column.seam
+            || !free(&busy, x, z)
+            || near_tree(&scenery, x, z)
+            || expansion_hash(terrain.seed, x, z, SCENERY_STONE_SALT) >= 0.12
+        {
+            continue;
+        }
+        let Some(ground) = ground_cell(world, x, z, top, bottom) else {
+            continue;
+        };
+        let cell = IVec3::new(x, ground.y + 1, z);
+        if world.contains(cell) {
+            continue;
+        }
+        world.insert(cell, up(BlockType::Stone, stone_block_material_id()));
+        scenery.stones.push(cell);
+        busy.push((x, z));
+        // A second stone beside it when the next column along is free and level.
+        let (nx, nz) =
+            if x == layout.overworld_extension.max_x || z == layout.overworld_extension.min_z {
+                (x, z + 1)
+            } else {
+                (x + 1, z)
+            };
+        if free(&busy, nx, nz) && !near_tree(&scenery, nx, nz) {
+            if let Some(g) = ground_cell(world, nx, nz, top, bottom) {
+                let second = IVec3::new(nx, g.y + 1, nz);
+                if g.y == ground.y && !world.contains(second) {
+                    world.insert(second, up(BlockType::Stone, stone_block_material_id()));
+                    scenery.stones.push(second);
+                    busy.push((nx, nz));
+                }
+            }
+        }
+        clusters += 1;
+    }
+
+    // Markers: two fence posts on the north edge, a log at the east tip.
+    let north = layout.overworld_extension.min_z;
+    for x in [pad.min_x + 2, pad.max_x - 2] {
+        if let Some(ground) = ground_cell(world, x, north, top, bottom) {
+            let cell = IVec3::new(x, ground.y + 1, north);
+            if free(&busy, x, north) && !world.contains(cell) && !near_tree(&scenery, x, north) {
+                world.insert(cell, up(BlockType::Fence, fence_material_id()));
+                scenery.markers.push(cell);
+                busy.push((x, north));
+            }
+        }
+    }
+    let target_z = layout.overworld_path_target.z;
+    if let Some((tip, tip_z)) = expansion
+        .columns
+        .iter()
+        .filter(|c| (c.z - target_z).abs() <= 1 && c.ring && free(&busy, c.x, c.z))
+        .map(|c| (c.x, c.z))
+        .max()
+    {
+        if let Some(ground) = ground_cell(world, tip, tip_z, top, bottom) {
+            let cell = IVec3::new(tip, ground.y + 1, tip_z);
+            if !world.contains(cell) && !near_tree(&scenery, tip, tip_z) {
+                world.insert(cell, up(BlockType::Log, log_material_id()));
+                scenery.markers.push(cell);
+                busy.push((tip, tip_z));
+            }
+        }
+    }
+
+    // Grass ledges: one cell outward and one down from a ring column, over air.
+    for column in &expansion.columns {
+        if scenery.ledges.len() >= SCENERY_MAX_LEDGES {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if !column.ring
+            || column.seam
+            || expansion_hash(terrain.seed, x, z, SCENERY_LEDGE_SALT) >= 0.25
+        {
+            continue;
+        }
+        let Some(ground) = ground_cell(world, x, z, top, bottom) else {
+            continue;
+        };
+        let outward = [(1, 0), (0, -1), (0, 1), (-1, 0)]
+            .into_iter()
+            .find(|(dx, dz)| {
+                expansion.column(x + dx, z + dz).is_none() && !pad.contains(x + dx, z + dz)
+            });
+        let Some((dx, dz)) = outward else {
+            continue;
+        };
+        let cell = IVec3::new(x + dx, ground.y - 1, z + dz);
+        // Never past the plan: the world box stays the lobe's box.
+        if cell.x > layout.overworld_extension.max_x || cell.z < 0 || cell.z >= terrain.depth {
+            continue;
+        }
+        let clear = !world.contains(cell)
+            && !world.contains(IVec3::new(cell.x, cell.y + 1, cell.z))
+            && !world.contains(IVec3::new(cell.x, cell.y - 1, cell.z))
+            && world.contains(IVec3::new(x, ground.y - 1, z));
+        if !clear {
+            continue;
+        }
+        world.insert(cell, up(BlockType::Grass, grass_material_id()));
+        scenery.ledges.push(cell);
+    }
+    scenery
+}
+
+/// Decorates the enlarged Red-Black underside: basalt outcrops hanging
+/// from ring columns, mycelium patches replacing plain interior ground
+/// cells, two amethyst accents (one with a cluster) and three crying
+/// obsidian cells in the sector's family colour. The fortress pad, the
+/// paved approach and every family focal cell (plus `FOCAL_CLEARANCE`
+/// columns around it) stay untouched, and nothing hangs under a pad or
+/// approach column.
+pub fn decorate_red_black_expansion(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    layout: &WorldExpansionLayout,
+    lower: &RedBlackExpansion,
+    approach: &RedBlackApproach,
+    focal: &[IVec3],
+    world: &mut VoxelWorld,
+) -> RedBlackScenery {
+    let mut scenery = RedBlackScenery::default();
+    let pad = layout.red_black_fortress_pad;
+    let focal_columns: Vec<(i32, i32)> = focal.iter().map(|c| (c.x, c.z)).collect();
+    let mut busy: Vec<(i32, i32)> = approach.main.iter().map(|c| (c.x, c.z)).collect();
+    let bottom = rhombus.lower_tip_y - 2;
+    let top = rhombus.shelf_y;
+    let lowest = |world: &VoxelWorld, x: i32, z: i32| lower_ground_cell(world, x, z, bottom, top);
+    let free = |busy: &[(i32, i32)], x: i32, z: i32| {
+        !pad.contains(x, z)
+            && !busy.contains(&(x, z))
+            && lower.column(x, z).is_some()
+            && !focal_columns.iter().any(|(fx, fz)| {
+                (fx - x).abs() < FOCAL_CLEARANCE && (fz - z).abs() < FOCAL_CLEARANCE
+            })
+    };
+
+    // Basalt outcrops on the ring: one or two cells hanging below.
+    let mut outcrops = 0;
+    for column in &lower.columns {
+        if outcrops >= SCENERY_MAX_BASALT_OUTCROPS {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if !column.ring
+            || !free(&busy, x, z)
+            || expansion_hash(terrain.seed, x, z, SCENERY_BASALT_SALT) >= 0.15
+        {
+            continue;
+        }
+        let Some(ground) = lowest(world, x, z) else {
+            continue;
+        };
+        let cell = IVec3::new(x, ground.y - 1, z);
+        if world.contains(cell) {
+            continue;
+        }
+        world.insert(
+            cell,
+            down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+        );
+        scenery.basalt.push(cell);
+        busy.push((x, z));
+        if free(&busy, x, z + 1) {
+            if let Some(g) = lowest(world, x, z + 1) {
+                let second = IVec3::new(x, g.y - 1, z + 1);
+                if g.y == ground.y && !world.contains(second) {
+                    world.insert(
+                        second,
+                        down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+                    );
+                    scenery.basalt.push(second);
+                    busy.push((x, z + 1));
+                }
+            }
+        }
+        outcrops += 1;
+    }
+
+    // Mycelium patches: plain interior ground cells turn to mycelium.
+    for column in &lower.columns {
+        if scenery.mycelium.len() >= SCENERY_MAX_MYCELIUM {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if column.ring
+            || !free(&busy, x, z)
+            || expansion_hash(terrain.seed, x, z, SCENERY_MYCELIUM_SALT) >= 0.35
+        {
+            continue;
+        }
+        let Some(ground) = lowest(world, x, z) else {
+            continue;
+        };
+        let plain = world.get(ground).is_some_and(|b| {
+            matches!(
+                b.block_type(),
+                BlockType::Deepslate | BlockType::SmoothBasalt
+            )
+        });
+        if !plain {
+            continue;
+        }
+        world.insert(ground, down(BlockType::Mycelium, mycelium_material_id()));
+        scenery.mycelium.push(ground);
+        busy.push((x, z));
+    }
+
+    // Amethyst: budding blocks under interior columns, a cluster below the first.
+    for column in &lower.columns {
+        if scenery.amethyst.len() >= SCENERY_MAX_AMETHYST + 1 {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if column.ring
+            || !free(&busy, x, z)
+            || expansion_hash(terrain.seed, x, z, SCENERY_AMETHYST_SALT) >= 0.04
+        {
+            continue;
+        }
+        let Some(ground) = lowest(world, x, z) else {
+            continue;
+        };
+        let cell = IVec3::new(x, ground.y - 1, z);
+        if world.contains(cell) {
+            continue;
+        }
+        world.insert(
+            cell,
+            down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
+        );
+        scenery.amethyst.push(cell);
+        if scenery.amethyst.len() == 1 {
+            let cluster = IVec3::new(x, ground.y - 2, z);
+            world.insert(
+                cluster,
+                down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
+            );
+            scenery.amethyst.push(cluster);
+        }
+        busy.push((x, z));
+    }
+
+    // Crying obsidian on the ring in the sector's family colour.
+    for column in &lower.columns {
+        if scenery.crying_obsidian.len() >= SCENERY_MAX_CRYING_OBSIDIAN {
+            break;
+        }
+        let (x, z) = (column.x, column.z);
+        if !column.ring
+            || !free(&busy, x, z)
+            || expansion_hash(terrain.seed, x, z, SCENERY_OBSIDIAN_SALT) >= 0.1
+        {
+            continue;
+        }
+        let Some(ground) = lowest(world, x, z) else {
+            continue;
+        };
+        let cell = IVec3::new(x, ground.y - 1, z);
+        if world.contains(cell) {
+            continue;
+        }
+        let block = match family_zone(terrain, rhombus, x, z) {
+            Family::Crimson => down(
+                BlockType::CryingObsidianCrimson,
+                crying_obsidian_crimson_material_id(),
+            ),
+            Family::Orange => down(
+                BlockType::CryingObsidianOrange,
+                crying_obsidian_orange_material_id(),
+            ),
+            Family::Violet => down(
+                BlockType::CryingObsidianViolet,
+                crying_obsidian_violet_material_id(),
+            ),
+        };
+        world.insert(cell, block);
+        scenery.crying_obsidian.push(cell);
+        busy.push((x, z));
+    }
+    scenery
 }

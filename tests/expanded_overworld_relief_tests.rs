@@ -156,6 +156,7 @@ fn paved(scene: &WorldScene, x: i32, z: i32) -> bool {
     a.cells()
         .iter()
         .chain(a.accents.iter())
+        .chain(scene.expansion_scenery().upper.cells().iter())
         .any(|c| c.x == x && c.z == z)
 }
 
@@ -215,6 +216,9 @@ fn there_are_several_height_levels_including_terraces() {
     );
     // The ring steps down: every terrace cell is the grass top of its column.
     for cell in &scene.overworld_relief().terraces {
+        if paved(&scene, cell.x, cell.z) {
+            continue;
+        }
         assert_eq!(scene.column_top(cell.x, cell.z), Some(cell.y));
         assert_eq!(
             scene.world().get(*cell).map(|b| b.block_type()),

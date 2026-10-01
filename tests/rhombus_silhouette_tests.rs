@@ -334,10 +334,12 @@ fn the_overworld_surface_is_unchanged_outside_the_cut_and_the_pit() {
     let dug: Vec<IVec3> = scene.upper_descent().dug.clone();
     // Gate 15 grows the east lobe: its cells are new by design.
     let approach = scene.overworld_approach();
+    let scenery = scene.expansion_scenery().upper.cells();
     let grown = |cell: &IVec3| {
         scene.overworld_expansion().cells.contains(cell)
             || approach.cells().contains(cell)
             || approach.accents.contains(cell)
+            || scenery.contains(cell)
     };
     for z in 0..24 {
         for x in 0..24 {
