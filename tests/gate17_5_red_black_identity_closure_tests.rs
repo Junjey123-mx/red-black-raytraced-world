@@ -147,7 +147,7 @@ mod renderer {
 use camera::portal_crossing::{PortalCrossingDetector, PortalCrossingEvent, PortalVolume};
 use camera::world_collision::{
     CAMERA_COLLISION_RADIUS, COLLISION_SUBSTEP, CameraCollisionConfig, CollisionState,
-    is_camera_passable, is_camera_solid, is_position_clear, resolve_camera_motion,
+    is_camera_passable, is_camera_solid, resolve_camera_motion,
 };
 use camera::world_free_fly::{
     FreeFlyInput, WorldFreeFlyCameraState, WorldRealm, angles_for, apply_free_fly_input,
