@@ -12,6 +12,7 @@ use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::red_black_timber::{
     RED_BLACK_TIMBER_DIR, red_black_leaves_material_id, red_black_log_material_id,
+    red_black_wood_planks_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -211,6 +212,8 @@ pub struct OverworldBlockTextures {
     /// Corinto logs: dark crimson end grain on +Y/-Y, burgundy bark on the
     /// four sides, exactly the Overworld log's face layout.
     pub red_black_log: FaceTextures,
+    /// Corinto planks: the lower realm's path, floor and trim timber.
+    pub red_black_wood_planks: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -327,6 +330,7 @@ impl OverworldBlockTextures {
         let red_black_leaves = manager.load(format!("{RED_BLACK_TIMBER_DIR}/leaves.png"))?;
         let rb_log_end = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/end.png"))?;
         let rb_log_side = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/side.png"))?;
+        let rb_planks = manager.load(format!("{RED_BLACK_TIMBER_DIR}/wood_planks.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
@@ -404,6 +408,7 @@ impl OverworldBlockTextures {
                 rb_log_side,
                 rb_log_side,
             ),
+            red_black_wood_planks: FaceTextures::uniform(rb_planks),
         })
     }
 }
@@ -839,6 +844,14 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.22, 0.06, 0.10, 1.0), 0.07, 10.0)
             .with_reflectivity(0.015)
             .with_face_textures(textures.red_black_log),
+    );
+    // Red-Black wood planks: the Overworld planks' semimatte profile over
+    // deep corinto boards with black seams; never emissive.
+    library.insert(
+        red_black_wood_planks_material_id(),
+        Material::new(Color::new(0.50, 0.15, 0.17, 1.0), 0.06, 8.0)
+            .with_reflectivity(0.01)
+            .with_face_textures(textures.red_black_wood_planks),
     );
     // Nether wart block: dense fungal red, matte (specular 0.04, shininess 6,
     // reflectivity 0.01), opaque and never a light source of its own.
