@@ -1450,3 +1450,160 @@ pub fn furnish_fortress_hall(
     built.table.push(table);
     built
 }
+
+// ---------------------------------------------------------------------
+// Emissive composition and courtyard (C204)
+// ---------------------------------------------------------------------
+
+/// The finishing accents, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressComposition {
+    /// Crying-obsidian finials on the keep's free-corner pillars.
+    pub finials: Vec<IVec3>,
+    /// Coloured-brick parapet rhythm on the keep's roof line.
+    pub parapet: Vec<IVec3>,
+    /// Budding amethyst and its cluster on the curtain's free corner.
+    pub crystal: Vec<IVec3>,
+    /// Nether wart and mycelium patches replacing courtyard floor cells.
+    pub patches: Vec<(IVec3, BlockType)>,
+}
+
+impl FortressComposition {
+    /// Cells added (the patches replace floor cells and are not counted).
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.finials
+            .iter()
+            .chain(self.parapet.iter())
+            .chain(self.crystal.iter())
+            .copied()
+            .collect()
+    }
+}
+
+fn crying_obsidian(family: Family) -> BlockInstance {
+    match family {
+        Family::Crimson => down(
+            BlockType::CryingObsidianCrimson,
+            crying_obsidian_crimson_material_id(),
+        ),
+        Family::Orange => down(
+            BlockType::CryingObsidianOrange,
+            crying_obsidian_orange_material_id(),
+        ),
+        Family::Violet => down(
+            BlockType::CryingObsidianViolet,
+            crying_obsidian_violet_material_id(),
+        ),
+    }
+}
+
+/// Finishes the composition: a crying-obsidian finial in the nearest
+/// family's colour on each free keep pillar, a coloured-brick parapet on
+/// every other cell of the keep roof line, a budding amethyst with its
+/// cluster growing toward `-Y` on the curtain's tower-less corner, and
+/// nether wart (Crimson side) and mycelium (Violet side) patches in the
+/// courtyard alleys. No light is added: every accent is an emissive block
+/// already certified.
+pub fn integrate_fortress(
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressComposition {
+    let mut built = FortressComposition::default();
+    let k = layout.central_keep;
+    let lv = layout.levels;
+    let f = layout.footprint;
+    let crown_y = lv.keep_roof_y - 1;
+    for (x, z) in [
+        (k.min_x, k.min_z),
+        (k.min_x, k.max_z),
+        (k.max_x, k.min_z),
+        (k.max_x, k.max_z),
+    ] {
+        if layout.tower_at(x, z).is_some() {
+            continue;
+        }
+        let cell = IVec3::new(x, crown_y, z);
+        if world.contains(cell) || !world.contains(IVec3::new(x, lv.keep_roof_y, z)) {
+            continue;
+        }
+        // The east pillar answers the Orange tower; the west ones their side.
+        let family = if x == k.max_x {
+            Family::Orange
+        } else {
+            curtain_family(layout, x, z)
+        };
+        world.insert(cell, crying_obsidian(family));
+        built.finials.push(cell);
+    }
+    for z in k.min_z..=k.max_z {
+        for x in k.min_x..=k.max_x {
+            if !layout.is_keep_shell(x, z)
+                || layout.is_keep_corner(x, z)
+                || layout.tower_at(x, z).is_some()
+            {
+                continue;
+            }
+            let along = if z == k.min_z || z == k.max_z { x } else { z };
+            if along % 2 != (k.min_x + 1) % 2 {
+                continue;
+            }
+            let cell = IVec3::new(x, crown_y, z);
+            if world.contains(cell) {
+                continue;
+            }
+            world.insert(cell, family_brick(curtain_family(layout, x, z)));
+            built.parapet.push(cell);
+        }
+    }
+    // The curtain corner without a tower grows a crystal.
+    for (x, z) in [
+        (f.min_x, f.min_z),
+        (f.max_x, f.min_z),
+        (f.min_x, f.max_z),
+        (f.max_x, f.max_z),
+    ] {
+        if layout.tower_at(x, z).is_some() {
+            continue;
+        }
+        let budding = IVec3::new(x, lv.wall_top_y - 1, z);
+        let cluster = above(budding, 1);
+        if world.contains(budding) || world.contains(cluster) {
+            continue;
+        }
+        world.insert(
+            budding,
+            down(BlockType::BuddingAmethyst, budding_amethyst_material_id()),
+        );
+        world.insert(
+            cluster,
+            down(BlockType::AmethystCluster, amethyst_cluster_material_id()),
+        );
+        built.crystal.push(budding);
+        built.crystal.push(cluster);
+    }
+    // Patches in the north (Crimson) and south (Violet) alleys.
+    let routes: Vec<(i32, i32)> = layout
+        .interior_routes
+        .iter()
+        .flat_map(|r| r.iter().map(|c| (c.x, c.z)))
+        .collect();
+    let _ = routes;
+    for (z, block_type, material) in [
+        (
+            f.min_z + 1,
+            BlockType::NetherWartBlock,
+            nether_wart_block_material_id as fn() -> MaterialId,
+        ),
+        (f.max_z - 1, BlockType::Mycelium, mycelium_material_id),
+    ] {
+        for x in [k.min_x, k.min_x + 1] {
+            if !layout.courtyard.contains(&(x, z)) {
+                continue;
+            }
+            let cell = IVec3::new(x, lv.ground_y, z);
+            world.insert(cell, down(block_type, material()));
+            built.patches.push((cell, block_type));
+        }
+    }
+    built
+}

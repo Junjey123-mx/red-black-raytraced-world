@@ -30,9 +30,10 @@ use crate::scene::expansion::{
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::fortress::{
-    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressGate, FortressHall,
-    FortressKeep, RedBlackFortressLayout, build_family_tower, build_fortress_foundation,
-    build_fortress_gate, build_symbol_keep, furnish_fortress_hall, weave_colored_bricks,
+    FamilyTowerBuild, FortressColoredBricks, FortressComposition, FortressFoundation, FortressGate,
+    FortressHall, FortressKeep, RedBlackFortressLayout, build_family_tower,
+    build_fortress_foundation, build_fortress_gate, build_symbol_keep, furnish_fortress_hall,
+    integrate_fortress, weave_colored_bricks,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -114,6 +115,7 @@ pub struct WorldScene {
     fortress_keep: FortressKeep,
     fortress_gate: FortressGate,
     fortress_hall: FortressHall,
+    fortress_composition: FortressComposition,
     world: VoxelWorld,
 }
 
@@ -237,6 +239,7 @@ impl WorldScene {
         let fortress_keep = build_symbol_keep(&config, &fortress_layout, &mut world);
         let fortress_gate = build_fortress_gate(&config, &fortress_layout, &mut world);
         let fortress_hall = furnish_fortress_hall(&fortress_layout, &mut world);
+        let fortress_composition = integrate_fortress(&fortress_layout, &mut world);
         Self {
             config,
             field,
@@ -281,6 +284,7 @@ impl WorldScene {
             fortress_keep,
             fortress_gate,
             fortress_hall,
+            fortress_composition,
             world,
         }
     }
@@ -459,6 +463,7 @@ impl WorldScene {
             .chain(self.fortress_keep.cells().iter())
             .chain(self.fortress_gate.cells().iter())
             .chain(self.fortress_hall.cells().iter())
+            .chain(self.fortress_composition.added_cells().iter())
             .filter(|c| c.y < ground && seen.insert(**c))
             .copied()
             .collect()
@@ -473,6 +478,11 @@ impl WorldScene {
     /// of the Gate 15 masses.
     pub fn architecture_voxels(&self) -> usize {
         self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The finishing emissive composition (Gate 17).
+    pub fn fortress_composition(&self) -> &FortressComposition {
+        &self.fortress_composition
     }
 
     /// The council hall and keep stair (Gate 17).
