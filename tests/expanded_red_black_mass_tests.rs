@@ -166,12 +166,15 @@ fn the_lower_mass_is_one_connected_piece() {
     assert_eq!(main.len(), scene.world().len());
     let e = scene.red_black_expansion();
     assert!(!e.underside.is_empty() && !e.walls.is_empty());
+    // The underside continues the rim of the existing lower mass: the
+    // westernmost lower columns sit at the rim level (or one further, where
+    // the C181 relief pushed them) next to island cells.
     let l = scene.expansion_layout();
     let rim = lower_bottom_y(l, l.fortress_terrace_min_x - 1);
     let mut touching = 0;
     for c in e.columns.iter().filter(|c| c.x < l.fortress_terrace_min_x) {
-        assert_eq!(c.bottom_y, rim);
-        let west = IVec3::new(c.x - 1, c.bottom_y, c.z);
+        assert!(c.bottom_y == rim || c.bottom_y == rim - 1, "{c:?}");
+        let west = IVec3::new(c.x - 1, rim, c.z);
         if scene.world().contains(west) && !e.cells().contains(&west) {
             touching += 1;
         }
@@ -299,12 +302,17 @@ fn no_floating_slab_and_down_orientation() {
     for cell in e.cells() {
         let b = scene.world().get(cell).unwrap();
         assert_eq!(b.orientation(), Orientation::Down, "{cell:?}");
+        // Structure, or one of the surface blocks the C181 pass lays over it.
         assert!(
             matches!(
                 b.block_type(),
                 BlockType::Deepslate
                     | BlockType::SmoothBasalt
                     | BlockType::PolishedBlackstoneBricks
+                    | BlockType::Mycelium
+                    | BlockType::RedBlackDeepslateBricksCrimson
+                    | BlockType::RedBlackDeepslateBricksOrange
+                    | BlockType::RedBlackDeepslateBricksViolet
             ),
             "{cell:?} is {:?}",
             b.block_type()
@@ -326,6 +334,7 @@ fn no_floating_slab_and_down_orientation() {
         .count();
         assert!(n >= 1, "{cell:?} floats");
     }
+    // The terrace steps one cell per column from the rim to the pad.
     let l = scene.expansion_layout();
     for x in l.fortress_terrace_min_x..=l.fortress_terrace_max_x {
         assert_eq!(lower_bottom_y(l, x), lower_bottom_y(l, x + 1) - 1);
@@ -335,7 +344,6 @@ fn no_floating_slab_and_down_orientation() {
         l.fortress_pad_bottom_y
     );
 }
-
 #[test]
 fn the_voxel_budget_is_respected() {
     let scene = WorldScene::new();

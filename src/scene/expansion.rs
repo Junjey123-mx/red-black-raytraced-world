@@ -21,7 +21,7 @@ use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basi
 use crate::scene::overworld_blocks::{
     cobblestone_material_id, deepslate_material_id, fence_material_id, log_material_id,
 };
-use crate::scene::red_black_maze::lower_mass_block;
+use crate::scene::red_black_maze::{Family, lower_mass_block, surface_block};
 use crate::scene::rhombus::RhombusConfig;
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::terrain::generator::stratum_material;
@@ -213,6 +213,8 @@ const CUT_SALT: u32 = 0x1500_0003;
 const EXPOSURE_SALT: u32 = 0x1500_0004;
 const RISE_SALT: u32 = 0x1500_0005;
 const PAVING_SALT: u32 = 0x1500_0006;
+const SURFACE_RELIEF_SALT: u32 = 0x1500_0007;
+const FAMILY_SCATTER_SALT: u32 = 0x1500_0008;
 
 /// Layers of the lobe's upper geology: the grass, the dirt below it and
 /// the stone under that. Deepslate follows below on the visible ring.
@@ -840,4 +842,84 @@ pub fn build_red_black_expansion(
         }
     }
     lower
+}
+
+// ---------------------------------------------------------------------
+// Red-Black surface (C181)
+// ---------------------------------------------------------------------
+
+/// Share of lower columns (outside the pad) whose ground steps one cell
+/// further from the mass (relief of the underside).
+pub const LOWER_SURFACE_RELIEF_SHARE: f32 = 0.15;
+/// Share of surface cells that take a family brick of a family other than
+/// the sector's own, so all three families read across the expansion.
+pub const FAMILY_SCATTER_SHARE: f32 = 0.10;
+
+/// The new -Y-facing surface as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackSurfaceExtension {
+    /// The ground cell of every lower column (all `Down`).
+    pub cells: Vec<IVec3>,
+    /// Cells added one further from the mass (the raised relief).
+    pub raised: Vec<IVec3>,
+}
+
+/// Covers the lower shell with Red-Black ground: every underside cell
+/// becomes a `Down` surface block from the same deterministic mix the
+/// certified underside uses (mycelium, smooth basalt, polished blackstone,
+/// the sector's family bricks), with a restrained scatter of the other two
+/// families' bricks so the expansion reads as one blended dark surface
+/// rather than colour rectangles. Outside the pad a share of columns gains
+/// one more cell toward -Y (relief); the pad stays level.
+pub fn extend_red_black_surface(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    layout: &WorldExpansionLayout,
+    lower: &mut RedBlackExpansion,
+    world: &mut VoxelWorld,
+) -> RedBlackSurfaceExtension {
+    let mut surface = RedBlackSurfaceExtension::default();
+    let pad = layout.red_black_fortress_pad;
+    for i in 0..lower.columns.len() {
+        let c = lower.columns[i];
+        let mut ground = IVec3::new(c.x, c.bottom_y, c.z);
+        if !pad.contains(c.x, c.z)
+            && expansion_hash(terrain.seed, c.x, c.z, SURFACE_RELIEF_SALT)
+                < LOWER_SURFACE_RELIEF_SHARE
+        {
+            let deeper = IVec3::new(c.x, c.bottom_y - 1, c.z);
+            if !world.contains(deeper) {
+                // The old ground stays as structure; the new cell is the ground.
+                let (block_type, material) =
+                    lower_mass_block(terrain, rhombus, c.x, c.bottom_y, c.z);
+                world.insert(
+                    ground,
+                    BlockInstance::new(block_type, material, Orientation::Down),
+                );
+                ground = deeper;
+                lower.columns[i].bottom_y = deeper.y;
+                surface.raised.push(deeper);
+            }
+        }
+        let (mut block_type, mut material) = surface_block(terrain, rhombus, c.x, c.z);
+        let scatter = expansion_hash(terrain.seed, c.x, c.z, FAMILY_SCATTER_SALT);
+        if scatter < FAMILY_SCATTER_SHARE {
+            let family = if scatter < FAMILY_SCATTER_SHARE / 3.0 {
+                Family::Crimson
+            } else if scatter < 2.0 * FAMILY_SCATTER_SHARE / 3.0 {
+                Family::Violet
+            } else {
+                Family::Orange
+            };
+            let bricks = family.bricks();
+            block_type = bricks.0;
+            material = bricks.1;
+        }
+        world.insert(
+            ground,
+            BlockInstance::new(block_type, material, Orientation::Down),
+        );
+        surface.cells.push(ground);
+    }
+    surface
 }

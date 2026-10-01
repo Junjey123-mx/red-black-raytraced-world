@@ -18,8 +18,9 @@ use crate::scene::descent::{
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
     EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, RedBlackExpansion,
-    WorldExpansionLayout, build_overworld_expansion, build_red_black_expansion,
-    pave_overworld_approach, shape_overworld_relief,
+    RedBlackSurfaceExtension, WorldExpansionLayout, build_overworld_expansion,
+    build_red_black_expansion, extend_red_black_surface, pave_overworld_approach,
+    shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -81,6 +82,7 @@ pub struct WorldScene {
     overworld_relief: OverworldRelief,
     overworld_approach: OverworldApproach,
     red_black_expansion: RedBlackExpansion,
+    red_black_surface_extension: RedBlackSurfaceExtension,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -129,11 +131,18 @@ impl WorldScene {
             &mut world,
         );
         let overworld_approach = pave_overworld_approach(&config, &expansion_layout, &mut world);
-        let red_black_expansion = build_red_black_expansion(
+        let mut red_black_expansion = build_red_black_expansion(
             &config,
             &rhombus,
             &expansion_layout,
             &overworld_expansion,
+            &mut world,
+        );
+        let red_black_surface_extension = extend_red_black_surface(
+            &config,
+            &rhombus,
+            &expansion_layout,
+            &mut red_black_expansion,
             &mut world,
         );
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
@@ -161,6 +170,7 @@ impl WorldScene {
             overworld_relief,
             overworld_approach,
             red_black_expansion,
+            red_black_surface_extension,
             silhouette,
             world,
         }
@@ -241,6 +251,11 @@ impl WorldScene {
     /// The lower shell of the east lobe (Gate 15).
     pub fn red_black_expansion(&self) -> &RedBlackExpansion {
         &self.red_black_expansion
+    }
+
+    /// The -Y-facing surface over the east lobe (Gate 15).
+    pub fn red_black_surface_extension(&self) -> &RedBlackSurfaceExtension {
+        &self.red_black_surface_extension
     }
 
     pub fn silhouette(&self) -> &Silhouette {
