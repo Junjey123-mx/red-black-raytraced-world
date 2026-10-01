@@ -12,10 +12,10 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::{IVec3, Vec3};
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::castle::{
-    CastleFoundation, CastleFurniture, CastleGatehouse, CastleKeep, CastleStairs, CastleTowers,
-    CastleWindows, OverworldCastleLayout, build_castle_foundation, build_castle_gatehouse,
-    build_castle_keep, build_castle_stairs, build_castle_towers, furnish_castle_hall,
-    glaze_castle_windows,
+    CastleDetails, CastleFoundation, CastleFurniture, CastleGatehouse, CastleKeep, CastleStairs,
+    CastleTowers, CastleWindows, OverworldCastleLayout, build_castle_foundation,
+    build_castle_gatehouse, build_castle_keep, build_castle_stairs, build_castle_towers,
+    detail_castle, furnish_castle_hall, glaze_castle_windows,
 };
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
@@ -101,6 +101,7 @@ pub struct WorldScene {
     castle_windows: CastleWindows,
     castle_stairs: CastleStairs,
     castle_furniture: CastleFurniture,
+    castle_details: CastleDetails,
     world: VoxelWorld,
 }
 
@@ -196,6 +197,7 @@ impl WorldScene {
         let castle_windows = glaze_castle_windows(&castle_layout, &mut world);
         let castle_stairs = build_castle_stairs(&castle_layout, &mut world);
         let castle_furniture = furnish_castle_hall(&castle_layout, &mut world);
+        let castle_details = detail_castle(&config, &castle_layout, &mut world);
         Self {
             config,
             field,
@@ -232,6 +234,7 @@ impl WorldScene {
             castle_windows,
             castle_stairs,
             castle_furniture,
+            castle_details,
             world,
         }
     }
@@ -357,6 +360,7 @@ impl WorldScene {
             .chain(self.castle_windows.glass.iter())
             .chain(self.castle_stairs.cells().iter())
             .chain(self.castle_furniture.cells().iter())
+            .chain(self.castle_details.cells().iter())
             .filter(|c| c.y > ground && seen.insert(**c))
             .copied()
             .collect()
@@ -385,6 +389,11 @@ impl WorldScene {
     /// The great hall's furniture (Gate 16).
     pub fn castle_furniture(&self) -> &CastleFurniture {
         &self.castle_furniture
+    }
+
+    /// Lamps, parapets and courtyard details (Gate 16).
+    pub fn castle_details(&self) -> &CastleDetails {
+        &self.castle_details
     }
 
     /// The towers and battlements (Gate 16).

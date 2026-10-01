@@ -228,7 +228,11 @@ fn stone_family(t: BlockType) -> bool {
     // A later stage may set a window bay (Glass) into a shell cell.
     matches!(
         t,
-        BlockType::Stone | BlockType::Cobblestone | BlockType::DeepslateBricks | BlockType::Glass
+        BlockType::Stone
+            | BlockType::Cobblestone
+            | BlockType::DeepslateBricks
+            | BlockType::Glass
+            | BlockType::RedstoneLampLit
     )
 }
 

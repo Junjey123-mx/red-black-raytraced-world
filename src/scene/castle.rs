@@ -12,7 +12,9 @@ use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::expansion::{WorldExpansionLayout, expansion_hash};
-use crate::scene::material_gallery::{deepslate_bricks_material_id, glass_material_id};
+use crate::scene::material_gallery::{
+    deepslate_bricks_material_id, glass_material_id, redstone_lamp_material_id,
+};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
 use crate::scene::overworld_blocks::{
@@ -1040,6 +1042,133 @@ pub fn furnish_castle_hall(
             IVec3::new(tx - 1, uy, h.min_z + 2),
             Orientation::East,
         );
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Details (C193)
+// ---------------------------------------------------------------------
+
+/// The finishing details, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleDetails {
+    /// Lit redstone lamps: sconces set into walls and lamps on posts.
+    pub lamps: Vec<IVec3>,
+    /// Merlons along the keep's roof line (every other cell).
+    pub keep_merlons: Vec<IVec3>,
+    /// Fence posts and rails in the courtyard alleys.
+    pub rails: Vec<IVec3>,
+}
+
+impl CastleDetails {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.lamps
+            .iter()
+            .chain(self.keep_merlons.iter())
+            .chain(self.rails.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Finishes the castle: lamp sconces replace one masonry cell on each side
+/// above the gate, two on the hall's east wall at eye level and one in the
+/// upper room's west wall; the north and south alleys beside the keep are
+/// lined with fence rails ending in a lamp post each; and merlons give the
+/// keep roof the curtain wall's rhythm. Lamps are emissive blocks
+/// only: no point light is added.
+pub fn detail_castle(
+    terrain: &TerrainConfig,
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleDetails {
+    let mut built = CastleDetails::default();
+    let lv = layout.levels;
+    let lamp = || up(BlockType::RedstoneLampLit, redstone_lamp_material_id());
+    let masonry_at = |world: &VoxelWorld, cell: IVec3| {
+        world.get(cell).is_some_and(|b| {
+            matches!(
+                b.block_type(),
+                BlockType::Stone | BlockType::Cobblestone | BlockType::DeepslateBricks
+            )
+        })
+    };
+    // Sconces: above the gate, in the hall's east wall, in the upper room.
+    let g = layout.gatehouse;
+    let mut sconces = vec![
+        IVec3::new(g.min_x, lv.wall_top_y, g.min_z),
+        IVec3::new(g.min_x, lv.wall_top_y, g.max_z),
+        IVec3::new(layout.keep.max_x, lv.base_y + 1, layout.hall.min_z + 1),
+        IVec3::new(layout.keep.max_x, lv.base_y + 1, layout.hall.max_z),
+        IVec3::new(
+            layout.keep.min_x,
+            lv.upper_floor_y + 2,
+            layout.hall.min_z + 2,
+        ),
+    ];
+    sconces.retain(|c| masonry_at(world, *c) && !layout.windows.contains(c));
+    for cell in sconces {
+        world.insert(cell, lamp());
+        built.lamps.push(cell);
+    }
+    // Lamp posts at the far end of the north and south alleys (the rails
+    // below line the alley up to them, so no walkable pocket is cut off).
+    let post_x = layout.keep.min_x + 2;
+    for z in [layout.footprint.min_z + 1, layout.footprint.max_z - 1] {
+        if !layout.courtyard.contains(&(post_x, z)) {
+            continue;
+        }
+        let post = IVec3::new(post_x, lv.base_y, z);
+        let top = IVec3::new(post_x, lv.base_y + 1, z);
+        if world.contains(post) || world.contains(top) {
+            continue;
+        }
+        world.insert(
+            post,
+            BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::Up),
+        );
+        world.insert(top, lamp());
+        built.rails.push(post);
+        built.lamps.push(top);
+    }
+    // Keep merlons: the roof line, every other cell, free corners and
+    // tower cells excepted.
+    let k = layout.keep;
+    for z in k.min_z..=k.max_z {
+        for x in k.min_x..=k.max_x {
+            if !layout.is_keep_shell(x, z) || layout.tower_at(x, z).is_some() {
+                continue;
+            }
+            let along = if z == k.min_z || z == k.max_z { x } else { z };
+            if along % MERLON_PERIOD != k.min_x % MERLON_PERIOD {
+                continue;
+            }
+            let cell = IVec3::new(x, lv.keep_roof_y + 1, z);
+            if world.contains(cell) || !world.contains(IVec3::new(x, lv.keep_roof_y, z)) {
+                continue;
+            }
+            world.insert(cell, masonry(terrain.seed, cell));
+            built.keep_merlons.push(cell);
+        }
+    }
+    // Alley rails: along the keep's north and south faces, one cell out,
+    // from the alley mouth to the lamp post.
+    for z in [k.min_z - 1, k.max_z + 1] {
+        for x in k.min_x..(k.min_x + 2) {
+            if !layout.courtyard.contains(&(x, z)) {
+                continue;
+            }
+            let cell = IVec3::new(x, lv.base_y, z);
+            if world.contains(cell) {
+                continue;
+            }
+            world.insert(
+                cell,
+                BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::Up),
+            );
+            built.rails.push(cell);
+        }
     }
     built
 }

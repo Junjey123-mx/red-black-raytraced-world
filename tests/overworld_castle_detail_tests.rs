@@ -139,15 +139,14 @@ mod renderer {
 }
 
 use camera::world_collision::{
-    CameraCollisionConfig, CollisionState, is_camera_passable, is_camera_solid, is_position_clear,
+    CameraCollisionConfig, is_camera_passable, is_camera_solid, is_position_clear,
     resolve_camera_motion,
 };
 use core::math::{IVec3, Vec3};
 use scene::block_type::BlockType;
-use scene::castle::{GATE_WIDTH, PASSAGE_HEIGHT};
-use scene::orientation::Orientation;
-use scene::overworld_blocks::{wood_door_bottom_material_id, wood_door_top_material_id};
-use scene::world::WorldScene;
+use scene::light::Light;
+use scene::overworld::HOUSE_FOOTPRINT;
+use scene::world::{WorldScene, world_lights};
 
 fn v(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, y, z)
@@ -213,178 +212,187 @@ fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, &back);
 }
 
-/// Eye points from the approach, through the gate, into the courtyard.
-fn entrance(scene: &WorldScene) -> Vec<Vec3> {
-    let c = scene.castle_layout();
-    let end = c.keep.min_x;
-    c.interior_route
-        .iter()
-        .take_while(|r| r.x < end)
-        .map(|r| eye(*r))
-        .collect()
-}
-
-/// Columns where a later stage (C193) stands a fence post, rail or lamp.
-fn detailed(scene: &WorldScene, x: i32, z: i32) -> bool {
-    scene
-        .castle_details()
-        .cells()
-        .iter()
-        .any(|c| c.x == x && c.z == z)
-}
-
 #[test]
-fn the_door_is_visible_in_the_gate() {
+fn lamps_are_present_and_restrained() {
     let scene = WorldScene::new();
     let c = scene.castle_layout();
-    let g = scene.castle_gatehouse();
-    assert_eq!(g.door.len(), (GATE_WIDTH * PASSAGE_HEIGHT) as usize);
-    let mut cells = g.door.clone();
-    cells.sort_by_key(|c| (c.z, c.y));
-    let mut expected = c.gate.cells();
-    expected.sort_by_key(|c| (c.z, c.y));
-    assert_eq!(cells, expected);
-    for cell in &g.door {
-        let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.block_type(), BlockType::WoodDoor);
-        assert_eq!(b.orientation(), Orientation::West);
-        let expected = if cell.y == c.gate.base.y {
-            wood_door_bottom_material_id()
-        } else {
-            wood_door_top_material_id()
-        };
-        assert_eq!(b.material_id(), expected);
-    }
-    // Framed: masonry above and beside, roof over the passage.
-    let lintel = IVec3::new(c.gate.base.x, c.gate.base.y + PASSAGE_HEIGHT, c.gate.base.z);
-    assert!(scene.world().contains(lintel));
-    assert_eq!(
-        g.roof.len(),
-        (c.gatehouse.width() * c.gatehouse.depth()) as usize
+    let d = scene.castle_details();
+    assert!(
+        d.lamps.len() >= 5 && d.lamps.len() <= 10,
+        "{}",
+        d.lamps.len()
     );
-    for r in &g.roof {
-        assert_eq!(
-            scene.world().get(*r).unwrap().block_type(),
-            BlockType::WoodPlanks
-        );
-        assert_eq!(r.y, c.levels.wall_top_y + 1);
+    for cell in &d.lamps {
+        let b = scene.world().get(*cell).unwrap();
+        assert_eq!(b.block_type(), BlockType::RedstoneLampLit);
+        assert!(c.footprint.contains(cell.x, cell.z));
+        assert!(is_camera_solid(b));
+    }
+    let on_gate = d
+        .lamps
+        .iter()
+        .filter(|l| c.gatehouse.contains(l.x, l.z))
+        .count();
+    let on_keep = d.lamps.iter().filter(|l| c.is_keep_shell(l.x, l.z)).count();
+    let on_posts = d
+        .lamps
+        .iter()
+        .filter(|l| c.courtyard.contains(&(l.x, l.z)))
+        .count();
+    assert!(
+        on_gate >= 2 && on_keep >= 2 && on_posts >= 1,
+        "gate {on_gate} keep {on_keep} posts {on_posts}"
+    );
+    // Every lamp has a solid cell below or beside it: no floating lights.
+    for cell in &d.lamps {
+        let supported = [(0, -1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)]
+            .iter()
+            .any(|(dx, dy, dz)| {
+                scene
+                    .world()
+                    .contains(IVec3::new(cell.x + dx, cell.y + dy, cell.z + dz))
+            });
+        assert!(supported, "{cell:?}");
     }
     println!(
-        "GATE16 gatehouse: posts={} walls={} roof={} door={} rail={} castle_voxels={} voxels={}",
-        g.posts.len(),
-        g.walls.len(),
-        g.roof.len(),
-        g.door.len(),
-        g.rail.len(),
+        "GATE16 details: lamps={} keep_merlons={} rails={} castle_voxels={} voxels={}",
+        d.lamps.len(),
+        d.keep_merlons.len(),
+        d.rails.len(),
         scene.castle_voxels(),
         scene.world().len()
     );
 }
 
 #[test]
-fn the_door_is_passable_and_the_walls_solid() {
-    let scene = WorldScene::new();
-    let g = scene.castle_gatehouse();
-    for cell in &g.door {
-        let b = scene.world().get(*cell).unwrap();
-        assert!(is_camera_passable(b.block_type()));
-        assert!(!is_camera_solid(b));
-    }
-    for cell in g
-        .posts
+fn the_point_light_count_is_unchanged() {
+    let lights = world_lights();
+    assert_eq!(lights.len(), 5);
+    let points = lights
         .iter()
-        .chain(g.walls.iter())
-        .chain(g.roof.iter())
-        .chain(g.rail.iter())
-    {
-        let b = scene.world().get(*cell).unwrap();
-        assert!(is_camera_solid(b), "{cell:?}");
-    }
-    for cell in &g.posts {
-        assert_eq!(
-            scene.world().get(*cell).unwrap().block_type(),
-            BlockType::Log
-        );
-    }
-    for cell in &g.rail {
-        assert_eq!(
-            scene.world().get(*cell).unwrap().block_type(),
-            BlockType::Fence
-        );
-    }
-    // The eye inside the door cell is clear; one cell into the jamb it is not.
-    let c = scene.castle_layout();
-    let d = c.gate.base;
-    assert!(clear(
-        &scene,
-        v(d.x as f32 + 0.5, d.y as f32 + 1.0, d.z as f32 + 1.0)
-    ));
-    assert!(!clear(
-        &scene,
-        v(d.x as f32 + 0.5, d.y as f32 + 1.0, d.z as f32 - 0.5)
-    ));
-    assert!(!clear(
-        &scene,
-        v(
-            d.x as f32 + 0.5,
-            d.y as f32 + 1.0,
-            d.z as f32 + GATE_WIDTH as f32 + 0.5
-        )
-    ));
+        .filter(|l| !matches!(l, Light::Directional(_)))
+        .count();
+    assert_eq!(points, 4);
+    let castle = std::fs::read_to_string("src/scene/castle.rs").unwrap();
+    assert!(!castle.contains("PointLight") && !castle.contains("Light::"));
+    let world = std::fs::read_to_string("src/scene/world.rs").unwrap();
+    assert_eq!(world.matches("PointLight::new(").count(), 0);
 }
 
 #[test]
-fn the_approach_continues_through_the_gate() {
-    let scene = WorldScene::new();
-    assert!(CollisionState::new().collision_enabled());
-    let mut points: Vec<Vec3> = scene
-        .overworld_approach()
-        .main
-        .iter()
-        .map(|c| eye(*c))
-        .collect();
-    points.extend(entrance(&scene));
-    walk_both_ways(&scene, &points);
-}
-
-#[test]
-fn the_courtyard_is_reachable_without_noclip() {
+fn the_courtyard_route_stays_clear() {
     let scene = WorldScene::new();
     let c = scene.castle_layout();
-    let mut points = entrance(&scene);
     let g = c.levels.ground_y;
-    // Every courtyard column, from the gate.
-    let last = *points.last().unwrap();
-    for (x, z) in &c.courtyard {
-        if detailed(&scene, *x, *z) {
-            continue;
-        }
-        let target = v(*x as f32 + 0.5, g as f32 + 2.0, *z as f32 + 0.5);
-        assert!(clear(&scene, target), "({x},{z})");
-        let mut route = points.clone();
-        route.push(target);
-        let _ = last;
-        walk(&scene, &route);
+    let route: Vec<Vec3> = c.interior_route.iter().map(|r| eye(*r)).collect();
+    walk_both_ways(&scene, &route);
+    // Details never stand on a route column.
+    for cell in scene.castle_details().cells() {
+        assert!(
+            !c.interior_route
+                .iter()
+                .any(|r| r.x == cell.x && r.z == cell.z && cell.y <= r.y + 2),
+            "{cell:?} on the route"
+        );
     }
-    points.push(eye(IVec3::new(c.courtyard[0].0, g, c.courtyard[0].1)));
-    walk_both_ways(&scene, &points);
+    // The gate row and the row to the keep door stay open across the yard.
+    for x in (c.gatehouse.max_x + 1)..c.keep.min_x {
+        for z in [c.gate.base.z, c.keep_door.base.z] {
+            for dy in 1..=2 {
+                assert!(
+                    !scene.world().contains(IVec3::new(x, g + dy, z)),
+                    "({x},{z}) + {dy}"
+                );
+            }
+        }
+    }
+    // Merlons and rails rest on something.
+    let d = scene.castle_details();
+    for cell in d.keep_merlons.iter().chain(d.rails.iter()) {
+        assert!(
+            scene
+                .world()
+                .contains(IVec3::new(cell.x, cell.y - 1, cell.z)),
+            "{cell:?} floats"
+        );
+    }
+    assert!(d.keep_merlons.len() >= 4, "{}", d.keep_merlons.len());
+    for m in &d.keep_merlons {
+        assert_eq!(m.y, c.levels.keep_roof_y + 1);
+        assert!(c.is_keep_shell(m.x, m.z));
+    }
 }
 
 #[test]
-fn the_gatehouse_stays_within_its_block() {
+fn the_details_are_deterministic() {
+    let a = WorldScene::new();
+    let b = WorldScene::new();
+    assert_eq!(a.castle_details(), b.castle_details());
+    assert_eq!(a.castle_furniture(), b.castle_furniture());
+    assert_eq!(a.castle_cells().len(), b.castle_cells().len());
+    assert_eq!(a.world().len(), b.world().len());
+    for cell in a.castle_cells() {
+        assert_eq!(a.world().get(cell), b.world().get(cell));
+    }
+}
+
+#[test]
+fn the_house_remains_a_separate_landmark() {
     let scene = WorldScene::new();
     let c = scene.castle_layout();
-    let g = scene.castle_gatehouse();
-    for cell in g.cells() {
-        assert!(c.gatehouse.contains(cell.x, cell.z), "{cell:?}");
-        assert!(cell.y > c.levels.ground_y && cell.y <= c.levels.wall_top_y + 2);
+    let house = HOUSE_FOOTPRINT.grown(3);
+    for cell in scene.castle_cells() {
+        assert!(c.footprint.contains(cell.x, cell.z), "{cell:?} off the pad");
+        assert!(!house.contains(cell.x, cell.z));
     }
-    // The passage keeps its head room (two cells) under lintel and roof.
-    for (x, z) in c.gatehouse_passage() {
-        for dy in 1..=2 {
-            let cell = IVec3::new(x, c.levels.ground_y + dy, z);
-            let open = !scene.world().contains(cell) || g.door.contains(&cell);
-            assert!(open, "{cell:?}");
-        }
+    assert!(
+        c.footprint.min_x - HOUSE_FOOTPRINT.max_x >= 10,
+        "the castle crowds the house"
+    );
+    // The house door is still reachable from the path and passable.
+    let door = &scene.house_exterior().door;
+    for d in door {
+        assert!(is_camera_passable(
+            scene.world().get(*d).unwrap().block_type()
+        ));
+    }
+    let lower = door[0];
+    let start = scene.path().start().unwrap();
+    let points = [
+        eye(start),
+        v(
+            lower.x as f32 + 0.5,
+            lower.y as f32 + 0.5,
+            lower.z as f32 + 1.5,
+        ),
+        v(
+            lower.x as f32 + 0.5,
+            lower.y as f32 + 0.5,
+            lower.z as f32 + 0.5,
+        ),
+        v(
+            lower.x as f32 + 0.5,
+            lower.y as f32 + 0.5,
+            lower.z as f32 - 1.5,
+        ),
+    ];
+    walk_both_ways(&scene, &points);
+    // The house keeps its own lamps, glass, fence and roof.
+    let h = scene.house_exterior();
+    assert_eq!(h.lamps.len(), 2);
+    for cell in &h.lamps {
+        assert_eq!(
+            scene.world().get(*cell).unwrap().block_type(),
+            BlockType::RedstoneLampLit
+        );
+    }
+    for cell in h.glass.iter() {
+        assert_eq!(
+            scene.world().get(*cell).unwrap().block_type(),
+            BlockType::Glass
+        );
+    }
+    for (cell, t, _) in &h.roof {
+        assert_eq!(scene.world().get(*cell).unwrap().block_type(), *t);
     }
 }

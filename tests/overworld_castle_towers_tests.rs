@@ -167,6 +167,15 @@ fn stone_family(t: BlockType) -> bool {
     )
 }
 
+/// Columns where a later stage (C193) stands a fence post, rail or lamp.
+fn detailed(scene: &WorldScene, x: i32, z: i32) -> bool {
+    scene
+        .castle_details()
+        .cells()
+        .iter()
+        .any(|c| c.x == x && c.z == z)
+}
+
 #[test]
 fn the_tower_count_and_sizes_are_valid() {
     let scene = WorldScene::new();
@@ -308,6 +317,9 @@ fn the_approach_gate_and_courtyard_stay_open() {
         assert!(scene.world().get(cell).is_none_or(|b| !is_camera_solid(b)));
     }
     for (x, z) in c.courtyard.iter().chain(c.gatehouse_passage().iter()) {
+        if detailed(&scene, *x, *z) {
+            continue;
+        }
         for dy in 1..=2 {
             // Nothing solid (the gate's door is passable).
             let open = scene

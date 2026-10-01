@@ -160,11 +160,24 @@ fn eye(c: IVec3) -> Vec3 {
 }
 
 fn masonry(t: BlockType) -> bool {
-    // Later stages (towers, keep) may re-lay a curtain cell in deepslate bricks.
+    // Later stages may re-lay a curtain cell in deepslate bricks or set a
+    // lamp sconce into it.
     matches!(
         t,
-        BlockType::Stone | BlockType::Cobblestone | BlockType::DeepslateBricks
+        BlockType::Stone
+            | BlockType::Cobblestone
+            | BlockType::DeepslateBricks
+            | BlockType::RedstoneLampLit
     )
+}
+
+/// Columns where a later stage (C193) stands a fence post, rail or lamp.
+fn detailed(scene: &WorldScene, x: i32, z: i32) -> bool {
+    scene
+        .castle_details()
+        .cells()
+        .iter()
+        .any(|c| c.x == x && c.z == z)
 }
 
 #[test]
@@ -230,6 +243,9 @@ fn the_courtyard_is_paved_and_clear() {
     let c = scene.castle_layout();
     let g = c.levels.ground_y;
     for (x, z) in c.courtyard.iter().chain(c.gatehouse_passage().iter()) {
+        if detailed(&scene, *x, *z) {
+            continue;
+        }
         let ground = IVec3::new(*x, g, *z);
         assert_eq!(
             scene.world().get(ground).unwrap().block_type(),
@@ -328,6 +344,9 @@ fn the_curtain_wall_is_anchored_and_hollow() {
     // Hollow: the column just inside the wall holds nothing at wall height
     // where it is courtyard.
     for (x, z) in &c.courtyard {
+        if detailed(&scene, *x, *z) {
+            continue;
+        }
         for y in c.levels.base_y..=c.levels.wall_top_y {
             assert!(!scene.world().contains(IVec3::new(*x, y, *z)));
         }
