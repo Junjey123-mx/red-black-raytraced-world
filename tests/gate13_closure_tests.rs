@@ -324,9 +324,9 @@ fn camera_catalog_and_constraints_26_to_33() {
     assert_ne!(view, start);
     view.reset();
     assert_eq!(view, start); // 27
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().len(), 41);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().len(), 46);
     assert_eq!(
         gallery_camera(4.0 / 3.0).position,
         Vec3::new(6.0, 5.6, 14.0)

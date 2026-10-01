@@ -678,9 +678,9 @@ fn voxel_and_light_budgets_are_respected() {
 // 13: Catalog, crates, Raylib 3D, protected code.
 #[test]
 fn catalog_crates_and_protected_code_are_unchanged() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().entries().len(), 41);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().entries().len(), 46);
     let manifest = std::fs::read_to_string("Cargo.toml").unwrap();
     let deps = &manifest[manifest.find("[dependencies]").unwrap()..];
     let deps = &deps[..deps.find("\n[").map_or(deps.len(), |i| i)];

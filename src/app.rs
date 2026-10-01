@@ -77,7 +77,7 @@ trait ViewerMode {
     }
 }
 
-/// The block catalog: the definitive 39-block `CatalogScene` plus the optical
+/// The block catalog: the definitive 44-block `CatalogScene` plus the optical
 /// diagnostics, lit by the gallery lights, with selection and focus keys.
 struct CatalogMode {
     catalog: CatalogScene,
@@ -649,7 +649,7 @@ fn run_viewer<M: ViewerMode>(build_mode: impl FnOnce(&mut TextureManager) -> M) 
 }
 
 /// The catalog application: the shared runtime showing the definitive
-/// 39-block `CatalogScene` and its diagnostics, with selection and focus.
+/// 44-block `CatalogScene` and its diagnostics, with selection and focus.
 pub fn run_catalog_app() {
     run_viewer(CatalogMode::new);
 }

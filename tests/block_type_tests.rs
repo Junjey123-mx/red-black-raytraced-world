@@ -106,12 +106,21 @@ fn catalog_contains_representative_blocks_of_all_three_families() {
     assert_eq!(overworld.len(), 17);
     assert_eq!(portal.len(), 2);
     assert_eq!(red_black.len(), 20);
+    // Gate 17.5: the Red-Black organic / timber family.
+    let timber = [
+        BlockType::RedBlackLeaves,
+        BlockType::RedBlackLog,
+        BlockType::RedBlackWoodPlanks,
+        BlockType::RedBlackFence,
+        BlockType::RedBlackWoodDoor,
+    ];
 
     // The whole official catalog is pairwise distinct.
     let all: HashSet<BlockType> = overworld
         .iter()
         .chain(portal.iter())
         .chain(red_black.iter())
+        .chain(timber.iter())
         .copied()
         .collect();
     assert_eq!(all.len(), OFFICIAL_BLOCK_COUNT);

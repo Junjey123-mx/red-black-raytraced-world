@@ -367,10 +367,10 @@ fn camera_catalog_and_gate_boundaries_are_respected() {
     assert!(camera.target.y < 0.0 && camera.target.y > r.lower_tip_y as f32);
     assert!(camera.position.y > camera.target.y);
     assert!((camera.position - camera.target).length() > 30.0);
-    // 19. Catalog 39/39.
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().len(), 41);
+    // 19. Catalog 44/44 (39/39 before Gate 17.5).
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().len(), 46);
     // 20. no Gate 14/15 features: sky is still the procedural gradient, no
     // threads, no cubemap, no gameplay.
     assert!(world_background().is_sky());

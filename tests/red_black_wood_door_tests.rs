@@ -380,7 +380,7 @@ fn the_collision_contract_is_explicit() {
         3,
         "exactly three passable blocks:\n{body}"
     );
-    let passable: Vec<BlockType> = BlockType::ALL
+    let passable: std::collections::HashSet<BlockType> = BlockType::ALL
         .iter()
         .copied()
         .chain([BlockType::RedBlackWoodDoor])

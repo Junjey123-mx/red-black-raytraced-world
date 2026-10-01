@@ -191,7 +191,7 @@ fn main_is_a_thin_entrypoint_without_its_own_module_tree() {
 
 #[test]
 fn the_catalog_scene_still_builds_with_every_official_block() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
     let scene = CatalogScene::new();
     assert_eq!(scene.len(), OFFICIAL_BLOCK_COUNT + 2);
     let official = official_entries();

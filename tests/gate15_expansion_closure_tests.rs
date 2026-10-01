@@ -630,9 +630,9 @@ fn a_and_d_follow_the_screen() {
 // 10: Catalog 39 of 39, single crate, no Raylib 3D.
 #[test]
 fn catalog_is_39_of_39_and_crates_untouched() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().entries().len(), 41);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().entries().len(), 46);
     let manifest = std::fs::read_to_string("Cargo.toml").unwrap();
     let deps = &manifest[manifest.find("[dependencies]").unwrap()..];
     let deps = &deps[..deps.find("\n[").map_or(deps.len(), |i| i)];

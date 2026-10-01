@@ -50,6 +50,11 @@ use crate::scene::overworld_blocks::{
     insert_overworld_materials, log_material_id, sand_material_id, stone_block_material_id,
 };
 use crate::scene::overworld_blocks::{wood_door_bottom_material_id, wood_door_top_material_id};
+use crate::scene::red_black_timber::{
+    red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
+    red_black_wood_door_bottom_material_id, red_black_wood_door_top_material_id,
+    red_black_wood_planks_material_id,
+};
 use crate::scene::scene::{PartialSceneTextures, diagnostic_partial_materials, grass_material_id};
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 use crate::scene::voxel_world::VoxelWorld;
@@ -105,8 +110,16 @@ pub const RED_BLACK_BRICKS_CRIMSON_X: i32 = 1;
 pub const RED_BLACK_BRICKS_ORANGE_X: i32 = 3;
 pub const RED_BLACK_BRICKS_VIOLET_X: i32 = 5;
 pub const POLISHED_BLACKSTONE_X: i32 = 7;
+/// Red-Black Organic / Timber row (Gate 17.5): foliage, log and planks as
+/// full cubes, then the two partial shapes (fence, two-cell door).
+pub const RED_BLACK_TIMBER_ROW_Z: i32 = -18;
+pub const RED_BLACK_LEAVES_X: i32 = 2;
+pub const RED_BLACK_LOG_X: i32 = 4;
+pub const RED_BLACK_WOOD_PLANKS_X: i32 = 6;
+pub const RED_BLACK_FENCE_X: i32 = 8;
+pub const RED_BLACK_WOOD_DOOR_X: i32 = 10;
 /// The farthest catalog row; the checker floor reaches two cells past it.
-pub const CATALOG_BACK_ROW_Z: i32 = STRUCTURAL_ROW_Z;
+pub const CATALOG_BACK_ROW_Z: i32 = RED_BLACK_TIMBER_ROW_Z;
 
 pub const GRASS_X: i32 = 1;
 pub const DIRT_X: i32 = 3;
@@ -211,7 +224,8 @@ fn cell_center(cell: IVec3) -> Vec3 {
 /// The catalog samples in inspection order: one sample per official block,
 /// grouped by family exactly as `BlockType::ALL` lists them (Overworld
 /// Terrain, Overworld Architecture, Portal, Red-Black Base, Crimson, Orange,
-/// Purple/Violet, Structural Red-Black), followed by the two optical
+/// Purple/Violet, Structural Red-Black, Red-Black Organic / Timber),
+/// followed by the two optical
 /// diagnostics (control and mirror cubes). Physical rows keep the Gate 06/07
 /// gallery slots and give each Red-Black family its own row.
 pub fn catalog_entries() -> Vec<CatalogEntry> {
@@ -234,6 +248,29 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
         BlockInstance::new(BlockType::WoodDoor, wood_door_top_material_id(), south),
     ));
     door.focus_point = Vec3::new(DOOR_X as f32 + 0.5, 2.0, SHAPES_Z as f32 + 0.5);
+
+    // The Red-Black door, like the Overworld one, is two cells tall.
+    let mut red_black_door = CatalogEntry::new(
+        "Red-Black wood door",
+        SampleKind::PartialGeometry,
+        BlockType::RedBlackWoodDoor,
+        red_black_wood_door_bottom_material_id(),
+        at(RED_BLACK_WOOD_DOOR_X, RED_BLACK_TIMBER_ROW_Z),
+        south,
+    );
+    red_black_door.extra_blocks.push((
+        IVec3::new(RED_BLACK_WOOD_DOOR_X, 2, RED_BLACK_TIMBER_ROW_Z),
+        BlockInstance::new(
+            BlockType::RedBlackWoodDoor,
+            red_black_wood_door_top_material_id(),
+            south,
+        ),
+    ));
+    red_black_door.focus_point = Vec3::new(
+        RED_BLACK_WOOD_DOOR_X as f32 + 0.5,
+        2.0,
+        RED_BLACK_TIMBER_ROW_Z as f32 + 0.5,
+    );
 
     let mut entries = vec![
         CatalogEntry::new(
@@ -550,6 +587,39 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
         ),
         door,
         CatalogEntry::new(
+            "Red-Black leaves",
+            SampleKind::Cutout,
+            BlockType::RedBlackLeaves,
+            red_black_leaves_material_id(),
+            at(RED_BLACK_LEAVES_X, RED_BLACK_TIMBER_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Red-Black log",
+            SampleKind::PlainBlock,
+            BlockType::RedBlackLog,
+            red_black_log_material_id(),
+            at(RED_BLACK_LOG_X, RED_BLACK_TIMBER_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Red-Black wood planks",
+            SampleKind::PlainBlock,
+            BlockType::RedBlackWoodPlanks,
+            red_black_wood_planks_material_id(),
+            at(RED_BLACK_WOOD_PLANKS_X, RED_BLACK_TIMBER_ROW_Z),
+            up,
+        ),
+        CatalogEntry::new(
+            "Red-Black fence",
+            SampleKind::PartialGeometry,
+            BlockType::RedBlackFence,
+            red_black_fence_material_id(),
+            at(RED_BLACK_FENCE_X, RED_BLACK_TIMBER_ROW_Z),
+            south,
+        ),
+        red_black_door,
+        CatalogEntry::new(
             "Amethyst cluster",
             SampleKind::PartialGeometry,
             BlockType::AmethystCluster,
@@ -718,7 +788,7 @@ impl CatalogScene {
     }
 
     /// One-line on-screen label with the block's family, e.g.
-    /// `Selected: Fence (Overworld Architecture) | 14 / 41`.
+    /// `Selected: Fence (Overworld Architecture) | 14 / 46`.
     pub fn label(&self) -> String {
         let entry = self.selected();
         let family = if entry.is_official() {

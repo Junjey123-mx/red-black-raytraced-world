@@ -730,9 +730,9 @@ fn the_voxel_budget_is_respected() {
 // 14: Catalog, lights, crates, Raylib 3D.
 #[test]
 fn catalog_lights_crates_and_raylib_are_unchanged() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().entries().len(), 41);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().entries().len(), 46);
     let lights = world_lights();
     assert_eq!(lights.len(), 5);
     assert_eq!(

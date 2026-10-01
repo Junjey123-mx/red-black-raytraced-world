@@ -190,6 +190,8 @@ fn the_five_new_block_types_exist() {
 // 2
 #[test]
 fn no_discriminant_or_registry_entry_is_duplicated() {
+    // Every registered block once; the five timber blocks are distinct from
+    // every pre-existing identity.
     let all: HashSet<BlockType> = BlockType::ALL
         .iter()
         .copied()
@@ -197,13 +199,17 @@ fn no_discriminant_or_registry_entry_is_duplicated() {
         .collect();
     assert_eq!(
         all.len(),
-        BlockType::ALL.len() + RED_BLACK_TIMBER.len(),
-        "a timber block collides with an existing one"
+        PRE_TIMBER_OFFICIAL_COUNT + RED_BLACK_TIMBER.len()
     );
     let discriminants: HashSet<usize> = RED_BLACK_TIMBER.iter().map(|t| *t as usize).collect();
     assert_eq!(discriminants.len(), 5);
-    for t in BlockType::ALL {
-        assert!(!is_red_black_timber(t), "{t:?}");
+    let older: Vec<BlockType> = BlockType::ALL
+        .iter()
+        .copied()
+        .filter(|t| !is_red_black_timber(*t))
+        .collect();
+    assert_eq!(older.len(), PRE_TIMBER_OFFICIAL_COUNT);
+    for t in older {
         assert!(!discriminants.contains(&(t as usize)), "{t:?}");
     }
     let ids: Vec<u32> = RED_BLACK_TIMBER

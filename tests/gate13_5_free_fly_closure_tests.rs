@@ -569,9 +569,9 @@ fn geometry_lights_catalog_and_dependencies_are_unchanged() {
             .count(),
         4
     );
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 39);
-    assert_eq!(official_entries().len(), 39);
-    assert_eq!(CatalogScene::new().len(), 41);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(official_entries().len(), 44);
+    assert_eq!(CatalogScene::new().len(), 46);
     assert_eq!(
         gallery_background(),
         core::color::Color::new(0.05, 0.05, 0.08, 1.0)

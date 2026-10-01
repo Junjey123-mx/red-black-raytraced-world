@@ -63,7 +63,7 @@ pub enum BlockType {
 
 /// Number of official catalog blocks: the single source of truth every
 /// registry and catalog check derives from.
-pub const OFFICIAL_BLOCK_COUNT: usize = 39;
+pub const OFFICIAL_BLOCK_COUNT: usize = 44;
 
 /// Visual family of an official block, in catalog order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -98,7 +98,7 @@ impl BlockFamily {
 
 impl BlockType {
     /// Every official block exactly once, grouped by family in catalog
-    /// order. The array length ties it to `OFFICIAL_BLOCK_COUNT`, and
+    /// order (the five Red-Black timber blocks of Gate 17.5 close the list). The array length ties it to `OFFICIAL_BLOCK_COUNT`, and
     /// `family` is an exhaustive match, so a new variant cannot be added
     /// without classifying it and extending this registry.
     pub const ALL: [BlockType; OFFICIAL_BLOCK_COUNT] = [
@@ -149,6 +149,12 @@ impl BlockType {
         BlockType::RedBlackDeepslateBricksOrange,
         BlockType::RedBlackDeepslateBricksViolet,
         BlockType::PolishedBlackstoneBricks,
+        // Red-Black Organic / Timber (Gate 17.5)
+        BlockType::RedBlackLeaves,
+        BlockType::RedBlackLog,
+        BlockType::RedBlackWoodPlanks,
+        BlockType::RedBlackFence,
+        BlockType::RedBlackWoodDoor,
     ];
 
     /// The visual family this block belongs to.

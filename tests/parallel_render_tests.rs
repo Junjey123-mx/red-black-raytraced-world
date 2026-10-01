@@ -441,7 +441,7 @@ fn the_catalog_renders_identically_in_parallel() {
         parallel(&scene, &camera, 64, 48, RenderQuality::Full, 8),
         reference
     );
-    assert_eq!(catalog.entries().len(), 41);
+    assert_eq!(catalog.entries().len(), 46);
 }
 
 #[test]
