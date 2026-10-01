@@ -365,10 +365,14 @@ fn the_dark_structure_dominates_the_keep() {
         .count();
     assert!(dark * 4 > cells.len() * 3, "dark {dark} of {}", cells.len());
     assert!(symbols <= 8 && coloured <= 8);
-    assert!(scene.fortress_keep().shell.iter().all(|c| matches!(
-        scene.world().get(*c).unwrap().block_type(),
-        BlockType::PolishedBlackstoneBricks | BlockType::SmoothBasalt
-    )));
+    // Shell cells are dark masonry, or a suit the hall (C203) sets into the wall.
+    assert!(scene.fortress_keep().shell.iter().all(|c| {
+        let t = scene.world().get(*c).unwrap().block_type();
+        matches!(
+            t,
+            BlockType::PolishedBlackstoneBricks | BlockType::SmoothBasalt
+        ) || is_symbol(t)
+    }));
 }
 
 #[test]
@@ -422,10 +426,12 @@ fn the_interior_volume_is_usable_on_two_levels() {
     assert!(occupied * 3 < volume, "{occupied} of {volume}");
     // Hall: every floor cell free of fittings is stood under with head room.
     for cell in &k.floor {
-        if scene
-            .world()
-            .contains(IVec3::new(cell.x, cell.y - 1, cell.z))
-        {
+        // Fittings (dais, seats, treads) may take a cell's head room.
+        if (1..=2).any(|dy| {
+            scene
+                .world()
+                .contains(IVec3::new(cell.x, cell.y - dy, cell.z))
+        }) {
             continue;
         }
         assert!(clear(&scene, eye(*cell)), "{cell:?}");

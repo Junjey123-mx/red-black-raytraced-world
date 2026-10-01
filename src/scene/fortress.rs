@@ -22,7 +22,7 @@ use crate::scene::overworld_blocks::{
     mycelium_material_id, nether_wart_block_material_id, orange_club_material_id,
     orange_spade_material_id, polished_blackstone_bricks_material_id, purple_club_material_id,
     purple_diamond_material_id, purple_heart_material_id, purple_spade_material_id,
-    smooth_basalt_material_id,
+    smooth_basalt_material_id, wood_stairs_material_id,
 };
 use crate::scene::red_black_maze::Family;
 use crate::scene::terrain::TerrainConfig;
@@ -1327,5 +1327,126 @@ pub fn build_fortress_gate(
     for cell in &built.opening {
         world.remove(*cell);
     }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Council hall, throne and stair (C203)
+// ---------------------------------------------------------------------
+
+/// The hall's furnishings, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressHall {
+    /// The keep stair: `Down` wood stairs climbing north to the upper room.
+    pub treads: Vec<(IVec3, Orientation)>,
+    /// Dark dais (polished blackstone) against the north wall.
+    pub dais: Vec<IVec3>,
+    /// The throne: one `Down` wood stair on the dais, backrest to the wall.
+    pub throne: IVec3,
+    /// Council seats (`Down` wood stairs) along the west side.
+    pub seats: Vec<IVec3>,
+    /// The council table (smooth basalt).
+    pub table: Vec<IVec3>,
+    /// The three-family crest wall behind the throne, at eye level.
+    pub crest: Vec<(IVec3, BlockType)>,
+}
+
+impl FortressHall {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.treads
+            .iter()
+            .map(|(c, _)| *c)
+            .chain(self.dais.iter().copied())
+            .chain(std::iter::once(self.throne))
+            .chain(self.seats.iter().copied())
+            .chain(self.table.iter().copied())
+            .chain(self.crest.iter().map(|(c, _)| *c))
+            .collect()
+    }
+
+    /// Every wood stair used (treads, seats and throne).
+    pub fn wood_stairs(&self) -> usize {
+        self.treads.len() + self.seats.len() + 1
+    }
+}
+
+/// Furnishes the keep as a symbolic council hall and sets its stair.
+///
+/// The layout's treads become `Down` wood stairs (raised half north, so
+/// the climb runs north from the door row into the open well). Against
+/// the north wall a two-cell blackstone dais carries a single `Down`
+/// wood-stair throne whose backrest meets the wall; behind it, set into
+/// the wall at eye level, a crest of one suit per family. Two `Down`
+/// stair seats face a smooth-basalt council table. The door row and the
+/// cells before the dais stay clear for the camera.
+pub fn furnish_fortress_hall(
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressHall {
+    let mut built = FortressHall::default();
+    let h = layout.hall;
+    let lv = layout.levels;
+    let stair =
+        |o: Orientation| BlockInstance::new(BlockType::WoodStairs, wood_stairs_material_id(), o);
+    for (cell, o) in &layout.stair {
+        world.insert(*cell, stair(*o));
+        for dy in 1..=2 {
+            world.remove(above(*cell, dy));
+        }
+        built.treads.push((*cell, *o));
+    }
+    // Dais along the north wall, east of the hall's middle, with the throne.
+    let dais_z = h.min_z;
+    for x in [h.min_x + 1, h.min_x + 2] {
+        let cell = IVec3::new(x, lv.base_y, dais_z);
+        world.insert(
+            cell,
+            down(
+                BlockType::PolishedBlackstoneBricks,
+                polished_blackstone_bricks_material_id(),
+            ),
+        );
+        built.dais.push(cell);
+    }
+    let throne = IVec3::new(h.min_x + 2, lv.base_y - 1, dais_z);
+    world.insert(throne, stair(Orientation::Down));
+    built.throne = throne;
+    // Crest wall behind the throne: one suit per family at eye level.
+    let crest_y = lv.base_y - 1;
+    let crest = [
+        (
+            h.min_x,
+            BlockType::CrimsonHeart,
+            crimson_heart_material_id as fn() -> MaterialId,
+        ),
+        (h.min_x + 1, BlockType::OrangeClub, orange_club_material_id),
+        (
+            h.min_x + 2,
+            BlockType::PurpleSpade,
+            purple_spade_material_id,
+        ),
+    ];
+    for (x, bt, material) in crest {
+        let cell = IVec3::new(x, crest_y, layout.central_keep.min_z);
+        if world
+            .get(cell)
+            .is_some_and(|b| is_dark_structure(b.block_type()))
+        {
+            world.insert(cell, down(bt, material()));
+            built.crest.push((cell, bt));
+        }
+    }
+    // Council: two seats on the west side facing the table beside them.
+    for z in [h.min_z + 1, h.min_z + 2] {
+        let seat = IVec3::new(h.min_x, lv.base_y, z);
+        world.insert(seat, stair(Orientation::Down));
+        built.seats.push(seat);
+    }
+    let table = IVec3::new(h.min_x + 1, lv.base_y, h.min_z + 2);
+    world.insert(
+        table,
+        down(BlockType::SmoothBasalt, smooth_basalt_material_id()),
+    );
+    built.table.push(table);
     built
 }

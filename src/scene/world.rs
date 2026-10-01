@@ -30,9 +30,9 @@ use crate::scene::expansion::{
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::fortress::{
-    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressGate, FortressKeep,
-    RedBlackFortressLayout, build_family_tower, build_fortress_foundation, build_fortress_gate,
-    build_symbol_keep, weave_colored_bricks,
+    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressGate, FortressHall,
+    FortressKeep, RedBlackFortressLayout, build_family_tower, build_fortress_foundation,
+    build_fortress_gate, build_symbol_keep, furnish_fortress_hall, weave_colored_bricks,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -113,6 +113,7 @@ pub struct WorldScene {
     fortress_towers: Vec<FamilyTowerBuild>,
     fortress_keep: FortressKeep,
     fortress_gate: FortressGate,
+    fortress_hall: FortressHall,
     world: VoxelWorld,
 }
 
@@ -235,6 +236,7 @@ impl WorldScene {
         ];
         let fortress_keep = build_symbol_keep(&config, &fortress_layout, &mut world);
         let fortress_gate = build_fortress_gate(&config, &fortress_layout, &mut world);
+        let fortress_hall = furnish_fortress_hall(&fortress_layout, &mut world);
         Self {
             config,
             field,
@@ -278,6 +280,7 @@ impl WorldScene {
             fortress_towers,
             fortress_keep,
             fortress_gate,
+            fortress_hall,
             world,
         }
     }
@@ -455,6 +458,7 @@ impl WorldScene {
             .chain(tower_cells.iter())
             .chain(self.fortress_keep.cells().iter())
             .chain(self.fortress_gate.cells().iter())
+            .chain(self.fortress_hall.cells().iter())
             .filter(|c| c.y < ground && seen.insert(**c))
             .copied()
             .collect()
@@ -469,6 +473,11 @@ impl WorldScene {
     /// of the Gate 15 masses.
     pub fn architecture_voxels(&self) -> usize {
         self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The council hall and keep stair (Gate 17).
+    pub fn fortress_hall(&self) -> &FortressHall {
+        &self.fortress_hall
     }
 
     /// The fortress gate (Gate 17).
