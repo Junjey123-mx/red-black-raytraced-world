@@ -12,9 +12,9 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::{IVec3, Vec3};
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::castle::{
-    CastleFoundation, CastleGatehouse, CastleKeep, CastleTowers, CastleWindows,
+    CastleFoundation, CastleGatehouse, CastleKeep, CastleStairs, CastleTowers, CastleWindows,
     OverworldCastleLayout, build_castle_foundation, build_castle_gatehouse, build_castle_keep,
-    build_castle_towers, glaze_castle_windows,
+    build_castle_stairs, build_castle_towers, glaze_castle_windows,
 };
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
@@ -98,6 +98,7 @@ pub struct WorldScene {
     castle_gatehouse: CastleGatehouse,
     castle_keep: CastleKeep,
     castle_windows: CastleWindows,
+    castle_stairs: CastleStairs,
     world: VoxelWorld,
 }
 
@@ -191,6 +192,7 @@ impl WorldScene {
         let castle_gatehouse = build_castle_gatehouse(&config, &castle_layout, &mut world);
         let castle_keep = build_castle_keep(&config, &castle_layout, &mut world);
         let castle_windows = glaze_castle_windows(&castle_layout, &mut world);
+        let castle_stairs = build_castle_stairs(&castle_layout, &mut world);
         Self {
             config,
             field,
@@ -225,6 +227,7 @@ impl WorldScene {
             castle_gatehouse,
             castle_keep,
             castle_windows,
+            castle_stairs,
             world,
         }
     }
@@ -348,6 +351,7 @@ impl WorldScene {
             .chain(self.castle_gatehouse.cells().iter())
             .chain(self.castle_keep.cells().iter())
             .chain(self.castle_windows.glass.iter())
+            .chain(self.castle_stairs.cells().iter())
             .filter(|c| c.y > ground && seen.insert(**c))
             .copied()
             .collect()
@@ -366,6 +370,11 @@ impl WorldScene {
     /// The glass windows (Gate 16).
     pub fn castle_windows(&self) -> &CastleWindows {
         &self.castle_windows
+    }
+
+    /// The interior stair (Gate 16).
+    pub fn castle_stairs(&self) -> &CastleStairs {
+        &self.castle_stairs
     }
 
     /// The towers and battlements (Gate 16).

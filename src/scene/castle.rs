@@ -18,7 +18,7 @@ use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
 use crate::scene::overworld_blocks::{
     cobblestone_material_id, double_wood_slab_material_id, fence_material_id, log_material_id,
     stone_block_material_id, wood_door_bottom_material_id, wood_door_top_material_id,
-    wood_planks_material_id,
+    wood_planks_material_id, wood_stairs_material_id,
 };
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::voxel_world::VoxelWorld;
@@ -852,6 +852,74 @@ pub fn glaze_castle_windows(
         }
         world.insert(*cell, up(BlockType::Glass, glass_material_id()));
         built.glass.push(*cell);
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Interior stair (C191)
+// ---------------------------------------------------------------------
+
+/// The interior stair, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleStairs {
+    /// The treads (`WoodStairs`), lowest first, with their orientation.
+    pub treads: Vec<Tread>,
+    /// Fence rail on the upper floor along the open well.
+    pub railing: Vec<IVec3>,
+    /// The upper-floor cell the stair lands on.
+    pub landing: IVec3,
+}
+
+impl CastleStairs {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.treads
+            .iter()
+            .map(|(c, _)| *c)
+            .chain(self.railing.iter().copied())
+            .collect()
+    }
+}
+
+/// Sets the interior stair of the keep: the layout's treads as `North`
+/// wood stairs (raised half to the south, so the climb runs south from the
+/// corridor row), the well above them left open, and a fence rail on the
+/// upper floor along the well's inner edge. The landing is the upper-floor
+/// cell past the last tread.
+pub fn build_castle_stairs(layout: &OverworldCastleLayout, world: &mut VoxelWorld) -> CastleStairs {
+    let mut built = CastleStairs::default();
+    for (cell, orientation) in &layout.stair {
+        world.insert(
+            *cell,
+            BlockInstance::new(
+                BlockType::WoodStairs,
+                wood_stairs_material_id(),
+                *orientation,
+            ),
+        );
+        for dy in 1..=2 {
+            world.remove(IVec3::new(cell.x, cell.y + dy, cell.z));
+        }
+        built.treads.push((*cell, *orientation));
+    }
+    let last = layout
+        .stair
+        .last()
+        .map(|(c, _)| *c)
+        .unwrap_or(layout.keep_door.base);
+    built.landing = IVec3::new(last.x, layout.levels.upper_floor_y, last.z + 1);
+    for (x, z) in &layout.stair_well {
+        let cell = IVec3::new(x - 1, layout.levels.upper_floor_y + 1, *z);
+        if layout.hall.contains(cell.x, cell.z)
+            && world.contains(IVec3::new(cell.x, cell.y - 1, cell.z))
+            && !world.contains(cell)
+        {
+            world.insert(
+                cell,
+                BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::East),
+            );
+            built.railing.push(cell);
+        }
     }
     built
 }

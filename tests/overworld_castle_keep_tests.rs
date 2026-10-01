@@ -307,17 +307,39 @@ fn the_interior_is_air_on_both_levels() {
     let c = scene.castle_layout();
     let h = c.hall;
     let lv = c.levels;
-    let mut air = 0;
+    // Rooms, not fill: whatever stands inside is a fitting of a later
+    // stage (stairs, rails, seats, tables, lamps), never masonry or logs,
+    // and most of the volume stays air.
+    let mut volume = 0;
+    let mut occupied = 0;
     for z in h.min_z..=h.max_z {
         for x in h.min_x..=h.max_x {
             for y in (lv.base_y..lv.upper_floor_y).chain((lv.upper_floor_y + 1)..lv.keep_roof_y) {
                 let cell = IVec3::new(x, y, z);
-                assert!(!scene.world().contains(cell), "{cell:?} fills the keep");
-                air += 1;
+                volume += 1;
+                if let Some(b) = scene.world().get(cell) {
+                    occupied += 1;
+                    assert!(
+                        matches!(
+                            b.block_type(),
+                            BlockType::WoodStairs
+                                | BlockType::Fence
+                                | BlockType::DoubleWoodSlab
+                                | BlockType::WoodPlanks
+                                | BlockType::RedstoneLampLit
+                        ),
+                        "{cell:?} fills the keep with {:?}",
+                        b.block_type()
+                    );
+                }
             }
         }
     }
-    assert_eq!(air as i32, h.width() * h.depth() * 4);
+    assert_eq!(volume as i32, h.width() * h.depth() * 4);
+    assert!(
+        occupied * 3 < volume,
+        "{occupied} of {volume} cells occupied"
+    );
     // The well is open from the ground floor up through the upper floor.
     for (x, z) in &c.stair_well {
         assert!(!scene.world().contains(IVec3::new(*x, lv.upper_floor_y, *z)));
@@ -421,6 +443,14 @@ fn the_second_level_is_usable() {
     let k = scene.castle_keep();
     let deck = k.upper_deck();
     assert!(deck.len() >= 10, "{}", deck.len());
+    // Deck cells carrying a fitting (the stair rail, a seat) are not stood on.
+    let free = |cell: &IVec3| {
+        !scene
+            .world()
+            .contains(IVec3::new(cell.x, cell.y + 1, cell.z))
+    };
+    let deck: Vec<IVec3> = deck.into_iter().filter(free).collect();
+    assert!(deck.len() >= 8, "{}", deck.len());
     for cell in &deck {
         // Two cells of head room under the roof, eye clear.
         for dy in 1..=2 {
