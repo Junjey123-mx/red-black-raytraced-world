@@ -16,8 +16,9 @@ use crate::scene::material_gallery::deepslate_bricks_material_id;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
 use crate::scene::overworld_blocks::{
-    cobblestone_material_id, fence_material_id, log_material_id, stone_block_material_id,
-    wood_door_bottom_material_id, wood_door_top_material_id, wood_planks_material_id,
+    cobblestone_material_id, double_wood_slab_material_id, fence_material_id, log_material_id,
+    stone_block_material_id, wood_door_bottom_material_id, wood_door_top_material_id,
+    wood_planks_material_id,
 };
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::voxel_world::VoxelWorld;
@@ -683,6 +684,134 @@ pub fn build_castle_gatehouse(
                 BlockInstance::new(BlockType::WoodDoor, material, door.facing),
             );
             built.door.push(cell);
+        }
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Keep (C189)
+// ---------------------------------------------------------------------
+
+/// The keep, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleKeep {
+    /// Masonry of the shell (the outline, ground to roof).
+    pub shell: Vec<IVec3>,
+    /// Log corner posts (the corners not shared with a tower).
+    pub corners: Vec<IVec3>,
+    /// The keep's door cells (`WoodDoor`, passable), lower then upper.
+    pub door: Vec<IVec3>,
+    /// Ground-floor planks (replacing the stone floor of the hall).
+    pub ground_floor: Vec<IVec3>,
+    /// Upper-floor planks, the stair well left open.
+    pub upper_floor: Vec<IVec3>,
+    /// Log beams carrying the upper floor (its two edge rows).
+    pub beams: Vec<IVec3>,
+    /// The roof (double slabs) closing the keep.
+    pub roof: Vec<IVec3>,
+}
+
+impl CastleKeep {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.shell
+            .iter()
+            .chain(self.corners.iter())
+            .chain(self.door.iter())
+            .chain(self.ground_floor.iter())
+            .chain(self.upper_floor.iter())
+            .chain(self.beams.iter())
+            .chain(self.roof.iter())
+            .copied()
+            .collect()
+    }
+
+    /// The upper floor's walkable cells (planks and beams).
+    pub fn upper_deck(&self) -> Vec<IVec3> {
+        self.upper_floor
+            .iter()
+            .chain(self.beams.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Builds the keep: a hollow masonry shell from the ground to the roof
+/// with log posts on its free corners, a west door onto the courtyard,
+/// a plank ground floor, a timber upper floor (log beams on the edge rows,
+/// planks between, the stair well open) and a double-slab roof. Nothing
+/// fills either room.
+pub fn build_castle_keep(
+    terrain: &TerrainConfig,
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleKeep {
+    let mut built = CastleKeep::default();
+    let k = layout.keep;
+    let lv = layout.levels;
+    let door_cells = layout.keep_door.cells();
+    for z in k.min_z..=k.max_z {
+        for x in k.min_x..=k.max_x {
+            // Tower cells already stand (with their own base course).
+            if !layout.is_keep_shell(x, z) || layout.tower_at(x, z).is_some() {
+                continue;
+            }
+            let log_corner = layout.is_keep_corner(x, z) && layout.tower_at(x, z).is_none();
+            for y in lv.base_y..=lv.keep_roof_y {
+                let cell = IVec3::new(x, y, z);
+                if door_cells.contains(&cell) {
+                    continue;
+                }
+                if log_corner {
+                    world.insert(cell, up(BlockType::Log, log_material_id()));
+                    built.corners.push(cell);
+                } else {
+                    world.insert(cell, masonry(terrain.seed, cell));
+                    built.shell.push(cell);
+                }
+            }
+        }
+    }
+    let door = layout.keep_door;
+    for (dy, material) in [
+        (0, wood_door_bottom_material_id()),
+        (1, wood_door_top_material_id()),
+    ] {
+        let cell = IVec3::new(door.base.x, door.base.y + dy, door.base.z);
+        world.insert(
+            cell,
+            BlockInstance::new(BlockType::WoodDoor, material, door.facing),
+        );
+        built.door.push(cell);
+    }
+    let h = layout.hall;
+    for z in h.min_z..=h.max_z {
+        for x in h.min_x..=h.max_x {
+            let floor = IVec3::new(x, lv.ground_y, z);
+            world.insert(floor, up(BlockType::WoodPlanks, wood_planks_material_id()));
+            built.ground_floor.push(floor);
+            for y in lv.base_y..lv.upper_floor_y {
+                world.remove(IVec3::new(x, y, z));
+            }
+            if !layout.stair_well.contains(&(x, z)) {
+                let cell = IVec3::new(x, lv.upper_floor_y, z);
+                if z == h.min_z || z == h.max_z {
+                    world.insert(cell, up(BlockType::Log, log_material_id()));
+                    built.beams.push(cell);
+                } else {
+                    world.insert(cell, up(BlockType::WoodPlanks, wood_planks_material_id()));
+                    built.upper_floor.push(cell);
+                }
+            }
+            for y in (lv.upper_floor_y + 1)..lv.keep_roof_y {
+                world.remove(IVec3::new(x, y, z));
+            }
+            let roof = IVec3::new(x, lv.keep_roof_y, z);
+            world.insert(
+                roof,
+                up(BlockType::DoubleWoodSlab, double_wood_slab_material_id()),
+            );
+            built.roof.push(roof);
         }
     }
     built

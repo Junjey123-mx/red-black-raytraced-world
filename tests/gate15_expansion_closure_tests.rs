@@ -352,10 +352,13 @@ fn upper_route(scene: &WorldScene) -> Vec<Vec3> {
         y,
         l.overworld_path_target.z as f32 + 0.5,
     ));
+    // Gate 16 built the castle here: the pad walk ends in its courtyard,
+    // just past the gatehouse, instead of the (now built-over) pad centre.
+    let castle = scene.castle_layout();
     points.push(v(
-        (pad.min_x + pad.max_x) as f32 / 2.0 + 0.5,
+        castle.gatehouse.max_x as f32 + 1.5,
         y,
-        (pad.min_z + pad.max_z) as f32 / 2.0 + 0.5,
+        l.overworld_path_target.z as f32 + 0.5,
     ));
     points
 }

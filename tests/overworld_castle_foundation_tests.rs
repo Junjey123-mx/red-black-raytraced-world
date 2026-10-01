@@ -207,8 +207,12 @@ fn the_foundation_replaces_the_pad_and_is_connected() {
         );
     }
     for cell in &f.floors {
+        // The keep later lays planks over its hall floor.
         let t = scene.world().get(*cell).unwrap().block_type();
-        assert!(masonry(t), "{cell:?} is {t:?}");
+        assert!(
+            masonry(t) || t == BlockType::WoodPlanks,
+            "{cell:?} is {t:?}"
+        );
     }
     println!(
         "GATE16 foundation: footings={} floors={} walls={} gate_opening={} voxels={}",
