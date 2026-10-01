@@ -388,7 +388,13 @@ fn emission_is_localized_and_the_body_stays_dark() {
         .iter()
         .filter(|c| is_dark_structure(scene.world().get(**c).unwrap().block_type()))
         .count();
-    assert!(dark * 3 > cells.len() * 2, "dark {dark} of {}", cells.len());
+    // Dark stone stays the structural majority (the Gate 17.5 balance rule
+    // keeps it at 60-70 % once corinto timber joins the body).
+    assert!(
+        dark * 5 >= cells.len() * 3,
+        "dark {dark} of {}",
+        cells.len()
+    );
     assert!(
         glow.len() * 4 < cells.len(),
         "glow {} of {}",

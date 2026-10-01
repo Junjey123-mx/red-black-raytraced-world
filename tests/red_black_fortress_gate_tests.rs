@@ -292,9 +292,9 @@ fn the_corridor_is_clear_under_its_vault() {
     );
     for cell in &g.vault {
         assert_eq!(cell.y, l.levels.wall_top_y - 1);
-        assert!(is_dark_structure(
-            scene.world().get(*cell).unwrap().block_type()
-        ));
+        // Dark, or the corinto vault Gate 17.5 lays over the corridor.
+        let t = scene.world().get(*cell).unwrap().block_type();
+        assert!(is_dark_structure(t) || t == BlockType::RedBlackWoodPlanks);
         assert!(
             scene
                 .world()

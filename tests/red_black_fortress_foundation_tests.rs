@@ -239,7 +239,9 @@ fn the_foundation_replaces_the_pad_and_is_connected() {
             is_dark_structure(b.block_type())
                 || matches!(
                     b.block_type(),
-                    BlockType::NetherWartBlock | BlockType::Mycelium
+                    BlockType::NetherWartBlock
+                        | BlockType::Mycelium
+                        | BlockType::RedBlackWoodPlanks
                 ),
             "{cell:?}"
         );
@@ -282,6 +284,7 @@ fn the_courtyard_is_paved_and_clear() {
                 t,
                 BlockType::SmoothBasalt
                     | BlockType::PolishedBlackstoneBricks
+                    | BlockType::RedBlackWoodPlanks
                     | BlockType::Mycelium
                     | BlockType::NetherWartBlock
             ),
@@ -331,12 +334,16 @@ fn the_curtain_is_anchored_and_hollow() {
         basalt > f.walls.len() / 6 && basalt < f.walls.len() / 2,
         "{basalt}"
     );
+    // The keep's small timber balconies (Gate 17.5) hang over the alleys
+    // above head room; nothing else fills the courtyard.
+    let balconies = scene.red_black_identity().timber.added_cells();
     for (x, z) in &l.courtyard {
         for y in l.levels.wall_top_y..=l.levels.base_y {
-            let open = scene
-                .world()
-                .get(IVec3::new(*x, y, *z))
-                .is_none_or(|b| !is_camera_solid(b));
+            let cell = IVec3::new(*x, y, *z);
+            if balconies.contains(&cell) {
+                continue;
+            }
+            let open = scene.world().get(cell).is_none_or(|b| !is_camera_solid(b));
             assert!(open, "({x},{y},{z}) fills the courtyard");
         }
     }

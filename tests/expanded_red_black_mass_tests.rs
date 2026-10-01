@@ -311,6 +311,7 @@ fn no_floating_slab_and_down_orientation() {
                     | BlockType::PolishedBlackstoneBricks
                     | BlockType::Mycelium
                     | BlockType::NetherWartBlock
+                    | BlockType::RedBlackWoodPlanks
                     | BlockType::RedBlackDeepslateBricksCrimson
                     | BlockType::RedBlackDeepslateBricksOrange
                     | BlockType::RedBlackDeepslateBricksViolet
@@ -382,6 +383,7 @@ fn pad_is_fortress_ground(scene: &WorldScene) {
                         | BlockType::Deepslate
                         | BlockType::NetherWartBlock
                         | BlockType::Mycelium
+                        | BlockType::RedBlackWoodPlanks
                 ),
                 "({x},{z}) is {:?}",
                 b.block_type()

@@ -17,9 +17,13 @@ use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
 use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_ground_cell};
 use crate::scene::fortress::RedBlackFortressLayout;
+use crate::scene::fortress::is_dark_structure;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::Tree;
-use crate::scene::red_black_timber::{red_black_leaves_material_id, red_black_log_material_id};
+use crate::scene::red_black_timber::{
+    red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
+    red_black_wood_planks_material_id,
+};
 use crate::scene::voxel_world::VoxelWorld;
 
 const TREE_TRUNK_SALT: u32 = 0x175E_0001;
@@ -219,10 +223,136 @@ pub fn plant_red_black_grove(
     grove
 }
 
+// ---------------------------------------------------------------------
+// Corinto timber inside the fortress (C214)
+// ---------------------------------------------------------------------
+
+/// The fortress's timber layer, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressTimber {
+    /// Dark cells turned into `RedBlackWoodPlanks`: hall floor, upper
+    /// floor between the beams, keep roof, gate vault, courtyard walkway.
+    pub planks: Vec<IVec3>,
+    /// Small timber balconies added on the keep's alley faces.
+    pub balconies: Vec<IVec3>,
+    /// `RedBlackFence` rails: balcony edges and the keep's stair well.
+    pub rails: Vec<IVec3>,
+}
+
+impl FortressTimber {
+    /// Cells added (the planks replace existing cells).
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.balconies
+            .iter()
+            .chain(self.rails.iter())
+            .copied()
+            .collect()
+    }
+
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.planks
+            .iter()
+            .chain(self.balconies.iter())
+            .chain(self.rails.iter())
+            .copied()
+            .collect()
+    }
+}
+
+fn planks() -> BlockInstance {
+    down(
+        BlockType::RedBlackWoodPlanks,
+        red_black_wood_planks_material_id(),
+    )
+}
+
+fn fence() -> BlockInstance {
+    down(BlockType::RedBlackFence, red_black_fence_material_id())
+}
+
+/// Lays the fortress's timber layer. Only dark structural cells of floors,
+/// roof, vault and the courtyard walkway are re-laid in corinto planks;
+/// the curtain, the towers, the keep's walls and pillars, the coloured
+/// bricks and every suit block keep their stone. Two short balconies (one
+/// per alley face of the keep, one course above head room) and rails along
+/// their edges and around the keep's stair well are the only added cells.
+pub fn weave_fortress_timber(
+    fortress: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressTimber {
+    let mut built = FortressTimber::default();
+    let lv = fortress.levels;
+    let h = fortress.hall;
+    let k = fortress.central_keep;
+    let relay = |world: &mut VoxelWorld, cell: IVec3, built: &mut FortressTimber| {
+        if world
+            .get(cell)
+            .is_some_and(|b| is_dark_structure(b.block_type()))
+        {
+            world.insert(cell, planks());
+            built.planks.push(cell);
+        }
+    };
+    for z in h.min_z..=h.max_z {
+        for x in h.min_x..=h.max_x {
+            // Hall floor and keep roof.
+            relay(world, IVec3::new(x, lv.ground_y, z), &mut built);
+            relay(world, IVec3::new(x, lv.keep_roof_y, z), &mut built);
+            // Upper floor between the two basalt beam rows.
+            if z != h.min_z && z != h.max_z {
+                relay(world, IVec3::new(x, lv.upper_floor_y, z), &mut built);
+            }
+        }
+    }
+    // Gate vault: the timber ceiling of the entry corridor.
+    let g = fortress.gatehouse;
+    let vault_y = lv.wall_top_y - 1;
+    for z in g.min_z..=g.max_z {
+        for x in g.min_x..=g.max_x {
+            relay(world, IVec3::new(x, vault_y, z), &mut built);
+        }
+    }
+    // Courtyard walkway: the route's courtyard cells between the threshold
+    // and the keep door (the blackstone threshold stays).
+    let walk_x = k.min_x - 1;
+    for z in fortress.gate.base.z..=fortress.keep_door.base.z {
+        relay(world, IVec3::new(walk_x, lv.ground_y, z), &mut built);
+    }
+    // Balconies on the keep's north and south faces, over the alleys, with
+    // a rail on their outer edge.
+    let balcony_y = lv.wall_top_y;
+    for (z, rail_z) in [(k.min_z - 1, k.min_z - 1), (k.max_z + 1, k.max_z + 1)] {
+        for x in [h.min_x, h.min_x + 1] {
+            let cell = IVec3::new(x, balcony_y, z);
+            if world.contains(cell) || !fortress.courtyard.contains(&(x, z)) {
+                continue;
+            }
+            world.insert(cell, planks());
+            built.balconies.push(cell);
+            let rail = IVec3::new(x, balcony_y - 1, rail_z);
+            if !world.contains(rail) {
+                world.insert(rail, fence());
+                built.rails.push(rail);
+            }
+        }
+    }
+    // Stair-well rail on the upper floor, on the well's west side.
+    for (x, z) in &fortress.stair_well {
+        let cell = IVec3::new(x - 1, lv.upper_floor_y - 1, *z);
+        let floor = IVec3::new(cell.x, lv.upper_floor_y, cell.z);
+        if h.contains(cell.x, cell.z) && world.contains(floor) && !world.contains(cell) {
+            world.insert(cell, fence());
+            built.rails.push(cell);
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
     pub grove: RedBlackGrove,
+    pub timber: FortressTimber,
 }
 
 impl RedBlackIdentity {
@@ -233,6 +363,7 @@ impl RedBlackIdentity {
         self.grove
             .cells()
             .into_iter()
+            .chain(self.timber.added_cells())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -257,5 +388,6 @@ pub fn build_red_black_identity(
         floor_y,
     };
     let grove = plant_red_black_grove(seed, fortress, &clearance, world);
-    RedBlackIdentity { grove }
+    let timber = weave_fortress_timber(fortress, world);
+    RedBlackIdentity { grove, timber }
 }

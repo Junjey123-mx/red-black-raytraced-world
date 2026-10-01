@@ -367,7 +367,23 @@ fn the_dark_structure_dominates_the_keep() {
         .iter()
         .filter(|c| is_family_brick(scene.world().get(**c).unwrap().block_type()))
         .count();
-    assert!(dark * 4 > cells.len() * 3, "dark {dark} of {}", cells.len());
+    // Gate 17.5 re-laid the keep's floors and roof in corinto timber: the
+    // stone-and-timber body still dominates, dark stone stays the majority.
+    let timber = cells
+        .iter()
+        .filter(|c| {
+            matches!(
+                scene.world().get(**c).unwrap().block_type(),
+                BlockType::RedBlackWoodPlanks | BlockType::RedBlackFence
+            )
+        })
+        .count();
+    assert!(
+        (dark + timber) * 4 > cells.len() * 3,
+        "dark {dark} + timber {timber} of {}",
+        cells.len()
+    );
+    assert!(dark * 2 > cells.len(), "dark {dark} of {}", cells.len());
     assert!(symbols <= 8 && coloured <= 8);
     // Shell cells are dark masonry, or a suit the hall (C203) sets into the wall.
     assert!(scene.fortress_keep().shell.iter().all(|c| {
@@ -460,10 +476,11 @@ fn the_interior_volume_is_usable_on_two_levels() {
     }
     assert_eq!(k.roof.len(), (h.width() * h.depth()) as usize);
     for cell in &k.roof {
-        assert_eq!(
+        // Blackstone, or the corinto roof Gate 17.5 lays over it.
+        assert!(matches!(
             scene.world().get(*cell).unwrap().block_type(),
-            BlockType::PolishedBlackstoneBricks
-        );
+            BlockType::PolishedBlackstoneBricks | BlockType::RedBlackWoodPlanks
+        ));
     }
     // The door is open and leads into the hall's south row.
     for cell in &k.door {
