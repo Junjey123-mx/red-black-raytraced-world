@@ -64,6 +64,8 @@ mod scene {
     pub mod block_shape_factory;
     #[path = "../src/scene/block_type.rs"]
     pub mod block_type;
+    #[path = "../src/scene/castle.rs"]
+    pub mod castle;
     #[path = "../src/scene/catalog.rs"]
     pub mod catalog;
     #[path = "../src/scene/cutaway.rs"]

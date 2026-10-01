@@ -11,6 +11,7 @@ use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
+use crate::scene::castle::OverworldCastleLayout;
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
     InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
@@ -87,6 +88,7 @@ pub struct WorldScene {
     red_black_approach: RedBlackApproach,
     expansion_scenery: ExpansionScenery,
     silhouette: Silhouette,
+    castle_layout: OverworldCastleLayout,
     world: VoxelWorld,
 }
 
@@ -172,6 +174,9 @@ impl WorldScene {
             ),
         };
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
+        // Gate 16: the castle contract on the pad (built after the silhouette
+        // so its hollow rooms are never taken for voids).
+        let castle_layout = OverworldCastleLayout::derive(&expansion_layout);
         Self {
             config,
             field,
@@ -200,6 +205,7 @@ impl WorldScene {
             red_black_approach,
             expansion_scenery,
             silhouette,
+            castle_layout,
             world,
         }
     }
@@ -294,6 +300,11 @@ impl WorldScene {
     /// The restrained scenery of both expansions (Gate 15).
     pub fn expansion_scenery(&self) -> &ExpansionScenery {
         &self.expansion_scenery
+    }
+
+    /// The Overworld castle contract on the pad (Gate 16).
+    pub fn castle_layout(&self) -> &OverworldCastleLayout {
+        &self.castle_layout
     }
 
     pub fn silhouette(&self) -> &Silhouette {

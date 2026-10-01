@@ -2,6 +2,7 @@ pub mod block;
 pub mod block_geometry;
 pub mod block_shape_factory;
 pub mod block_type;
+pub mod castle;
 pub mod catalog;
 pub mod cutaway;
 pub mod descent;
