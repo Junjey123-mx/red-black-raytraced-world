@@ -149,12 +149,15 @@ fn the_upper_and_lower_halves_form_one_connected_mass() {
     let scene = WorldScene::new();
     let s = scene.silhouette();
     let main = connected_component(scene.world(), s.tip);
+    // The Gate 16 castle is built after the silhouette pass; it stands on
+    // the main component and is the only thing added since.
+    let castle = scene.castle_voxels();
     assert_eq!(
         main.len(),
         scene.world().len(),
         "cells outside the main component"
     );
-    assert_eq!(s.main_component, scene.world().len());
+    assert_eq!(s.main_component + castle, scene.world().len());
     // From the grass under a tree to the tip: one piece.
     let grass = scene.trees()[0].base;
     assert!(main.contains(&grass));

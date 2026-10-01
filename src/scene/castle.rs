@@ -7,10 +7,17 @@
 
 #![allow(dead_code)]
 
+use crate::core::material::MaterialId;
 use crate::core::math::IVec3;
-use crate::scene::expansion::WorldExpansionLayout;
+use crate::scene::block::BlockInstance;
+use crate::scene::block_type::BlockType;
+use crate::scene::expansion::{WorldExpansionLayout, expansion_hash};
+use crate::scene::material_gallery::deepslate_bricks_material_id;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
+use crate::scene::overworld_blocks::{cobblestone_material_id, stone_block_material_id};
+use crate::scene::terrain::TerrainConfig;
+use crate::scene::voxel_world::VoxelWorld;
 
 /// Side of each square corner tower (columns).
 pub const TOWER_SIDE: i32 = 3;
@@ -370,4 +377,114 @@ impl OverworldCastleLayout {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------
+// Foundation, courtyard and curtain wall (C186)
+// ---------------------------------------------------------------------
+
+const MASONRY_SALT: u32 = 0x16C0_0001;
+/// Share of curtain-wall cells laid in cobblestone instead of stone.
+pub const COBBLE_SHARE: f32 = 0.35;
+
+fn up(block_type: BlockType, material: MaterialId) -> BlockInstance {
+    BlockInstance::new(block_type, material, Orientation::Up)
+}
+
+/// Stone or cobblestone for a masonry cell, by hash, so the walls read as
+/// rubble-and-ashlar rather than a flat colour.
+pub fn masonry(seed: u32, cell: IVec3) -> BlockInstance {
+    if expansion_hash(seed, cell.x * 3 + cell.y, cell.z * 5 - cell.y, MASONRY_SALT) < COBBLE_SHARE {
+        up(BlockType::Cobblestone, cobblestone_material_id())
+    } else {
+        up(BlockType::Stone, stone_block_material_id())
+    }
+}
+
+/// The castle's base, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleFoundation {
+    /// Ground cells under every wall, tower and keep outline (deepslate
+    /// bricks), replacing the pad's grass.
+    pub footings: Vec<IVec3>,
+    /// Ground cells of the courtyard, gatehouse passage, hall and tower
+    /// cores (cobblestone and stone), replacing the pad's grass.
+    pub floors: Vec<IVec3>,
+    /// Curtain-wall cells (stone and cobblestone), hollow behind.
+    pub walls: Vec<IVec3>,
+    /// The cells of the gate opening, left as air.
+    pub gate_opening: Vec<IVec3>,
+}
+
+impl CastleFoundation {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.footings
+            .iter()
+            .chain(self.floors.iter())
+            .chain(self.walls.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Lays the foundation and raises the curtain wall.
+///
+/// The pad's grass row becomes the floor plan: deepslate-brick footings
+/// under every outline (curtain, towers, keep), cobblestone across the
+/// courtyard and the gatehouse passage, stone inside the keep and the
+/// tower cores. The curtain wall rises `WALL_HEIGHT` courses on the
+/// footprint's outline, one cell thick with nothing behind it, and the
+/// gate opening stays open for the door.
+pub fn build_castle_foundation(
+    terrain: &TerrainConfig,
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleFoundation {
+    let mut built = CastleFoundation::default();
+    let f = layout.footprint;
+    let g = layout.levels.ground_y;
+    let passage = layout.gatehouse_passage();
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            let cell = IVec3::new(x, g, z);
+            // The gate threshold is paved: the passage runs over it.
+            let outline = !passage.contains(&(x, z))
+                && (layout.is_curtain_column(x, z)
+                    || layout.is_tower_shell(x, z)
+                    || layout.is_keep_shell(x, z)
+                    || layout.gatehouse.contains(x, z));
+            if outline {
+                world.insert(
+                    cell,
+                    up(BlockType::DeepslateBricks, deepslate_bricks_material_id()),
+                );
+                built.footings.push(cell);
+            } else if layout.hall.contains(x, z) || layout.tower_at(x, z).is_some() {
+                world.insert(cell, up(BlockType::Stone, stone_block_material_id()));
+                built.floors.push(cell);
+            } else {
+                world.insert(cell, up(BlockType::Cobblestone, cobblestone_material_id()));
+                built.floors.push(cell);
+            }
+        }
+    }
+    let gate_cells = layout.gate.cells();
+    for z in f.min_z..=f.max_z {
+        for x in f.min_x..=f.max_x {
+            if !layout.is_curtain_column(x, z) {
+                continue;
+            }
+            for y in layout.levels.base_y..=layout.levels.wall_top_y {
+                let cell = IVec3::new(x, y, z);
+                if gate_cells.contains(&cell) {
+                    world.remove(cell);
+                    built.gate_opening.push(cell);
+                    continue;
+                }
+                world.insert(cell, masonry(terrain.seed, cell));
+                built.walls.push(cell);
+            }
+        }
+    }
+    built
 }

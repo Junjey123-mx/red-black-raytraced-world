@@ -11,7 +11,7 @@ use crate::core::color::Color;
 use crate::core::face_textures::FaceTextures;
 use crate::core::math::Vec3;
 use crate::renderer::skybox::{Background, SkyGradient};
-use crate::scene::castle::OverworldCastleLayout;
+use crate::scene::castle::{CastleFoundation, OverworldCastleLayout, build_castle_foundation};
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
     InvertedRoute, UpperDescent, build_inverted_route, build_upper_descent,
@@ -89,6 +89,7 @@ pub struct WorldScene {
     expansion_scenery: ExpansionScenery,
     silhouette: Silhouette,
     castle_layout: OverworldCastleLayout,
+    castle_foundation: CastleFoundation,
     world: VoxelWorld,
 }
 
@@ -177,6 +178,7 @@ impl WorldScene {
         // Gate 16: the castle contract on the pad (built after the silhouette
         // so its hollow rooms are never taken for voids).
         let castle_layout = OverworldCastleLayout::derive(&expansion_layout);
+        let castle_foundation = build_castle_foundation(&config, &castle_layout, &mut world);
         Self {
             config,
             field,
@@ -206,6 +208,7 @@ impl WorldScene {
             expansion_scenery,
             silhouette,
             castle_layout,
+            castle_foundation,
             world,
         }
     }
@@ -305,6 +308,17 @@ impl WorldScene {
     /// The Overworld castle contract on the pad (Gate 16).
     pub fn castle_layout(&self) -> &OverworldCastleLayout {
         &self.castle_layout
+    }
+
+    /// The castle's footings, floors and curtain wall (Gate 16).
+    pub fn castle_foundation(&self) -> &CastleFoundation {
+        &self.castle_foundation
+    }
+
+    /// Cells the Gate 16 castle added above the pad (its ground row only
+    /// replaces Gate 15 cells).
+    pub fn castle_voxels(&self) -> usize {
+        self.castle_foundation.walls.len()
     }
 
     pub fn silhouette(&self) -> &Silhouette {

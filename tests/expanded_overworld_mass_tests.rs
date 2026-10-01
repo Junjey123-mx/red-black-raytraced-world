@@ -181,15 +181,10 @@ fn the_castle_pad_is_fully_supported() {
             for d in 0..(UPPER_STRATA_DEPTH - 1) {
                 assert!(scene.world().contains(IVec3::new(x, c.surface_y - d, z)));
             }
-            // Open air above the pad.
-            for y in (c.surface_y + 1)..(c.surface_y + 6) {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
-                    "({x}, {y}, {z}) sits on the pad"
-                );
-            }
         }
     }
+    // Gate 16 builds the castle on the pad: its ground row is the foundation.
+    pad_is_castle_ground(&scene);
 }
 
 #[test]
@@ -212,6 +207,7 @@ fn the_strata_are_present_in_order() {
             .chain(approach.cells().iter())
             .chain(approach.accents.iter())
             .any(|d| d.x == c.x && d.z == c.z)
+            || scene.castle_layout().footprint.contains(c.x, c.z)
     };
     for c in &e.columns {
         if touched(c) {
@@ -254,6 +250,7 @@ fn the_top_of_every_new_column_is_grass_facing_up() {
             .chain(approach.accents.iter())
             .chain(scenery.iter())
             .any(|c| c.x == x && c.z == z)
+            || scene.castle_layout().footprint.contains(x, z)
     };
     for c in &scene.overworld_expansion().columns {
         if paved(c.x, c.z) {
@@ -395,9 +392,41 @@ fn the_voxel_budget_is_respected() {
     // may add a few dozen cells on top, always under the soft maximum.
     let scenery = scene.expansion_scenery();
     let decoration = scenery.upper.cells().len() + scenery.lower.added_cells().len();
+    // Gate 16's castle has its own budget on top of the Gate 15 masses.
+    let castle = scene.castle_voxels();
     assert!(
-        n - decoration <= VOXEL_BUDGET_TARGET,
-        "{n} - {decoration} over the target"
+        n - decoration - castle <= VOXEL_BUDGET_TARGET,
+        "{n} - {decoration} - {castle} over the target"
     );
-    assert!(n <= VOXEL_BUDGET_SOFT_MAX, "{n} over the soft maximum");
+    assert!(
+        n - castle <= VOXEL_BUDGET_SOFT_MAX,
+        "{n} over the soft maximum"
+    );
+}
+
+/// Gate 16 built the castle on the pad: its ground row is the castle
+/// foundation, level with the pad surface.
+fn pad_is_castle_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.overworld_castle_pad;
+    assert_eq!(scene.castle_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.castle_pad_surface_y, z);
+            let t = scene.world().get(ground).map(|b| b.block_type());
+            assert!(
+                matches!(
+                    t,
+                    Some(
+                        BlockType::DeepslateBricks
+                            | BlockType::Cobblestone
+                            | BlockType::Stone
+                            | BlockType::WoodPlanks
+                    )
+                ),
+                "({x},{z}) is {t:?}"
+            );
+            assert!(scene.world().contains(IVec3::new(x, ground.y - 1, z)));
+        }
+    }
 }

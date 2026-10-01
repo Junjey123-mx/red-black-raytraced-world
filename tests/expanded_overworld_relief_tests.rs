@@ -160,6 +160,7 @@ fn paved(scene: &WorldScene, x: i32, z: i32) -> bool {
         .chain(a.accents.iter())
         .chain(scene.expansion_scenery().upper.cells().iter())
         .any(|c| c.x == x && c.z == z)
+        || scene.castle_layout().footprint.contains(x, z)
 }
 
 fn clear(scene: &WorldScene, p: Vec3) -> bool {
@@ -401,12 +402,13 @@ fn the_surface_is_collision_safe() {
             );
         }
     }
-    // A walk across the pad from its west edge to its east edge, one cell
-    // above the grass, is never blocked.
+    // A walk onto the pad from the approach, through the Gate 16 gate into
+    // the courtyard, one cell above the ground, is never blocked.
+    let castle = scene.castle_layout();
     let y = l.castle_pad_surface_y as f32 + 2.0;
-    let z = (l.overworld_castle_pad.min_z + l.overworld_castle_pad.max_z) as f32 / 2.0 + 0.5;
-    let from = v(l.overworld_castle_pad.min_x as f32 + 0.5, y, z);
-    let to = v(l.overworld_castle_pad.max_x as f32 + 0.5, y, z);
+    let z = castle.gate.base.z as f32 + castle.gate.width as f32 / 2.0;
+    let from = v(l.overworld_castle_pad.min_x as f32 - 1.5, y, z);
+    let to = v(castle.gatehouse.max_x as f32 + 1.5, y, z);
     let reached = resolve_camera_motion(
         scene.world(),
         from,

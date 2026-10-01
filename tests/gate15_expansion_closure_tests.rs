@@ -468,22 +468,8 @@ fn the_castle_pad_is_reserved() {
     assert_eq!(pad.width(), PAD_SIDE);
     assert_eq!(pad.depth(), PAD_SIDE);
     assert_eq!(l.castle_pad_area(), PAD_SIDE * PAD_SIDE);
-    for z in pad.min_z..=pad.max_z {
-        for x in pad.min_x..=pad.max_x {
-            let top = ground_cell(scene.world(), x, z, 40, -4).unwrap();
-            assert_eq!(top.y, l.castle_pad_surface_y, "({x},{z})");
-            let b = scene.world().get(top).unwrap();
-            assert_eq!(b.block_type(), BlockType::Grass);
-            assert_eq!(b.orientation(), Orientation::Up);
-            for y in (top.y + 1)..=40 {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
-                    "({x},{y},{z})"
-                );
-            }
-            assert!(clear(&scene, eye_over(top)));
-        }
-    }
+    // Gate 16 built the castle on it: the pad row is its foundation.
+    pad_is_castle_ground(&scene);
     println!(
         "GATE15 castle pad x {}..={} z {}..={} surface y={}",
         pad.min_x, pad.max_x, pad.min_z, pad.max_z, l.castle_pad_surface_y
@@ -746,8 +732,12 @@ fn the_voxel_budget_is_respected() {
     let n = scene.world().len();
     let decoration = decoration_cells(&scene);
     assert!(n > GATE_14_VOXELS);
-    assert!(n - decoration <= VOXEL_BUDGET_TARGET, "{n} - {decoration}");
-    assert!(n <= VOXEL_BUDGET_SOFT_MAX, "{n}");
+    let castle = scene.castle_voxels();
+    assert!(
+        n - decoration - castle <= VOXEL_BUDGET_TARGET,
+        "{n} - {decoration} - {castle}"
+    );
+    assert!(n - castle <= VOXEL_BUDGET_SOFT_MAX, "{n}");
     println!(
         "GATE15 voxels={n} delta={} decoration={decoration} upper={} lower={}",
         n - GATE_14_VOXELS,
@@ -962,5 +952,32 @@ fn bench_release_expansion() {
             1000.0 / t,
             p50(&mut full)
         );
+    }
+}
+
+/// Gate 16 built the castle on the pad: its ground row is the castle
+/// foundation, level with the pad surface.
+fn pad_is_castle_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.overworld_castle_pad;
+    assert_eq!(scene.castle_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.castle_pad_surface_y, z);
+            let t = scene.world().get(ground).map(|b| b.block_type());
+            assert!(
+                matches!(
+                    t,
+                    Some(
+                        BlockType::DeepslateBricks
+                            | BlockType::Cobblestone
+                            | BlockType::Stone
+                            | BlockType::WoodPlanks
+                    )
+                ),
+                "({x},{z}) is {t:?}"
+            );
+            assert!(scene.world().contains(IVec3::new(x, ground.y - 1, z)));
+        }
     }
 }

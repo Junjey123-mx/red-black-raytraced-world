@@ -177,22 +177,8 @@ fn the_castle_pad_remains_open() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
     let pad = l.overworld_castle_pad;
-    for z in pad.min_z..=pad.max_z {
-        for x in pad.min_x..=pad.max_x {
-            let top = ground_cell(scene.world(), x, z, 40, -4).unwrap();
-            assert_eq!(top.y, l.castle_pad_surface_y, "({x},{z})");
-            assert_eq!(
-                scene.world().get(top).unwrap().block_type(),
-                BlockType::Grass
-            );
-            for y in (top.y + 1)..=40 {
-                assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
-                    "({x},{y},{z}) over the pad"
-                );
-            }
-        }
-    }
+    // Gate 16 built the castle on it: the pad row is its foundation.
+    pad_is_castle_ground(&scene);
     for c in upper_cells(&scene) {
         assert!(!pad.contains(c.x, c.z), "{c:?} on the pad");
     }
@@ -458,5 +444,32 @@ fn no_focal_scene_is_cluttered() {
                 .iter()
                 .all(|o| (o.base.x - t.base.x).abs() >= 3 || (o.base.z - t.base.z).abs() >= 3)
         );
+    }
+}
+
+/// Gate 16 built the castle on the pad: its ground row is the castle
+/// foundation, level with the pad surface.
+fn pad_is_castle_ground(scene: &WorldScene) {
+    let l = scene.expansion_layout();
+    let pad = l.overworld_castle_pad;
+    assert_eq!(scene.castle_layout().footprint, pad);
+    for z in pad.min_z..=pad.max_z {
+        for x in pad.min_x..=pad.max_x {
+            let ground = IVec3::new(x, l.castle_pad_surface_y, z);
+            let t = scene.world().get(ground).map(|b| b.block_type());
+            assert!(
+                matches!(
+                    t,
+                    Some(
+                        BlockType::DeepslateBricks
+                            | BlockType::Cobblestone
+                            | BlockType::Stone
+                            | BlockType::WoodPlanks
+                    )
+                ),
+                "({x},{z}) is {t:?}"
+            );
+            assert!(scene.world().contains(IVec3::new(x, ground.y - 1, z)));
+        }
     }
 }
