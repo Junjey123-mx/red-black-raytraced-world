@@ -11,8 +11,8 @@ use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
 use crate::scene::red_black_timber::{
-    RED_BLACK_TIMBER_DIR, red_black_leaves_material_id, red_black_log_material_id,
-    red_black_wood_planks_material_id,
+    RED_BLACK_TIMBER_DIR, red_black_fence_material_id, red_black_leaves_material_id,
+    red_black_log_material_id, red_black_wood_planks_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -851,6 +851,15 @@ pub fn insert_overworld_materials(
         red_black_wood_planks_material_id(),
         Material::new(Color::new(0.50, 0.15, 0.17, 1.0), 0.06, 8.0)
             .with_reflectivity(0.01)
+            .with_face_textures(textures.red_black_wood_planks),
+    );
+    // Red-Black fence: the Overworld fence's wood profile (specular 0.10,
+    // shininess 18) wearing the corinto planks, exactly as Fence wears the
+    // Overworld planks; never emissive.
+    library.insert(
+        red_black_fence_material_id(),
+        Material::new(Color::new(0.50, 0.15, 0.17, 1.0), 0.10, 18.0)
+            .with_reflectivity(0.02)
             .with_face_textures(textures.red_black_wood_planks),
     );
     // Nether wart block: dense fungal red, matte (specular 0.04, shininess 6,
