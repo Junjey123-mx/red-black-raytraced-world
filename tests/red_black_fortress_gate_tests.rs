@@ -141,11 +141,12 @@ mod renderer {
 }
 
 use camera::world_collision::{
-    CameraCollisionConfig, is_camera_solid, is_position_clear, resolve_camera_motion,
+    CameraCollisionConfig, CollisionState, is_camera_passable, is_camera_solid, is_position_clear,
+    resolve_camera_motion,
 };
 use core::math::{IVec3, Vec3};
 use scene::block_type::BlockType;
-use scene::fortress::{FORTRESS_WALL_COURSES, is_dark_structure};
+use scene::fortress::{is_dark_structure, is_family_brick};
 use scene::orientation::Orientation;
 use scene::world::WorldScene;
 
@@ -214,200 +215,15 @@ fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
     walk(scene, &back);
 }
 
-#[test]
-fn the_foundation_replaces_the_pad_and_is_connected() {
-    let scene = WorldScene::new();
+/// Eye points from the Gate 15 approach, through the gate, into the courtyard.
+fn entrance(scene: &WorldScene) -> Vec<Vec3> {
     let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    let g = l.levels.ground_y;
-    let pad = l.footprint;
-    assert_eq!(
-        f.footings.len() + f.floors.len(),
-        (pad.width() * pad.depth()) as usize
-    );
-    for cell in f.footings.iter().chain(f.floors.iter()) {
-        assert_eq!(cell.y, g);
-        assert!(pad.contains(cell.x, cell.z));
-        let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.orientation(), Orientation::Down);
-        // Dark, or the organic core floor a family tower lays later.
-        assert!(
-            is_dark_structure(b.block_type())
-                || matches!(
-                    b.block_type(),
-                    BlockType::NetherWartBlock | BlockType::Mycelium
-                ),
-            "{cell:?}"
-        );
-        // Each pad column is a Gate 15 lower-shell column (the one connected
-        // world is certified by the closure tests).
-        assert!(
-            scene.red_black_expansion().column(cell.x, cell.z).is_some(),
-            "{cell:?}"
-        );
-    }
-    for cell in &f.footings {
-        assert_eq!(
-            scene.world().get(*cell).unwrap().block_type(),
-            BlockType::PolishedBlackstoneBricks
-        );
-    }
-    println!(
-        "GATE17 foundation: footings={} floors={} walls={} gate_opening={} fortress_voxels={} voxels={}",
-        f.footings.len(),
-        f.floors.len(),
-        f.walls.len(),
-        f.gate_opening.len(),
-        scene.fortress_voxels(),
-        scene.world().len()
-    );
-}
-
-#[test]
-fn the_courtyard_is_paved_and_clear() {
-    let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let g = l.levels.ground_y;
-    for (x, z) in l.courtyard.iter().chain(l.gate_corridor().iter()) {
-        let ground = IVec3::new(*x, g, *z);
-        // Basalt paving, or the blackstone threshold / organic patches later
-        // stages lay over it.
-        let t = scene.world().get(ground).unwrap().block_type();
-        assert!(
-            matches!(
-                t,
-                BlockType::SmoothBasalt
-                    | BlockType::PolishedBlackstoneBricks
-                    | BlockType::Mycelium
-                    | BlockType::NetherWartBlock
-            ),
-            "({x},{z}) is {t:?}"
-        );
-        // Head room functionally above the floor: the two cells below in world y.
-        for dy in 1..=2 {
-            let open = scene
-                .world()
-                .get(IVec3::new(*x, g - dy, *z))
-                .is_none_or(|b| !is_camera_solid(b));
-            assert!(open, "({x},{z}) - {dy}");
-        }
-        assert!(clear(&scene, eye(ground)), "({x},{z})");
-    }
-}
-
-#[test]
-fn the_curtain_is_anchored_and_hollow() {
-    let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    let pad = l.footprint;
-    let perimeter = (2 * (pad.width() + pad.depth()) - 4) as usize;
-    assert_eq!(
-        f.walls.len(),
-        perimeter * FORTRESS_WALL_COURSES as usize - f.gate_opening.len()
-    );
-    let mut basalt = 0;
-    for cell in &f.walls {
-        assert!(l.is_curtain_column(cell.x, cell.z));
-        assert!(cell.y <= l.levels.base_y && cell.y >= l.levels.wall_top_y);
-        let b = scene.world().get(*cell).unwrap();
-        assert!(is_camera_solid(b));
-        assert_eq!(b.orientation(), Orientation::Down);
-        if b.block_type() == BlockType::SmoothBasalt {
-            basalt += 1;
-        }
-        // Anchored toward the ground (world +y), through the opening's lintel too.
-        let support = IVec3::new(cell.x, cell.y + 1, cell.z);
-        assert!(
-            scene.world().contains(support) || f.gate_opening.contains(&support),
-            "{cell:?} floats"
-        );
-    }
-    assert!(
-        basalt > f.walls.len() / 6 && basalt < f.walls.len() / 2,
-        "{basalt}"
-    );
-    for (x, z) in &l.courtyard {
-        for y in l.levels.wall_top_y..=l.levels.base_y {
-            let open = scene
-                .world()
-                .get(IVec3::new(*x, y, *z))
-                .is_none_or(|b| !is_camera_solid(b));
-            assert!(open, "({x},{y},{z}) fills the courtyard");
-        }
-    }
-}
-
-#[test]
-fn the_gate_opening_is_valid() {
-    let scene = WorldScene::new();
-    let l = scene.fortress_layout();
-    let f = scene.fortress_foundation();
-    assert_eq!(f.gate_opening, l.gate.cells());
-    for cell in &f.gate_opening {
-        let open = scene.world().get(*cell).is_none_or(|b| !is_camera_solid(b));
-        assert!(open, "{cell:?} blocked");
-    }
-    let g = l.gate;
-    // Lintel functionally above (world y - 2), jambs beside.
-    let lintel = IVec3::new(g.base.x, g.base.y - 2, g.base.z);
-    assert!(
-        scene
-            .world()
-            .get(lintel)
-            .is_some_and(|b| is_camera_solid(b))
-    );
-    for j in [
-        IVec3::new(g.base.x, g.base.y, g.base.z - 1),
-        IVec3::new(g.base.x, g.base.y, g.base.z + g.width),
-    ] {
-        assert!(
-            scene.world().get(j).is_some_and(|b| is_camera_solid(b)),
-            "{j:?}"
-        );
-    }
-    assert!(clear(
-        &scene,
-        v(
-            g.base.x as f32 + 0.5,
-            g.base.y as f32 - 0.5,
-            g.base.z as f32 + 1.0
-        )
-    ));
-}
-
-#[test]
-fn everything_is_down_oriented() {
-    let scene = WorldScene::new();
-    for cell in scene.fortress_foundation().cells() {
-        assert_eq!(
-            scene.world().get(cell).unwrap().orientation(),
-            Orientation::Down,
-            "{cell:?}"
-        );
-    }
-    for cell in scene.fortress_cells() {
-        assert!(cell.y < scene.fortress_layout().levels.ground_y);
-        assert_eq!(
-            scene.world().get(cell).unwrap().orientation(),
-            Orientation::Down
-        );
-    }
-}
-
-#[test]
-fn the_approach_is_unobstructed() {
-    let scene = WorldScene::new();
-    let a = scene.red_black_approach();
-    for cell in &a.main {
-        assert!(clear(&scene, eye(*cell)), "{cell:?}");
-    }
-    let l = scene.fortress_layout();
-    for cell in scene.fortress_foundation().cells() {
-        assert!(l.footprint.contains(cell.x, cell.z));
-    }
-    // From the approach through the gate into the courtyard and back.
-    let mut points: Vec<Vec3> = a.main.iter().map(|c| eye(*c)).collect();
+    let mut points: Vec<Vec3> = scene
+        .red_black_approach()
+        .main
+        .iter()
+        .map(|c| eye(*c))
+        .collect();
     let end = l.central_keep.min_x;
     points.extend(
         l.main_route()
@@ -415,5 +231,189 @@ fn the_approach_is_unobstructed() {
             .take_while(|r| r.x < end)
             .map(|r| eye(*r)),
     );
+    points
+}
+
+#[test]
+fn the_approach_connects_to_the_gate() {
+    let scene = WorldScene::new();
+    let l = scene.fortress_layout();
+    let g = scene.fortress_gate();
+    let last = *scene.red_black_approach().main.last().unwrap();
+    assert_eq!(last.x + 1, l.gate.base.x);
+    assert!(
+        l.gate
+            .columns()
+            .iter()
+            .any(|(_, z)| (z - last.z).abs() <= 1)
+    );
+    assert_eq!(g.opening, l.gate.cells());
+    assert_eq!(g.opening.len(), 4);
+    assert!(CollisionState::new().collision_enabled());
+    walk(&scene, &entrance(&scene));
+    println!(
+        "GATE17 gate: pillars={} walls={} vault={} accents={} threshold={} fortress_voxels={} voxels={}",
+        g.pillars.len(),
+        g.walls.len(),
+        g.vault.len(),
+        g.accents.len(),
+        g.threshold.len(),
+        scene.fortress_voxels(),
+        scene.world().len()
+    );
+}
+
+#[test]
+fn the_corridor_is_clear_under_its_vault() {
+    let scene = WorldScene::new();
+    let l = scene.fortress_layout();
+    let g = scene.fortress_gate();
+    let ground = l.levels.ground_y;
+    for (x, z) in l.gate_corridor() {
+        for dy in 1..=2 {
+            let cell = IVec3::new(x, ground - dy, z);
+            assert!(
+                !scene.world().contains(cell),
+                "{cell:?} blocks the corridor"
+            );
+        }
+        assert!(clear(&scene, eye(IVec3::new(x, ground, z))), "({x},{z})");
+    }
+    for cell in &g.opening {
+        assert!(!scene.world().contains(*cell), "{cell:?} is not open");
+    }
+    assert_eq!(
+        g.vault.len(),
+        (l.gatehouse.width() * l.gatehouse.depth()) as usize
+    );
+    for cell in &g.vault {
+        assert_eq!(cell.y, l.levels.wall_top_y - 1);
+        assert!(is_dark_structure(
+            scene.world().get(*cell).unwrap().block_type()
+        ));
+        assert!(
+            scene
+                .world()
+                .contains(IVec3::new(cell.x, cell.y + 1, cell.z))
+                || l.gate_corridor().contains(&(cell.x, cell.z)),
+            "{cell:?}"
+        );
+    }
+}
+
+#[test]
+fn the_frame_is_solid_dark_architecture_with_colored_accents() {
+    let scene = WorldScene::new();
+    let g = scene.fortress_gate();
+    let l = scene.fortress_layout();
+    for cell in g
+        .pillars
+        .iter()
+        .chain(g.walls.iter())
+        .chain(g.vault.iter())
+        .chain(g.accents.iter())
+        .chain(g.threshold.iter())
+    {
+        let b = scene.world().get(*cell).unwrap();
+        assert!(is_camera_solid(b), "{cell:?}");
+        assert_eq!(b.orientation(), Orientation::Down);
+    }
+    for cell in &g.pillars {
+        assert_eq!(
+            scene.world().get(*cell).unwrap().block_type(),
+            BlockType::PolishedBlackstoneBricks
+        );
+    }
+    assert_eq!(g.accents.len(), 2);
+    let kinds: Vec<BlockType> = g
+        .accents
+        .iter()
+        .map(|c| scene.world().get(*c).unwrap().block_type())
+        .collect();
+    assert!(
+        kinds.contains(&BlockType::CryingObsidianCrimson)
+            && kinds.contains(&BlockType::CryingObsidianViolet),
+        "{kinds:?}"
+    );
+    // The woven jambs and lintel (C197) are kept around the opening.
+    let gate = l.gate;
+    for cell in [
+        IVec3::new(gate.base.x, gate.base.y, gate.base.z - 1),
+        IVec3::new(gate.base.x, gate.base.y, gate.base.z + gate.width),
+        IVec3::new(gate.base.x, gate.base.y - 2, gate.base.z),
+    ] {
+        assert!(
+            is_family_brick(scene.world().get(cell).unwrap().block_type()),
+            "{cell:?}"
+        );
+    }
+    assert_eq!(g.threshold.len(), 2);
+}
+
+#[test]
+fn the_courtyard_is_reachable_and_the_route_reverses() {
+    let scene = WorldScene::new();
+    let points = entrance(&scene);
     walk_both_ways(&scene, &points);
+    let l = scene.fortress_layout();
+    let g = l.levels.ground_y;
+    let last = *points.last().unwrap();
+    for (x, z) in &l.courtyard {
+        let target = eye(IVec3::new(*x, g, *z));
+        assert!(clear(&scene, target), "({x},{z})");
+        let via = eye(IVec3::new(l.gatehouse.max_x + 1, g, *z));
+        let via2 = eye(IVec3::new(*x, g, l.gate.base.z));
+        let a = [last, via, target];
+        let b = [last, via2, target];
+        let ok = |pts: &[Vec3]| {
+            let mut p = pts[0];
+            for t in &pts[1..] {
+                p = step(&scene, p, *t);
+                if (p - *t).length() >= 1e-3 {
+                    return false;
+                }
+            }
+            true
+        };
+        assert!(ok(&a) || ok(&b), "({x},{z}) unreachable from the gate");
+    }
+}
+
+#[test]
+fn no_portal_semantics_are_reused() {
+    let scene = WorldScene::new();
+    for cell in scene.fortress_cells() {
+        let t = scene.world().get(cell).unwrap().block_type();
+        assert!(
+            !matches!(
+                t,
+                BlockType::PortalCoreDarkCrimson | BlockType::PortalFrameRedObsidian
+            ),
+            "{cell:?} is a portal block"
+        );
+        assert!(t != BlockType::WoodDoor || is_camera_passable(t));
+    }
+    for cell in &scene.fortress_gate().opening {
+        assert!(scene.world().get(*cell).is_none());
+    }
+    let src = std::fs::read_to_string("src/scene/fortress.rs").unwrap();
+    for token in [
+        "PortalCore",
+        "PortalFrame",
+        "portal_crossing",
+        "PortalVolume",
+        "WoodDoor",
+    ] {
+        assert!(!src.contains(token), "{token} in fortress.rs");
+    }
+    // The real portal is untouched.
+    let portal = scene.portal();
+    assert_eq!(portal.frame.len(), 18);
+    assert_eq!(portal.core.len(), 12);
+    for c in &portal.core {
+        assert_eq!(
+            scene.world().get(*c).unwrap().block_type(),
+            BlockType::PortalCoreDarkCrimson
+        );
+    }
 }

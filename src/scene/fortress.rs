@@ -1206,3 +1206,126 @@ pub fn build_symbol_keep(
     }
     built
 }
+
+// ---------------------------------------------------------------------
+// Gate, arch and corridor (C202)
+// ---------------------------------------------------------------------
+
+/// The gate, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FortressGate {
+    /// Dark pillars on the inner corners of the corridor.
+    pub pillars: Vec<IVec3>,
+    /// Masonry of the corridor's side rows inside the curtain.
+    pub walls: Vec<IVec3>,
+    /// The corridor's ceiling (functionally above the passage).
+    pub vault: Vec<IVec3>,
+    /// Crying-obsidian accents flanking the arch past the wall top.
+    pub accents: Vec<IVec3>,
+    /// Polished-blackstone threshold cells on the courtyard floor.
+    pub threshold: Vec<IVec3>,
+    /// The opening, kept clear (no door block of any kind).
+    pub opening: Vec<IVec3>,
+}
+
+impl FortressGate {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.pillars
+            .iter()
+            .chain(self.walls.iter())
+            .chain(self.vault.iter())
+            .chain(self.accents.iter())
+            .chain(self.threshold.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Builds the fortress gate: the two side rows of the gate block become
+/// pillars (inside) and masonry (on the curtain) for the wall's courses;
+/// a dark vault closes the corridor one course past the wall top; a
+/// crying-obsidian accent in the family of each jamb hangs from the arch's
+/// outer corners; and two polished-blackstone threshold cells mark where
+/// the corridor meets the courtyard. The opening itself stays clear: the
+/// gate is architecture, not a portal.
+pub fn build_fortress_gate(
+    terrain: &TerrainConfig,
+    layout: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> FortressGate {
+    let mut built = FortressGate::default();
+    let g = layout.gatehouse;
+    let lv = layout.levels;
+    for z in [g.min_z, g.max_z] {
+        for x in g.min_x..=g.max_x {
+            for y in (lv.wall_top_y..=lv.base_y).rev() {
+                let cell = IVec3::new(x, y, z);
+                if world
+                    .get(cell)
+                    .is_some_and(|b| is_family_brick(b.block_type()))
+                {
+                    continue;
+                }
+                if layout.is_curtain_column(x, z) {
+                    world.insert(cell, dark_masonry(terrain.seed, cell));
+                    built.walls.push(cell);
+                } else {
+                    world.insert(
+                        cell,
+                        down(
+                            BlockType::PolishedBlackstoneBricks,
+                            polished_blackstone_bricks_material_id(),
+                        ),
+                    );
+                    built.pillars.push(cell);
+                }
+            }
+        }
+    }
+    let vault_y = lv.wall_top_y - 1;
+    for z in g.min_z..=g.max_z {
+        for x in g.min_x..=g.max_x {
+            let cell = IVec3::new(x, vault_y, z);
+            world.insert(cell, dark_masonry(terrain.seed, cell));
+            built.vault.push(cell);
+        }
+    }
+    for (z, family) in [(g.min_z, Family::Crimson), (g.max_z, Family::Violet)] {
+        let cell = IVec3::new(g.min_x, vault_y - 1, z);
+        let (bt, material) = match family {
+            Family::Crimson => (
+                BlockType::CryingObsidianCrimson,
+                crying_obsidian_crimson_material_id(),
+            ),
+            Family::Orange => (
+                BlockType::CryingObsidianOrange,
+                crying_obsidian_orange_material_id(),
+            ),
+            Family::Violet => (
+                BlockType::CryingObsidianViolet,
+                crying_obsidian_violet_material_id(),
+            ),
+        };
+        world.insert(cell, down(bt, material));
+        built.accents.push(cell);
+    }
+    let threshold_x = g.max_x + 1;
+    for dz in 0..layout.gate.width {
+        let cell = IVec3::new(threshold_x, lv.ground_y, layout.gate.base.z + dz);
+        if layout.courtyard.contains(&(cell.x, cell.z)) {
+            world.insert(
+                cell,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+            built.threshold.push(cell);
+        }
+    }
+    built.opening = layout.gate.cells();
+    for cell in &built.opening {
+        world.remove(*cell);
+    }
+    built
+}

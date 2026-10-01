@@ -30,9 +30,9 @@ use crate::scene::expansion::{
     pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::fortress::{
-    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressKeep,
-    RedBlackFortressLayout, build_family_tower, build_fortress_foundation, build_symbol_keep,
-    weave_colored_bricks,
+    FamilyTowerBuild, FortressColoredBricks, FortressFoundation, FortressGate, FortressKeep,
+    RedBlackFortressLayout, build_family_tower, build_fortress_foundation, build_fortress_gate,
+    build_symbol_keep, weave_colored_bricks,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -112,6 +112,7 @@ pub struct WorldScene {
     fortress_bricks: FortressColoredBricks,
     fortress_towers: Vec<FamilyTowerBuild>,
     fortress_keep: FortressKeep,
+    fortress_gate: FortressGate,
     world: VoxelWorld,
 }
 
@@ -233,6 +234,7 @@ impl WorldScene {
             ),
         ];
         let fortress_keep = build_symbol_keep(&config, &fortress_layout, &mut world);
+        let fortress_gate = build_fortress_gate(&config, &fortress_layout, &mut world);
         Self {
             config,
             field,
@@ -275,6 +277,7 @@ impl WorldScene {
             fortress_bricks,
             fortress_towers,
             fortress_keep,
+            fortress_gate,
             world,
         }
     }
@@ -451,6 +454,7 @@ impl WorldScene {
             .iter()
             .chain(tower_cells.iter())
             .chain(self.fortress_keep.cells().iter())
+            .chain(self.fortress_gate.cells().iter())
             .filter(|c| c.y < ground && seen.insert(**c))
             .copied()
             .collect()
@@ -465,6 +469,11 @@ impl WorldScene {
     /// of the Gate 15 masses.
     pub fn architecture_voxels(&self) -> usize {
         self.castle_voxels() + self.fortress_voxels()
+    }
+
+    /// The fortress gate (Gate 17).
+    pub fn fortress_gate(&self) -> &FortressGate {
+        &self.fortress_gate
     }
 
     /// The central symbolic keep (Gate 17).
