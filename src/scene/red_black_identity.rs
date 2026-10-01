@@ -60,16 +60,15 @@ fn down(block_type: BlockType, material: crate::core::material::MaterialId) -> B
 }
 
 /// The trunk sites of the first grove, derived from the fortress pad: one
-/// beside the forecourt and one south of the gate (both off every sight
-/// line from the approach to the gate) and two on the lobe's north ring
-/// behind the fortress, clear of the towers' crests.
+/// beside the forecourt (off every sight line from the approach to the
+/// gate) and two on the lobe's east edge, beside the fortress rather than
+/// in front of it, so no view of the four towers is screened by foliage.
 pub fn tree_sites(fortress: &RedBlackFortressLayout) -> Vec<(i32, i32)> {
     let f = fortress.footprint;
     vec![
         (f.min_x - 4, f.min_z + 5),
-        (f.min_x - 1, f.max_z),
-        (f.min_x + 3, f.min_z - 1),
-        (f.min_x + 7, f.min_z - 1),
+        (f.max_x + 1, f.min_z + 2),
+        (f.max_x + 1, f.max_z - 1),
     ]
 }
 
@@ -161,9 +160,16 @@ pub fn grow_red_black_tree(
     // Walk columns stay free from the ground down: no leaf hangs under a
     // path, so its paving remains the lowest cell of the column.
     let in_walk_column = |c: IVec3| clearance.walk_columns.contains(&(c.x, c.z));
+    // Inside the world box as it stands: a tree never grows the bounds.
+    let bounds = world.bounds()?;
+    let inside = |c: IVec3| bounds.contains_cell(c);
     let trunk: Vec<IVec3> = (1..=height).map(|d| IVec3::new(x, base.y - d, z)).collect();
     if trunk.iter().any(|c| {
-        world.contains(*c) || clearance.cells.contains(c) || near_focal(*c) || in_walk_column(*c)
+        world.contains(*c)
+            || clearance.cells.contains(c)
+            || near_focal(*c)
+            || in_walk_column(*c)
+            || !inside(*c)
     }) {
         return None;
     }
@@ -180,6 +186,7 @@ pub fn grow_red_black_tree(
             || clearance.cells.contains(&c)
             || near_focal(c)
             || in_walk_column(c)
+            || !inside(c)
             || c.y < clearance.floor_y
         {
             continue;
@@ -927,6 +934,108 @@ pub fn expand_red_black_landscape(
     built
 }
 
+// ---------------------------------------------------------------------
+// Approach composition (C219)
+// ---------------------------------------------------------------------
+
+/// Fence posts per fragment along the path's north edge, and the gap after.
+pub const EDGE_FRAGMENT: usize = 2;
+pub const EDGE_GAP: usize = 2;
+
+/// The composed approach, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ApproachComposition {
+    /// Shoulder ground cells beside the path re-laid in blackstone.
+    pub edge: Vec<IVec3>,
+    /// `RedBlackFence` fragments standing on that edge.
+    pub fences: Vec<IVec3>,
+    /// Trunk sites of the shoulder trees (planted into the grove).
+    pub tree_sites: Vec<(i32, i32)>,
+}
+
+/// The shoulder's tree sites: on its ragged outer row, one past the
+/// landing's side of the path and one at the path's turn, both north of
+/// every sight line to the gate.
+pub fn shoulder_tree_sites(expansion: &WorldExpansionLayout) -> Vec<(i32, i32)> {
+    let outer_z = expansion.red_black_extension.min_z - 2;
+    let turn_x = expansion.red_black_fortress_pad.min_x - 1;
+    vec![(turn_x - 3, outer_z), (turn_x, outer_z)]
+}
+
+/// Composes the fortress approach: the shoulder's inner ground cells beside
+/// the path become a blackstone edge with short `RedBlackFence` fragments
+/// (posts in pairs with gaps, only within one course of the path), and two
+/// crimson trees grow on the shoulder's outer row at the path's sides. The
+/// path, its head room, the gate's sight lines and every family scene stay
+/// clear; the fortress silhouette is left open.
+pub fn compose_fortress_approach(
+    seed: u32,
+    expansion: &WorldExpansionLayout,
+    approach: &RedBlackApproach,
+    landscape: &LandscapeExpansion,
+    clearance: &TreeClearance,
+    grove: &mut RedBlackGrove,
+    world: &mut VoxelWorld,
+) -> ApproachComposition {
+    let mut built = ApproachComposition::default();
+    let inner_z = expansion.red_black_extension.min_z - 1;
+    let mut edge: Vec<(IVec3, IVec3)> = landscape
+        .ground
+        .iter()
+        .filter(|g| g.z == inner_z)
+        .filter_map(|g| {
+            approach
+                .main
+                .iter()
+                .find(|p| p.x == g.x && p.z == g.z + 1)
+                .map(|p| (*g, *p))
+        })
+        .collect();
+    edge.sort_by_key(|(g, _)| g.x);
+    for (i, (g, path)) in edge.iter().enumerate() {
+        if world
+            .get(*g)
+            .is_some_and(|b| b.block_type() != BlockType::PolishedBlackstoneBricks)
+        {
+            world.insert(
+                *g,
+                down(
+                    BlockType::PolishedBlackstoneBricks,
+                    polished_blackstone_bricks_material_id(),
+                ),
+            );
+        }
+        built.edge.push(*g);
+        let in_fragment = i % (EDGE_FRAGMENT + EDGE_GAP) < EDGE_FRAGMENT;
+        let post = IVec3::new(g.x, g.y - 1, g.z);
+        if in_fragment
+            && (path.y - g.y).abs() <= 1
+            && !world.contains(post)
+            && !clearance.cells.contains(&post)
+        {
+            world.insert(post, fence());
+            built.fences.push(post);
+        }
+    }
+    for (x, z) in shoulder_tree_sites(expansion) {
+        if grove.trees.len() >= RED_BLACK_TREES_MAX {
+            break;
+        }
+        let spaced = grove
+            .trees
+            .iter()
+            .all(|t| (t.base.x - x).abs() >= TREE_SPACING || (t.base.z - z).abs() >= TREE_SPACING);
+        if !spaced {
+            continue;
+        }
+        if let Some(tree) = grow_red_black_tree(seed, x, z, clearance, world) {
+            grove.trees.push(tree);
+            built.tree_sites.push((x, z));
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -936,6 +1045,7 @@ pub struct RedBlackIdentity {
     pub gatehouse: RedBlackGatehouse,
     pub fourth_tower: FourthTower,
     pub landscape: LandscapeExpansion,
+    pub composition: ApproachComposition,
 }
 
 impl RedBlackIdentity {
@@ -951,6 +1061,7 @@ impl RedBlackIdentity {
             .chain(self.gatehouse.added_cells())
             .chain(self.fourth_tower.added_cells())
             .chain(self.landscape.cells.iter().copied())
+            .chain(self.composition.fences.iter().copied())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -974,13 +1085,45 @@ pub fn build_red_black_identity(
         focal_columns,
         floor_y,
     };
-    let grove = plant_red_black_grove(seed, fortress, &clearance, world);
+    // Architecture first (timber, path, gatehouse, fourth tower, landscape),
+    // then the vegetation that has to keep clear of all of it.
     let timber = weave_fortress_timber(fortress, world);
-    let path = lay_corinto_path(approach, fortress, &clearance, &grove, world);
+    let path = lay_corinto_path(
+        approach,
+        fortress,
+        &clearance,
+        &RedBlackGrove::default(),
+        world,
+    );
     let gatehouse = build_red_black_gatehouse(fortress, world);
     let fourth_tower = build_fourth_tower(seed, fortress, world);
     let landscape =
         expand_red_black_landscape(seed, expansion, fortress, protected, floor_y, world);
+    // The fourth tower's crests join the protected cells: no leaf may touch
+    // a symbol.
+    let mut grown_protection = protected.clone();
+    for (c, _) in &fourth_tower.crests {
+        for (dx, dy, dz) in [
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+        ] {
+            grown_protection.insert(IVec3::new(c.x + dx, c.y + dy, c.z + dz));
+        }
+    }
+    let clearance = TreeClearance {
+        cells: &grown_protection,
+        walk_columns,
+        focal_columns,
+        floor_y,
+    };
+    let mut grove = plant_red_black_grove(seed, fortress, &clearance, world);
+    let composition = compose_fortress_approach(
+        seed, expansion, approach, &landscape, &clearance, &mut grove, world,
+    );
     RedBlackIdentity {
         grove,
         timber,
@@ -988,5 +1131,6 @@ pub fn build_red_black_identity(
         gatehouse,
         fourth_tower,
         landscape,
+        composition,
     }
 }

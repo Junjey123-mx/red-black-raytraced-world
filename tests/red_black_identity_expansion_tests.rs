@@ -328,12 +328,11 @@ fn the_new_surface_faces_minus_y() {
         if trees.contains(&(g.x, g.z)) {
             continue;
         }
-        let below_free = !scene.world().contains(IVec3::new(g.x, g.y - 1, g.z))
-            || scene
-                .red_black_identity()
-                .path
-                .fences
-                .contains(&IVec3::new(g.x, g.y - 1, g.z));
+        let below = IVec3::new(g.x, g.y - 1, g.z);
+        let id = scene.red_black_identity();
+        let below_free = !scene.world().contains(below)
+            || id.path.fences.contains(&below)
+            || id.composition.fences.contains(&below);
         assert!(below_free, "{g:?} is not the ground");
     }
 }
