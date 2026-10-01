@@ -15,7 +15,10 @@ use crate::scene::expansion::{WorldExpansionLayout, expansion_hash};
 use crate::scene::material_gallery::deepslate_bricks_material_id;
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT};
-use crate::scene::overworld_blocks::{cobblestone_material_id, stone_block_material_id};
+use crate::scene::overworld_blocks::{
+    cobblestone_material_id, fence_material_id, log_material_id, stone_block_material_id,
+    wood_door_bottom_material_id, wood_door_top_material_id, wood_planks_material_id,
+};
 use crate::scene::terrain::TerrainConfig;
 use crate::scene::voxel_world::VoxelWorld;
 
@@ -585,6 +588,101 @@ pub fn build_castle_towers(
             let cell = IVec3::new(x, lv.wall_top_y + 1, z);
             world.insert(cell, masonry(terrain.seed, cell));
             built.wall_merlons.push(cell);
+        }
+    }
+    built
+}
+
+// ---------------------------------------------------------------------
+// Gatehouse (C188)
+// ---------------------------------------------------------------------
+
+/// The gatehouse, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CastleGatehouse {
+    /// Log posts at the inner corners of the passage.
+    pub posts: Vec<IVec3>,
+    /// Masonry of the side walls inside the curtain.
+    pub walls: Vec<IVec3>,
+    /// Plank roof over the passage.
+    pub roof: Vec<IVec3>,
+    /// The door cells (`WoodDoor`, camera-passable), lower then upper.
+    pub door: Vec<IVec3>,
+    /// Fence rail on the roof's outer edge.
+    pub rail: Vec<IVec3>,
+}
+
+impl CastleGatehouse {
+    pub fn cells(&self) -> Vec<IVec3> {
+        self.posts
+            .iter()
+            .chain(self.walls.iter())
+            .chain(self.roof.iter())
+            .chain(self.door.iter())
+            .chain(self.rail.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Builds the gatehouse around the gate opening.
+///
+/// The passage runs east from the curtain through the gatehouse block;
+/// its two side rows are masonry on the curtain and log posts inside,
+/// `WALL_HEIGHT` courses high, roofed with planks one course above the
+/// curtain top and railed with fence on the outer edge. The gate opening
+/// receives the `WoodDoor`, two wide and two high, facing west: visible,
+/// closed, and passable to the camera as everywhere else in the world.
+pub fn build_castle_gatehouse(
+    terrain: &TerrainConfig,
+    layout: &OverworldCastleLayout,
+    world: &mut VoxelWorld,
+) -> CastleGatehouse {
+    let mut built = CastleGatehouse::default();
+    let g = layout.gatehouse;
+    let lv = layout.levels;
+    for z in [g.min_z, g.max_z] {
+        for x in g.min_x..=g.max_x {
+            for y in lv.base_y..=lv.wall_top_y {
+                let cell = IVec3::new(x, y, z);
+                if layout.is_curtain_column(x, z) {
+                    world.insert(cell, masonry(terrain.seed, cell));
+                    built.walls.push(cell);
+                } else {
+                    world.insert(cell, up(BlockType::Log, log_material_id()));
+                    built.posts.push(cell);
+                }
+            }
+        }
+    }
+    let roof_y = lv.wall_top_y + 1;
+    for z in g.min_z..=g.max_z {
+        for x in g.min_x..=g.max_x {
+            let cell = IVec3::new(x, roof_y, z);
+            world.insert(cell, up(BlockType::WoodPlanks, wood_planks_material_id()));
+            built.roof.push(cell);
+        }
+    }
+    for z in [g.min_z, g.max_z] {
+        let cell = IVec3::new(g.min_x, roof_y + 1, z);
+        world.insert(
+            cell,
+            BlockInstance::new(BlockType::Fence, fence_material_id(), Orientation::West),
+        );
+        built.rail.push(cell);
+    }
+    let door = layout.gate;
+    for dz in 0..door.width {
+        for (dy, material) in [
+            (0, wood_door_bottom_material_id()),
+            (1, wood_door_top_material_id()),
+        ] {
+            let cell = IVec3::new(door.base.x, door.base.y + dy, door.base.z + dz);
+            world.insert(
+                cell,
+                BlockInstance::new(BlockType::WoodDoor, material, door.facing),
+            );
+            built.door.push(cell);
         }
     }
     built

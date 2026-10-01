@@ -232,11 +232,13 @@ fn the_courtyard_is_paved_and_clear() {
             BlockType::Cobblestone,
             "({x},{z})"
         );
+        // Head room: nothing solid (the gate's door, added later, is passable).
         for dy in 1..=2 {
-            assert!(
-                !scene.world().contains(IVec3::new(*x, g + dy, *z)),
-                "({x},{z}) + {dy}"
-            );
+            let open = scene
+                .world()
+                .get(IVec3::new(*x, g + dy, *z))
+                .is_none_or(|b| !is_camera_solid(b));
+            assert!(open, "({x},{z}) + {dy}");
         }
         assert!(clear(scene.world(), eye(ground)), "({x},{z})");
     }
@@ -248,8 +250,10 @@ fn the_gate_opening_exists_in_the_wall() {
     let c = scene.castle_layout();
     let f = scene.castle_foundation();
     assert_eq!(f.gate_opening, c.gate.cells());
+    // Left open by this stage; the gatehouse later hangs the passable door.
     for cell in &f.gate_opening {
-        assert!(!scene.world().contains(*cell), "{cell:?} blocked");
+        let open = scene.world().get(*cell).is_none_or(|b| !is_camera_solid(b));
+        assert!(open, "{cell:?} blocked");
     }
     // Wall above and beside the opening.
     let g = &c.gate;

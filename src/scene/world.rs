@@ -12,8 +12,8 @@ use crate::core::face_textures::FaceTextures;
 use crate::core::math::{IVec3, Vec3};
 use crate::renderer::skybox::{Background, SkyGradient};
 use crate::scene::castle::{
-    CastleFoundation, CastleTowers, OverworldCastleLayout, build_castle_foundation,
-    build_castle_towers,
+    CastleFoundation, CastleGatehouse, CastleTowers, OverworldCastleLayout,
+    build_castle_foundation, build_castle_gatehouse, build_castle_towers,
 };
 use crate::scene::cutaway::{Cutaway, carve_cutaway};
 use crate::scene::descent::{
@@ -94,6 +94,7 @@ pub struct WorldScene {
     castle_layout: OverworldCastleLayout,
     castle_foundation: CastleFoundation,
     castle_towers: CastleTowers,
+    castle_gatehouse: CastleGatehouse,
     world: VoxelWorld,
 }
 
@@ -184,6 +185,7 @@ impl WorldScene {
         let castle_layout = OverworldCastleLayout::derive(&expansion_layout);
         let castle_foundation = build_castle_foundation(&config, &castle_layout, &mut world);
         let castle_towers = build_castle_towers(&config, &castle_layout, &mut world);
+        let castle_gatehouse = build_castle_gatehouse(&config, &castle_layout, &mut world);
         Self {
             config,
             field,
@@ -215,6 +217,7 @@ impl WorldScene {
             castle_layout,
             castle_foundation,
             castle_towers,
+            castle_gatehouse,
             world,
         }
     }
@@ -335,9 +338,15 @@ impl WorldScene {
             .walls
             .iter()
             .chain(self.castle_towers.cells().iter())
+            .chain(self.castle_gatehouse.cells().iter())
             .filter(|c| c.y > ground && seen.insert(**c))
             .copied()
             .collect()
+    }
+
+    /// The gatehouse and its door (Gate 16).
+    pub fn castle_gatehouse(&self) -> &CastleGatehouse {
+        &self.castle_gatehouse
     }
 
     /// The towers and battlements (Gate 16).

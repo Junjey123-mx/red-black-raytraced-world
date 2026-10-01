@@ -304,11 +304,16 @@ fn the_approach_gate_and_courtyard_stay_open() {
         ));
     }
     for cell in c.gate.cells() {
-        assert!(!scene.world().contains(cell));
+        assert!(scene.world().get(cell).is_none_or(|b| !is_camera_solid(b)));
     }
     for (x, z) in c.courtyard.iter().chain(c.gatehouse_passage().iter()) {
         for dy in 1..=2 {
-            assert!(!scene.world().contains(IVec3::new(*x, g + dy, *z)));
+            // Nothing solid (the gate's door is passable).
+            let open = scene
+                .world()
+                .get(IVec3::new(*x, g + dy, *z))
+                .is_none_or(|b| !is_camera_solid(b));
+            assert!(open, "({x},{z}) + {dy}");
         }
     }
     for cell in scene.castle_towers().cells() {
