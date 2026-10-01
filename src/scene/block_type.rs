@@ -52,6 +52,13 @@ pub enum BlockType {
     RedBlackDeepslateBricksViolet,
     PolishedBlackstoneBricks,
     NetherWartBlock,
+
+    // Red-Black organic / timber (Gate 17.5)
+    RedBlackLeaves,
+    RedBlackLog,
+    RedBlackWoodPlanks,
+    RedBlackFence,
+    RedBlackWoodDoor,
 }
 
 /// Number of official catalog blocks: the single source of truth every
@@ -69,6 +76,7 @@ pub enum BlockFamily {
     Orange,
     Violet,
     StructuralRedBlack,
+    RedBlackTimber,
 }
 
 impl BlockFamily {
@@ -83,6 +91,7 @@ impl BlockFamily {
             BlockFamily::Orange => "Orange",
             BlockFamily::Violet => "Purple/Violet",
             BlockFamily::StructuralRedBlack => "Structural Red-Black",
+            BlockFamily::RedBlackTimber => "Red-Black Organic / Timber",
         }
     }
 }
@@ -185,6 +194,11 @@ impl BlockType {
             | BlockType::RedBlackDeepslateBricksOrange
             | BlockType::RedBlackDeepslateBricksViolet
             | BlockType::PolishedBlackstoneBricks => BlockFamily::StructuralRedBlack,
+            BlockType::RedBlackLeaves
+            | BlockType::RedBlackLog
+            | BlockType::RedBlackWoodPlanks
+            | BlockType::RedBlackFence
+            | BlockType::RedBlackWoodDoor => BlockFamily::RedBlackTimber,
         }
     }
 

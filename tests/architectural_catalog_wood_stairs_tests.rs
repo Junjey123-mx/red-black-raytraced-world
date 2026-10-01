@@ -72,6 +72,8 @@ mod scene {
     pub mod orientation;
     #[path = "../src/scene/overworld_blocks.rs"]
     pub mod overworld_blocks;
+    #[path = "../src/scene/red_black_timber.rs"]
+    pub mod red_black_timber;
     #[path = "../src/scene/scene.rs"]
     pub mod scene;
     #[path = "../src/scene/texture_manager.rs"]

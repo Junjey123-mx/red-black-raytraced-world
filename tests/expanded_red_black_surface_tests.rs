@@ -96,6 +96,8 @@ mod scene {
     pub mod portal;
     #[path = "../src/scene/red_black_maze.rs"]
     pub mod red_black_maze;
+    #[path = "../src/scene/red_black_timber.rs"]
+    pub mod red_black_timber;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]

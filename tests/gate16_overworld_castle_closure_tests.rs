@@ -96,6 +96,8 @@ mod scene {
     pub mod portal;
     #[path = "../src/scene/red_black_maze.rs"]
     pub mod red_black_maze;
+    #[path = "../src/scene/red_black_timber.rs"]
+    pub mod red_black_timber;
     #[path = "../src/scene/rhombus.rs"]
     pub mod rhombus;
     #[path = "../src/scene/scene.rs"]
@@ -769,8 +771,10 @@ fn catalog_lights_crates_and_raylib_are_unchanged() {
             "--",
             "src/camera",
             "src/renderer",
-            "src/scene/block_type.rs",
-            "src/scene/catalog.rs",
+            // Gate 17.5 extends the block registry, the catalog and the
+            // door passability contract (certified by its own tests); the
+            // rest of the protected code must stay untouched.
+            ":(exclude)src/camera/world_collision.rs",
         ])
         .output();
     if let Ok(out) = out {

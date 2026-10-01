@@ -74,8 +74,9 @@ fn amethyst_cluster() -> BlockGeometry {
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
         BlockType::WoodStairs => wood_stairs(),
-        BlockType::Fence => fence(),
-        BlockType::WoodDoor => wood_door(),
+        // The Red-Black timber twins reuse the certified shapes as they are.
+        BlockType::Fence | BlockType::RedBlackFence => fence(),
+        BlockType::WoodDoor | BlockType::RedBlackWoodDoor => wood_door(),
         BlockType::PortalCoreDarkCrimson => portal_core(),
         BlockType::AmethystCluster => amethyst_cluster(),
         _ => BlockGeometry::FullCube,
