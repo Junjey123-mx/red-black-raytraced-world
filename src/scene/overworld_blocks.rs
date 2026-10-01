@@ -10,7 +10,9 @@ use crate::core::hit::Face;
 use crate::core::material::{AlphaMode, Material, MaterialId};
 use crate::core::texture::TextureId;
 use crate::scene::material_library::MaterialLibrary;
-use crate::scene::red_black_timber::{RED_BLACK_TIMBER_DIR, red_black_leaves_material_id};
+use crate::scene::red_black_timber::{
+    RED_BLACK_TIMBER_DIR, red_black_leaves_material_id, red_black_log_material_id,
+};
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
 pub fn dirt_material_id() -> MaterialId {
@@ -206,6 +208,9 @@ pub struct OverworldBlockTextures {
     /// Red-Black timber family (Gate 17.5): crimson foliage, same alpha
     /// mask layout as the Overworld leaves.
     pub red_black_leaves: FaceTextures,
+    /// Corinto logs: dark crimson end grain on +Y/-Y, burgundy bark on the
+    /// four sides, exactly the Overworld log's face layout.
+    pub red_black_log: FaceTextures,
 }
 
 impl OverworldBlockTextures {
@@ -320,6 +325,8 @@ impl OverworldBlockTextures {
         let deepslate_top = manager.load(format!("{overworld_dir}/deepslate/top.png"))?;
         let deepslate_side = manager.load(format!("{overworld_dir}/deepslate/side.png"))?;
         let red_black_leaves = manager.load(format!("{RED_BLACK_TIMBER_DIR}/leaves.png"))?;
+        let rb_log_end = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/end.png"))?;
+        let rb_log_side = manager.load(format!("{RED_BLACK_TIMBER_DIR}/log/side.png"))?;
 
         Ok(Self {
             dirt: FaceTextures::uniform(dirt),
@@ -389,6 +396,14 @@ impl OverworldBlockTextures {
                 deepslate_side,
             ),
             red_black_leaves: FaceTextures::uniform(red_black_leaves),
+            red_black_log: FaceTextures::new(
+                rb_log_side,
+                rb_log_side,
+                rb_log_end,
+                rb_log_end,
+                rb_log_side,
+                rb_log_side,
+            ),
         })
     }
 }
@@ -816,6 +831,14 @@ pub fn insert_overworld_materials(
         Material::new(Color::new(0.36, 0.06, 0.10, 1.0), 0.03, 4.0)
             .with_face_textures(textures.red_black_leaves)
             .with_alpha_mode(AlphaMode::Cutout),
+    );
+    // Red-Black log: the Overworld log's semimatte profile over almost-black
+    // burgundy bark and dark crimson rings; never emissive.
+    library.insert(
+        red_black_log_material_id(),
+        Material::new(Color::new(0.22, 0.06, 0.10, 1.0), 0.07, 10.0)
+            .with_reflectivity(0.015)
+            .with_face_textures(textures.red_black_log),
     );
     // Nether wart block: dense fungal red, matte (specular 0.04, shininess 6,
     // reflectivity 0.01), opaque and never a light source of its own.
