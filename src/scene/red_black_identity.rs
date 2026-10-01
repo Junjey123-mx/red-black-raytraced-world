@@ -24,6 +24,7 @@ use crate::scene::overworld::Tree;
 use crate::scene::overworld_blocks::polished_blackstone_bricks_material_id;
 use crate::scene::red_black_timber::{
     red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
+    red_black_wood_door_bottom_material_id, red_black_wood_door_top_material_id,
     red_black_wood_planks_material_id,
 };
 use crate::scene::voxel_world::VoxelWorld;
@@ -473,12 +474,110 @@ pub fn lay_corinto_path(
     built
 }
 
+// ---------------------------------------------------------------------
+// Gatehouse and Red-Black door (C216)
+// ---------------------------------------------------------------------
+
+/// The gatehouse, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackGatehouse {
+    /// The door cells (`RedBlackWoodDoor`), the ground-side half first in
+    /// each column.
+    pub door: Vec<IVec3>,
+    /// The entry corridor's floor, re-laid in corinto planks.
+    pub corridor_floor: Vec<IVec3>,
+    /// The timber gallery crowning the gate block above its vault.
+    pub hood: Vec<IVec3>,
+    /// Fence rails on the gallery's outer edge.
+    pub rails: Vec<IVec3>,
+}
+
+impl RedBlackGatehouse {
+    pub fn added_cells(&self) -> Vec<IVec3> {
+        self.door
+            .iter()
+            .chain(self.hood.iter())
+            .chain(self.rails.iter())
+            .copied()
+            .collect()
+    }
+}
+
+/// Completes the fortress entrance as a readable gatehouse.
+///
+/// The gate opening receives a `RedBlackWoodDoor`, two columns wide and
+/// two cells tall: the door's lower half sits next to the ground (the
+/// realm's floor at `-Y`'s far side) and its upper half one course further
+/// toward `-Y`, both facing West toward the path. A door panel is a
+/// vertical slab, so it keeps the horizontal `West` facing every door in
+/// the world uses; turning it `Down` would lay the panel across the
+/// corridor. The corridor floor becomes corinto planks so the path runs
+/// through the gate; a planks hood projects one column out over the
+/// entrance, one course past the path's head room, with fence finials on
+/// its ends. The arch, its coloured jambs and lintel and its crying
+/// obsidian stay as Gate 17 built them; nothing here is a portal.
+pub fn build_red_black_gatehouse(
+    fortress: &RedBlackFortressLayout,
+    world: &mut VoxelWorld,
+) -> RedBlackGatehouse {
+    let mut built = RedBlackGatehouse::default();
+    let gate = fortress.gate;
+    let lv = fortress.levels;
+    for dz in 0..gate.width {
+        for (dy, material) in [
+            (0, red_black_wood_door_bottom_material_id()),
+            (1, red_black_wood_door_top_material_id()),
+        ] {
+            let cell = IVec3::new(gate.base.x, gate.base.y - dy, gate.base.z + dz);
+            world.insert(
+                cell,
+                BlockInstance::new(BlockType::RedBlackWoodDoor, material, gate.facing),
+            );
+            built.door.push(cell);
+        }
+    }
+    for (x, z) in fortress.gate_corridor() {
+        let cell = IVec3::new(x, lv.ground_y, z);
+        if world
+            .get(cell)
+            .is_some_and(|b| is_dark_structure(b.block_type()))
+        {
+            world.insert(cell, planks());
+            built.corridor_floor.push(cell);
+        }
+    }
+    // A timber gallery crowns the gate block one course past its vault, so
+    // the gatehouse rises above the curtain as its own corinto story; fence
+    // rails line its outer (west) edge. Nothing projects over the path.
+    let g = fortress.gatehouse;
+    let gallery_y = lv.wall_top_y - 2;
+    for z in g.min_z..=g.max_z {
+        for x in g.min_x..=g.max_x {
+            let cell = IVec3::new(x, gallery_y, z);
+            let under = IVec3::new(x, gallery_y + 1, z);
+            if !world.contains(cell) && world.contains(under) {
+                world.insert(cell, planks());
+                built.hood.push(cell);
+            }
+        }
+    }
+    for z in (g.min_z + 1)..g.max_z {
+        let cell = IVec3::new(g.min_x, gallery_y - 1, z);
+        if built.hood.contains(&IVec3::new(g.min_x, gallery_y, z)) && !world.contains(cell) {
+            world.insert(cell, fence());
+            built.rails.push(cell);
+        }
+    }
+    built
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
     pub grove: RedBlackGrove,
     pub timber: FortressTimber,
     pub path: CorintoPath,
+    pub gatehouse: RedBlackGatehouse,
 }
 
 impl RedBlackIdentity {
@@ -491,6 +590,7 @@ impl RedBlackIdentity {
             .into_iter()
             .chain(self.timber.added_cells())
             .chain(self.path.added_cells())
+            .chain(self.gatehouse.added_cells())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -518,9 +618,11 @@ pub fn build_red_black_identity(
     let grove = plant_red_black_grove(seed, fortress, &clearance, world);
     let timber = weave_fortress_timber(fortress, world);
     let path = lay_corinto_path(approach, fortress, &clearance, &grove, world);
+    let gatehouse = build_red_black_gatehouse(fortress, world);
     RedBlackIdentity {
         grove,
         timber,
         path,
+        gatehouse,
     }
 }

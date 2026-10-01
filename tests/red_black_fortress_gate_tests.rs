@@ -276,15 +276,23 @@ fn the_corridor_is_clear_under_its_vault() {
     for (x, z) in l.gate_corridor() {
         for dy in 1..=2 {
             let cell = IVec3::new(x, ground - dy, z);
+            // Open, or the camera-passable Red-Black door (Gate 17.5).
             assert!(
-                !scene.world().contains(cell),
+                scene
+                    .world()
+                    .get(cell)
+                    .is_none_or(|b| b.block_type() == BlockType::RedBlackWoodDoor),
                 "{cell:?} blocks the corridor"
             );
         }
         assert!(clear(&scene, eye(IVec3::new(x, ground, z))), "({x},{z})");
     }
     for cell in &g.opening {
-        assert!(!scene.world().contains(*cell), "{cell:?} is not open");
+        let open = scene
+            .world()
+            .get(*cell)
+            .is_none_or(|b| b.block_type() == BlockType::RedBlackWoodDoor);
+        assert!(open, "{cell:?} is not open");
     }
     assert_eq!(
         g.vault.len(),
@@ -397,8 +405,15 @@ fn no_portal_semantics_are_reused() {
         );
         assert!(t != BlockType::WoodDoor || is_camera_passable(t));
     }
+    // The opening holds no portal block: it is open or hung with the
+    // ordinary, camera-passable Red-Black door (Gate 17.5).
     for cell in &scene.fortress_gate().opening {
-        assert!(scene.world().get(*cell).is_none());
+        assert!(
+            scene
+                .world()
+                .get(*cell)
+                .is_none_or(|b| b.block_type() == BlockType::RedBlackWoodDoor)
+        );
     }
     let src = std::fs::read_to_string("src/scene/fortress.rs").unwrap();
     for token in [

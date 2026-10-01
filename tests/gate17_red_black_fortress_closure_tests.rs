@@ -578,8 +578,15 @@ fn the_fortress_route_needs_no_noclip() {
         let pts: Vec<Vec3> = tower_route.iter().map(|c| eye_under(*c)).collect();
         walk_both_ways(&scene, &pts);
     }
+    // Open, or hung with the camera-passable Red-Black door (Gate 17.5).
     for cell in &scene.fortress_gate().opening {
-        assert!(!scene.world().contains(*cell));
+        assert!(
+            scene
+                .world()
+                .get(*cell)
+                .is_none_or(|b| b.block_type() == BlockType::RedBlackWoodDoor
+                    && is_camera_passable(b.block_type()))
+        );
     }
     for cell in scene.fortress_cells() {
         assert!(
