@@ -20,6 +20,7 @@ use crate::scene::overworld::column_top;
 use crate::scene::overworld::{ColumnRect, HOUSE_FOOTPRINT, PathLayout, pond_basin_columns};
 use crate::scene::overworld_blocks::{
     cobblestone_material_id, deepslate_material_id, fence_material_id, log_material_id,
+    polished_blackstone_bricks_material_id, smooth_basalt_material_id,
 };
 use crate::scene::red_black_maze::{Family, lower_mass_block, surface_block};
 use crate::scene::rhombus::RhombusConfig;
@@ -922,4 +923,102 @@ pub fn extend_red_black_surface(
         surface.cells.push(ground);
     }
     surface
+}
+
+// ---------------------------------------------------------------------
+// Fortress approach (C182)
+// ---------------------------------------------------------------------
+
+/// The columns of the lower approach: two rows east along the lobe's
+/// north edge from the landing to the terrace, then two columns south
+/// along the pad's west side to the target row.
+pub fn fortress_approach_columns(layout: &WorldExpansionLayout) -> Vec<(i32, i32)> {
+    let mut cols = Vec::new();
+    let anchor = layout.red_black_path_anchor;
+    let pad = layout.red_black_fortress_pad;
+    let target = layout.red_black_path_target;
+    let rows = (anchor.z + 1)..=(anchor.z + 2);
+    for x in anchor.x..pad.min_x {
+        for z in rows.clone() {
+            cols.push((x, z));
+        }
+    }
+    for x in (pad.min_x - 2)..pad.min_x {
+        for z in (anchor.z + 3)..=(target.z + 1) {
+            if !cols.contains(&(x, z)) {
+                cols.push((x, z));
+            }
+        }
+    }
+    cols
+}
+
+/// The paved lower approach as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackApproach {
+    /// Paved ground cells (polished blackstone with basalt every few
+    /// cells), all `Down`, in walking order from the landing to the pad.
+    pub main: Vec<IVec3>,
+    /// Family-brick accents at the pad entrance (part of the paving).
+    pub accents: Vec<IVec3>,
+}
+
+/// The lowest cell of a column within the lower world (the Red-Black
+/// ground), if any.
+pub fn lower_ground_cell(
+    world: &VoxelWorld,
+    x: i32,
+    z: i32,
+    bottom: i32,
+    top: i32,
+) -> Option<IVec3> {
+    (bottom..=top)
+        .map(|y| IVec3::new(x, y, z))
+        .find(|c| world.contains(*c))
+}
+
+/// Paves the lower approach from the Gate 14 landing to the fortress pad
+/// across the lobe's new underside: every corridor column's ground cell
+/// becomes `Down` polished blackstone (smooth basalt every fourth cell),
+/// and the two cells flanking the pad entrance carry the sector's family
+/// bricks. Only ground cells of the new surface are replaced: the portal
+/// tunnel, the landing, the certified underside and every family block
+/// stay as they are.
+pub fn pave_fortress_approach(
+    terrain: &TerrainConfig,
+    rhombus: &RhombusConfig,
+    layout: &WorldExpansionLayout,
+    world: &mut VoxelWorld,
+) -> RedBlackApproach {
+    let mut approach = RedBlackApproach::default();
+    let bottom = rhombus.lower_tip_y - 2;
+    let top = rhombus.shelf_y;
+    let target = layout.red_black_path_target;
+    let pad = layout.red_black_fortress_pad;
+    for (i, (x, z)) in fortress_approach_columns(layout).into_iter().enumerate() {
+        let Some(cell) = lower_ground_cell(world, x, z, bottom, top) else {
+            continue;
+        };
+        let entrance = x == pad.min_x - 1 && (z == target.z - 1 || z == target.z + 1);
+        let (block_type, material) = if entrance {
+            let family = crate::scene::red_black_maze::family_zone(terrain, rhombus, x, z);
+            family.bricks()
+        } else if i % 4 == 3 {
+            (BlockType::SmoothBasalt, smooth_basalt_material_id())
+        } else {
+            (
+                BlockType::PolishedBlackstoneBricks,
+                polished_blackstone_bricks_material_id(),
+            )
+        };
+        world.insert(
+            cell,
+            BlockInstance::new(block_type, material, Orientation::Down),
+        );
+        if entrance {
+            approach.accents.push(cell);
+        }
+        approach.main.push(cell);
+    }
+    approach
 }

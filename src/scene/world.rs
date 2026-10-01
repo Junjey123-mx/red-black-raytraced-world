@@ -17,10 +17,10 @@ use crate::scene::descent::{
 };
 use crate::scene::environment::WorldEnvironmentProfile;
 use crate::scene::expansion::{
-    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, RedBlackExpansion,
-    RedBlackSurfaceExtension, WorldExpansionLayout, build_overworld_expansion,
-    build_red_black_expansion, extend_red_black_surface, pave_overworld_approach,
-    shape_overworld_relief,
+    EXPANSION_WIDTH, OverworldApproach, OverworldExpansion, OverworldRelief, RedBlackApproach,
+    RedBlackExpansion, RedBlackSurfaceExtension, WorldExpansionLayout, build_overworld_expansion,
+    build_red_black_expansion, extend_red_black_surface, pave_fortress_approach,
+    pave_overworld_approach, shape_overworld_relief,
 };
 use crate::scene::light::{DirectionalLight, Light};
 use crate::scene::material_gallery::{
@@ -83,6 +83,7 @@ pub struct WorldScene {
     overworld_approach: OverworldApproach,
     red_black_expansion: RedBlackExpansion,
     red_black_surface_extension: RedBlackSurfaceExtension,
+    red_black_approach: RedBlackApproach,
     silhouette: Silhouette,
     world: VoxelWorld,
 }
@@ -145,6 +146,8 @@ impl WorldScene {
             &mut red_black_expansion,
             &mut world,
         );
+        let red_black_approach =
+            pave_fortress_approach(&config, &rhombus, &expansion_layout, &mut world);
         let silhouette = finalize_silhouette(&config, &rhombus, &mut world);
         Self {
             config,
@@ -171,6 +174,7 @@ impl WorldScene {
             overworld_approach,
             red_black_expansion,
             red_black_surface_extension,
+            red_black_approach,
             silhouette,
             world,
         }
@@ -256,6 +260,11 @@ impl WorldScene {
     /// The -Y-facing surface over the east lobe (Gate 15).
     pub fn red_black_surface_extension(&self) -> &RedBlackSurfaceExtension {
         &self.red_black_surface_extension
+    }
+
+    /// The paved lower approach to the fortress site (Gate 15).
+    pub fn red_black_approach(&self) -> &RedBlackApproach {
+        &self.red_black_approach
     }
 
     pub fn silhouette(&self) -> &Silhouette {
