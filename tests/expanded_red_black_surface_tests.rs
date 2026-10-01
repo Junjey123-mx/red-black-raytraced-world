@@ -94,6 +94,8 @@ mod scene {
     pub mod overworld_blocks;
     #[path = "../src/scene/portal.rs"]
     pub mod portal;
+    #[path = "../src/scene/red_black_identity.rs"]
+    pub mod red_black_identity;
     #[path = "../src/scene/red_black_maze.rs"]
     pub mod red_black_maze;
     #[path = "../src/scene/red_black_timber.rs"]
@@ -190,6 +192,15 @@ fn the_functional_top_faces_minus_y() {
         .iter()
         .map(|c| (c.x, c.z))
         .chain((pad.min_z..=pad.max_z).flat_map(|z| (pad.min_x..=pad.max_x).map(move |x| (x, z))))
+        // ... and the Gate 17.5 trees hang their trunks from the surface.
+        .chain(
+            scene
+                .red_black_identity()
+                .grove
+                .cells()
+                .iter()
+                .map(|c| (c.x, c.z)),
+        )
         .collect();
     for cell in &s.cells {
         let b = scene.world().get(*cell).unwrap();

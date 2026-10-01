@@ -92,6 +92,8 @@ mod scene {
     pub mod overworld_blocks;
     #[path = "../src/scene/portal.rs"]
     pub mod portal;
+    #[path = "../src/scene/red_black_identity.rs"]
+    pub mod red_black_identity;
     #[path = "../src/scene/red_black_maze.rs"]
     pub mod red_black_maze;
     #[path = "../src/scene/red_black_timber.rs"]

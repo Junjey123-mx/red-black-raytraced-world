@@ -47,6 +47,7 @@ use crate::scene::overworld::{
 };
 use crate::scene::overworld_blocks::{OverworldBlockTextures, insert_overworld_materials};
 use crate::scene::portal::{PortalBuild, build_portal_core, build_portal_frame, portal_light};
+use crate::scene::red_black_identity::{RedBlackIdentity, build_red_black_identity};
 use crate::scene::red_black_maze::{
     Family, FamilyLayout, FamilyTransitions, LowerMass, RedBlackSurface, blend_family_transitions,
     build_lower_mass, build_red_black_surface, compose_crimson, compose_orange, compose_violet,
@@ -116,6 +117,7 @@ pub struct WorldScene {
     fortress_gate: FortressGate,
     fortress_hall: FortressHall,
     fortress_composition: FortressComposition,
+    red_black_identity: RedBlackIdentity,
     world: VoxelWorld,
 }
 
@@ -240,6 +242,68 @@ impl WorldScene {
         let fortress_gate = build_fortress_gate(&config, &fortress_layout, &mut world);
         let fortress_hall = furnish_fortress_hall(&fortress_layout, &mut world);
         let fortress_composition = integrate_fortress(&fortress_layout, &mut world);
+        // Gate 17.5: the Red-Black world identity on the finished fortress.
+        let red_black_identity = {
+            let route = &inverted_route;
+            let mut protected: std::collections::HashSet<IVec3> = route
+                .treads
+                .iter()
+                .map(|(c, _)| *c)
+                .chain(route.supports.iter().copied())
+                .chain(route.layout.platform_cells())
+                .chain(route.layout.exit_clearance())
+                .collect();
+            for f in &families {
+                protected.extend(f.cells());
+            }
+            // Nothing grows against a symbol: every cell touching a suit
+            // block (family scenes and fortress heraldry) stays open.
+            let symbols: Vec<IVec3> = world
+                .iter()
+                .filter(|(_, b)| crate::scene::fortress::is_symbol(b.block_type()))
+                .map(|(c, _)| *c)
+                .collect();
+            for c in symbols {
+                for (dx, dy, dz) in [
+                    (1, 0, 0),
+                    (-1, 0, 0),
+                    (0, 1, 0),
+                    (0, -1, 0),
+                    (0, 0, 1),
+                    (0, 0, -1),
+                ] {
+                    protected.insert(IVec3::new(c.x + dx, c.y + dy, c.z + dz));
+                }
+            }
+            let walk_columns: std::collections::HashSet<(i32, i32)> = red_black_approach
+                .main
+                .iter()
+                .map(|c| (c.x, c.z))
+                .chain(
+                    fortress_layout
+                        .interior_routes
+                        .iter()
+                        .flatten()
+                        .map(|c| (c.x, c.z)),
+                )
+                .chain(fortress_layout.courtyard.iter().copied())
+                .collect();
+            let focal_columns: Vec<(i32, i32)> = families
+                .iter()
+                .flat_map(|f| f.symbols.iter().chain(f.accents.iter()))
+                .map(|c| (c.x, c.z))
+                .collect();
+            build_red_black_identity(
+                config.seed,
+                &expansion_layout,
+                &fortress_layout,
+                &protected,
+                &walk_columns,
+                &focal_columns,
+                rhombus.lower_tip_y,
+                &mut world,
+            )
+        };
         Self {
             config,
             field,
@@ -285,6 +349,7 @@ impl WorldScene {
             fortress_gate,
             fortress_hall,
             fortress_composition,
+            red_black_identity,
             world,
         }
     }
@@ -474,10 +539,22 @@ impl WorldScene {
         self.fortress_cells().len()
     }
 
-    /// Cells added by both architecture gates (castle and fortress) on top
-    /// of the Gate 15 masses.
+    /// Cells added by the architecture and identity gates (castle,
+    /// fortress and the Gate 17.5 Red-Black identity) on top of the Gate 15
+    /// masses.
     pub fn architecture_voxels(&self) -> usize {
-        self.castle_voxels() + self.fortress_voxels()
+        self.castle_voxels() + self.fortress_voxels() + self.identity_voxels()
+    }
+
+    /// The Gate 17.5 Red-Black identity (trees, timber, path, gatehouse,
+    /// fourth tower, landscape).
+    pub fn red_black_identity(&self) -> &RedBlackIdentity {
+        &self.red_black_identity
+    }
+
+    /// Cells the Gate 17.5 identity stages added to the world.
+    pub fn identity_voxels(&self) -> usize {
+        self.red_black_identity.added_cells().len()
     }
 
     /// The finishing emissive composition (Gate 17).

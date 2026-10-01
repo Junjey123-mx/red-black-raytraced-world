@@ -17,6 +17,7 @@ pub mod orientation;
 pub mod overworld;
 pub mod overworld_blocks;
 pub mod portal;
+pub mod red_black_identity;
 pub mod red_black_maze;
 pub mod red_black_timber;
 pub mod rhombus;

@@ -94,6 +94,8 @@ mod scene {
     pub mod overworld_blocks;
     #[path = "../src/scene/portal.rs"]
     pub mod portal;
+    #[path = "../src/scene/red_black_identity.rs"]
+    pub mod red_black_identity;
     #[path = "../src/scene/red_black_maze.rs"]
     pub mod red_black_maze;
     #[path = "../src/scene/red_black_timber.rs"]
@@ -653,9 +655,10 @@ fn voxel_and_light_budgets_are_respected() {
     let scene = WorldScene::new();
     let n = scene.world().len();
     let fortress = scene.fortress_voxels();
+    // Gate 17.5 adds its Red-Black identity cells on top.
     assert_eq!(
         n,
-        GATE_16_VOXELS + fortress,
+        GATE_16_VOXELS + fortress + scene.identity_voxels(),
         "cells outside the fortress changed"
     );
     assert!(
