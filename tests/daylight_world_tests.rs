@@ -236,7 +236,7 @@ fn the_catalog_keeps_its_flat_studio_background() {
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     assert!(app.contains("Background::Solid(gallery_background())"));
     // The World takes its (realm-dependent) sky from the free-fly camera.
-    assert!(app.contains("self.free_fly.background()"));
+    assert!(app.contains("self.free_fly.skybox(&self.skies)"));
 }
 
 #[test]

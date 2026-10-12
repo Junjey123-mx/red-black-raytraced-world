@@ -385,7 +385,8 @@ fn camera_catalog_and_gate_boundaries_are_respected() {
     assert!(!app.contains("std::thread") && !app.contains("available_parallelism"));
     assert!(!app.contains("cubemap") && !app.contains("Player") && !app.contains("gravity"));
     let skybox = std::fs::read_to_string("src/renderer/skybox.rs").unwrap();
-    assert!(!skybox.contains("Cubemap {"));
+    // (The final delivery added the six-image skybox as `Background::Cubemap`.)
+    assert!(skybox.contains("Cubemap(SkyCubemap)"));
     // Gate 13.6 filled `parallel.rs` with scoped std threads; the viewer
     // itself still spawns nothing and no rayon is involved.
     let parallel = std::fs::read_to_string("src/renderer/parallel.rs").unwrap();

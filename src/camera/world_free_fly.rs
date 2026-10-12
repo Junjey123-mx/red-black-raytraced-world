@@ -489,4 +489,22 @@ impl WorldFreeFlyCameraState {
     pub fn background(&self) -> crate::renderer::skybox::Background {
         self.environment().background(self.sky_up())
     }
+
+    /// The same moment's skybox: the realm's cubemap, cross-fading to the
+    /// other realm's through a portal transition and turning with the view.
+    pub fn skybox(
+        &self,
+        skies: &crate::scene::environment::WorldSkyboxes,
+    ) -> crate::renderer::skybox::Background {
+        let faces = |realm: WorldRealm| match realm {
+            WorldRealm::Overworld => skies.day,
+            WorldRealm::RedBlack => skies.red_black,
+        };
+        let (from, to, blend) = match &self.transition {
+            Some(t) => (faces(t.from_realm), faces(t.to_realm), t.eased()),
+            None => (faces(self.realm), faces(self.realm), 0.0),
+        };
+        let up = self.sky_up();
+        skies.background(from, to, blend, up, self.environment().sky(up))
+    }
 }

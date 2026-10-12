@@ -703,7 +703,9 @@ pub fn trace_ray(scene: &VoxelScene, ray: &Ray, depth: u32) -> Color {
 /// secondary ray.
 pub fn trace_ray_at(scene: &VoxelScene, ray: &Ray, depth: u32, quality: RenderQuality) -> Color {
     let Some(voxel) = nearest_visible_hit(scene, ray, scene.max_distance) else {
-        return scene.background.color(ray.direction);
+        return scene
+            .background
+            .sample(ray.direction, scene.texture_manager);
     };
 
     let Some(material) = scene.materials.get(voxel.block.material_id()) else {

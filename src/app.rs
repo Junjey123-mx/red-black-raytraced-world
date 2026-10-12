@@ -20,6 +20,7 @@ use crate::renderer::refinement::FullRefinement;
 use crate::renderer::shading::DEFAULT_AMBIENT_FACTOR;
 use crate::renderer::skybox::Background;
 use crate::scene::catalog::{CatalogScene, CatalogTextures, catalog_materials};
+use crate::scene::environment::WorldSkyboxes;
 use crate::scene::light::Light;
 use crate::scene::material_gallery::{
     GALLERY_MAX_DISTANCE, gallery_background, gallery_camera, gallery_lights,
@@ -43,6 +44,7 @@ const OVERWORLD_TEXTURES_DIR: &str = "assets/textures/overworld";
 const PORTAL_TEXTURES_DIR: &str = "assets/textures/portal";
 const GRASS_TEXTURES_DIR: &str = "assets/textures/overworld/grass";
 const SHAPE_TEXTURES_DIR: &str = "assets/textures/diagnostic/partial";
+const SKYBOX_TEXTURES_DIR: &str = "assets/textures/skybox";
 
 /// Everything that differs between the project's executables: which scene is
 /// traced, and its own camera, controls and label. The window, texture
@@ -179,6 +181,8 @@ struct WorldMode {
     scene: WorldScene,
     materials: MaterialLibrary,
     lights: Vec<Light>,
+    /// The two realms' six-image skyboxes.
+    skies: WorldSkyboxes,
     /// The World's own free-fly camera (the catalog keeps the orbit camera).
     free_fly: WorldFreeFlyCameraState,
     /// Fires when the camera's movement pierces the portal membrane.
@@ -200,6 +204,8 @@ impl WorldMode {
             PORTAL_TEXTURES_DIR,
         )
         .expect("missing world texture");
+        let skies =
+            WorldSkyboxes::load(manager, SKYBOX_TEXTURES_DIR).expect("missing skybox texture");
         let scene = WorldScene::new();
         let portal_detector =
             PortalCrossingDetector::new(PortalVolume::from_anchor(&scene.rhombus().portal));
@@ -207,6 +213,7 @@ impl WorldMode {
             scene,
             materials: world_materials(&textures),
             lights: world_lights(),
+            skies,
             free_fly: world_free_fly_camera(),
             portal_detector,
             collision: CameraCollisionConfig::default(),
@@ -228,10 +235,10 @@ impl ViewerMode for WorldMode {
         &self.lights
     }
 
-    /// The realm's sky (blended through the portal transition), hung
-    /// along the camera's current vertical.
+    /// The realm's skybox (cross-faded through the portal transition),
+    /// hung along the camera's current vertical.
     fn background(&self) -> Background {
-        self.free_fly.background()
+        self.free_fly.skybox(&self.skies)
     }
 
     fn ambient_factor(&self) -> f32 {

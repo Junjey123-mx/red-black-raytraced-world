@@ -7,7 +7,57 @@
 
 use crate::core::color::Color;
 use crate::core::math::Vec3;
-use crate::renderer::skybox::{Background, SkyGradient};
+use crate::renderer::skybox::{
+    Background, CUBEMAP_FACE_NAMES, CubemapFaces, SkyCubemap, SkyGradient,
+};
+use crate::scene::texture_manager::{TextureLoadError, TextureManager};
+
+/// The two realms' skyboxes: the Overworld's clouded day with its sun, and
+/// the Red-Black world's starred cornelian night with its eclipsed moon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorldSkyboxes {
+    pub day: CubemapFaces,
+    pub red_black: CubemapFaces,
+}
+
+impl WorldSkyboxes {
+    /// Loads `<dir>/overworld/*.png` and `<dir>/red_black/*.png`, six faces
+    /// each, as CPU textures.
+    pub fn load(manager: &mut TextureManager, dir: &str) -> Result<Self, TextureLoadError> {
+        let mut faces = |realm: &str| -> Result<CubemapFaces, TextureLoadError> {
+            let mut ids = Vec::with_capacity(6);
+            for name in CUBEMAP_FACE_NAMES {
+                ids.push(manager.load(format!("{dir}/{realm}/{name}.png"))?);
+            }
+            Ok(CubemapFaces([
+                ids[0], ids[1], ids[2], ids[3], ids[4], ids[5],
+            ]))
+        };
+        Ok(Self {
+            day: faces("overworld")?,
+            red_black: faces("red_black")?,
+        })
+    }
+
+    /// The skybox hung along `up`, cross-faded from one realm's cube to
+    /// another's; `fallback` is the blended gradient of the same moment.
+    pub fn background(
+        &self,
+        from: CubemapFaces,
+        to: CubemapFaces,
+        blend: f32,
+        up: Vec3,
+        fallback: SkyGradient,
+    ) -> Background {
+        Background::Cubemap(SkyCubemap {
+            from,
+            to,
+            blend,
+            up,
+            fallback,
+        })
+    }
+}
 
 /// Sky colors and ambient scale of one realm.
 #[derive(Debug, Clone, Copy, PartialEq)]

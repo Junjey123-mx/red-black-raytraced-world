@@ -351,11 +351,11 @@ fn camera_catalog_and_constraints_26_to_33() {
     for forbidden in ["Player", "gravity", "HUD", "enemy", "pickup"] {
         assert!(!app.contains(forbidden), "{forbidden}"); // 31
     }
-    assert!(world_background().is_sky()); // 32 (procedural sky, no cubemap yet)
+    assert!(world_background().is_sky()); // 32 (the final delivery added the cubemap skybox)
     assert!(
-        !std::fs::read_to_string("src/renderer/skybox.rs")
+        std::fs::read_to_string("src/renderer/skybox.rs")
             .unwrap()
-            .contains("Cubemap {")
+            .contains("Cubemap(SkyCubemap)")
     );
     // 33: Gate 13 shipped no parallel renderer; Gate 13.6 filled
     // `parallel.rs` with scoped std threads (still no rayon, and the
