@@ -760,6 +760,28 @@ pub fn lower_bottom_y(layout: &WorldExpansionLayout, x: i32) -> i32 {
     }
 }
 
+/// The underside level of lobe column `(x, z)`: `lower_bottom_y`, except
+/// in the gate's forecourt. The terrace columns in front of the fortress
+/// gate sit at the pad level, so no terrain hangs in front of the door,
+/// and the strip along the pad's west wall steps up to them from the
+/// approach's ramp.
+pub fn lower_column_bottom_y(layout: &WorldExpansionLayout, x: i32, z: i32) -> i32 {
+    let pad = layout.fortress_pad_bottom_y;
+    let west = layout.red_black_fortress_pad.min_x;
+    let gate_z = layout.red_black_path_target.z;
+    let terrace =
+        ((layout.fortress_terrace_min_x - 1)..=layout.fortress_terrace_max_x).contains(&x);
+    if terrace && ((gate_z - 1)..=(gate_z + 2)).contains(&z) {
+        pad
+    } else if x >= west - 2 && x < west && z == gate_z - 2 {
+        pad
+    } else if x >= west - 2 && x < west && z == gate_z - 3 {
+        pad - (west - 1 - x)
+    } else {
+        lower_bottom_y(layout, x)
+    }
+}
+
 /// The easternmost cell of the existing lower mass at the rim level for
 /// row `z`, so the lower shell starts right after it and its underside
 /// continues the rim.
@@ -806,7 +828,7 @@ pub fn build_red_black_expansion(
     let top_cap = terrain.deepslate_level;
     for &(z, first, last) in &rows {
         for x in first..=last {
-            let bottom_y = lower_bottom_y(layout, x);
+            let bottom_y = lower_column_bottom_y(layout, x, z);
             let ring = x == first
                 || x == last
                 || row_of(z - 1).is_none_or(|(f, l)| x < f || x > l)
@@ -846,6 +868,32 @@ pub fn build_red_black_expansion(
                     BlockInstance::new(block_type, material, Orientation::Down),
                 );
                 lower.walls.push(cell);
+            }
+        }
+    }
+    // Skirts go in after the ring walls, which look for the lowest cell
+    // above each underside.
+    for &(z, first, last) in &rows {
+        for x in first..=last {
+            let bottom_y = lower_column_bottom_y(layout, x, z);
+            // Where a neighbour's underside sits more than one cell toward
+            // +Y (the forecourt's edge), close the step.
+            let step_top = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .filter(|(dx, dz)| row_of(z + dz).is_some_and(|(f, l)| (f..=l).contains(&(x + dx))))
+                .map(|(dx, dz)| lower_column_bottom_y(layout, x + dx, z + dz))
+                .max()
+                .unwrap_or(bottom_y);
+            for y in (bottom_y + 1)..=step_top {
+                let cell = IVec3::new(x, y, z);
+                if !world.contains(cell) {
+                    let (block_type, material) = lower_mass_block(terrain, rhombus, x, y, z);
+                    world.insert(
+                        cell,
+                        BlockInstance::new(block_type, material, Orientation::Down),
+                    );
+                    lower.walls.push(cell);
+                }
             }
         }
     }
@@ -892,6 +940,7 @@ pub fn extend_red_black_surface(
         let c = lower.columns[i];
         let mut ground = IVec3::new(c.x, c.bottom_y, c.z);
         if !pad.contains(c.x, c.z)
+            && lower_column_bottom_y(layout, c.x, c.z) == lower_bottom_y(layout, c.x)
             && expansion_hash(terrain.seed, c.x, c.z, SURFACE_RELIEF_SALT)
                 < LOWER_SURFACE_RELIEF_SHARE
         {

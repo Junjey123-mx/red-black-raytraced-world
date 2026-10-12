@@ -12,7 +12,7 @@ use crate::core::material::MaterialId;
 use crate::core::math::IVec3;
 use crate::scene::block::BlockInstance;
 use crate::scene::block_type::BlockType;
-use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_bottom_y};
+use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_column_bottom_y};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::ColumnRect;
 use crate::scene::overworld_blocks::{
@@ -274,7 +274,11 @@ impl RedBlackFortressLayout {
         // ground steps with x.
         let mut main = Vec::new();
         for x in [target.x - 2, target.x - 1] {
-            main.push(IVec3::new(x, lower_bottom_y(expansion, x), target.z));
+            main.push(IVec3::new(
+                x,
+                lower_column_bottom_y(expansion, x, target.z),
+                target.z,
+            ));
         }
         for x in gatehouse.min_x..=gatehouse.max_x {
             main.push(IVec3::new(x, ground_y, target.z));

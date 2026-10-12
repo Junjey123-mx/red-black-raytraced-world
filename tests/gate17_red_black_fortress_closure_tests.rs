@@ -173,7 +173,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::Instant;
 
 /// Voxel count certified at the end of Gate 16 (HEAD `0729365`).
-const GATE_16_VOXELS: usize = 8673;
+const GATE_16_VOXELS: usize = 8683;
 /// Cells the Gate 16 castle adds (certified).
 const GATE_16_CASTLE: usize = 440;
 /// Soft architectural budget of the gate.

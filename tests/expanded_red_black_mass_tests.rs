@@ -180,7 +180,15 @@ fn the_lower_mass_is_one_connected_piece() {
     let l = scene.expansion_layout();
     let rim = lower_bottom_y(l, l.fortress_terrace_min_x - 1);
     let mut touching = 0;
-    for c in e.columns.iter().filter(|c| c.x < l.fortress_terrace_min_x) {
+    // (The gate forecourt is levelled with the pad instead.)
+    let forecourt = |c: &&scene::expansion::LowerColumn| {
+        scene::expansion::lower_column_bottom_y(l, c.x, c.z) != lower_bottom_y(l, c.x)
+    };
+    for c in e
+        .columns
+        .iter()
+        .filter(|c| c.x < l.fortress_terrace_min_x && !forecourt(c))
+    {
         assert!(c.bottom_y == rim || c.bottom_y == rim - 1, "{c:?}");
         let west = IVec3::new(c.x - 1, rim, c.z);
         if scene.world().contains(west) && !e.cells().contains(&west) {
