@@ -14,6 +14,7 @@ use crate::scene::red_black_timber::{
     RED_BLACK_TIMBER_DIR, red_black_fence_material_id, red_black_leaves_material_id,
     red_black_log_material_id, red_black_wood_door_bottom_material_id,
     red_black_wood_door_top_material_id, red_black_wood_planks_material_id,
+    red_black_wood_stairs_material_id,
 };
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
 
@@ -871,6 +872,14 @@ pub fn insert_overworld_materials(
     // Overworld planks; never emissive.
     library.insert(
         red_black_fence_material_id(),
+        Material::new(Color::new(0.50, 0.15, 0.17, 1.0), 0.10, 18.0)
+            .with_reflectivity(0.02)
+            .with_face_textures(textures.red_black_wood_planks),
+    );
+    // Red-Black wood stairs: the fence's wood profile on the stepped
+    // geometry, wearing the corinto planks; never emissive.
+    library.insert(
+        red_black_wood_stairs_material_id(),
         Material::new(Color::new(0.50, 0.15, 0.17, 1.0), 0.10, 18.0)
             .with_reflectivity(0.02)
             .with_face_textures(textures.red_black_wood_planks),

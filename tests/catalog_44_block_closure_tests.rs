@@ -165,11 +165,11 @@ const OLD_39: [BlockType; 39] = [
 // 1
 #[test]
 fn there_are_forty_four_unique_official_block_types() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
-    assert_eq!(BlockType::ALL.len(), 44);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
+    assert_eq!(BlockType::ALL.len(), 45);
     let unique: HashSet<BlockType> = BlockType::ALL.iter().copied().collect();
-    assert_eq!(unique.len(), 44);
-    assert_eq!(official_entries().len(), 44);
+    assert_eq!(unique.len(), 45);
+    assert_eq!(official_entries().len(), 45);
     for t in RED_BLACK_TIMBER {
         assert!(BlockType::ALL.contains(&t), "{t:?}");
     }
@@ -184,7 +184,7 @@ fn no_catalog_entry_is_duplicated() {
     let names: HashSet<&str> = catalog_entries().iter().map(|e| e.display_name).collect();
     assert_eq!(names.len(), catalog_entries().len());
     let ids: HashSet<_> = official.iter().map(|e| e.material_id).collect();
-    assert_eq!(ids.len(), 44, "one material per official block");
+    assert_eq!(ids.len(), 45, "one material per official block");
     let cells: HashSet<_> = catalog_entries()
         .iter()
         .flat_map(|e| std::iter::once(e.position).chain(e.extra_blocks.iter().map(|(c, _)| *c)))
@@ -220,12 +220,12 @@ fn the_five_new_variants_are_selectable() {
         s.select_next();
     }
     assert_eq!(seen, RED_BLACK_TIMBER.to_vec());
-    // Backwards too: the last official entry before the diagnostics is the door.
+    // Backwards too: the last official entry before the diagnostics is the stairs.
     let mut s = CatalogScene::new();
     s.select_previous();
     s.select_previous();
     s.select_previous();
-    assert_eq!(s.selected().block_type, BlockType::RedBlackWoodDoor);
+    assert_eq!(s.selected().block_type, BlockType::RedBlackWoodStairs);
 }
 
 // 4
@@ -254,7 +254,7 @@ fn focus_works_on_every_new_variant() {
         }
         s.select_next();
     }
-    assert_eq!(focused, 5);
+    assert_eq!(focused, RED_BLACK_TIMBER.len());
 }
 
 // 5
@@ -273,6 +273,7 @@ fn the_labels_are_correct() {
             ("Red-Black wood planks", BlockType::RedBlackWoodPlanks),
             ("Red-Black fence", BlockType::RedBlackFence),
             ("Red-Black wood door", BlockType::RedBlackWoodDoor),
+            ("Red-Black wood stairs", BlockType::RedBlackWoodStairs),
         ]
     );
 }
@@ -303,7 +304,9 @@ fn the_category_and_sample_kinds_are_correct() {
         }
         let expected = match e.block_type {
             BlockType::RedBlackLeaves => SampleKind::Cutout,
-            BlockType::RedBlackFence | BlockType::RedBlackWoodDoor => SampleKind::PartialGeometry,
+            BlockType::RedBlackFence
+            | BlockType::RedBlackWoodDoor
+            | BlockType::RedBlackWoodStairs => SampleKind::PartialGeometry,
             _ => SampleKind::PlainBlock,
         };
         assert_eq!(e.kind, expected, "{}", e.display_name);
@@ -374,7 +377,7 @@ fn the_old_thirty_nine_are_unchanged() {
 #[test]
 fn diagnostics_are_not_counted_as_official() {
     let all = catalog_entries();
-    assert_eq!(all.len(), 46);
+    assert_eq!(all.len(), 47);
     let diagnostics: Vec<SampleKind> = all
         .iter()
         .filter(|e| !e.is_official())

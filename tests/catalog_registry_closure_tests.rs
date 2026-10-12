@@ -130,7 +130,7 @@ const FACES: [Face; 6] = [
 ];
 
 /// The blocks whose shape is not a full cube (Gate 06/07 partial geometry).
-const PARTIAL: [BlockType; 7] = [
+const PARTIAL: [BlockType; 8] = [
     BlockType::WoodStairs,
     BlockType::Fence,
     BlockType::WoodDoor,
@@ -138,6 +138,7 @@ const PARTIAL: [BlockType; 7] = [
     BlockType::AmethystCluster,
     BlockType::RedBlackFence,
     BlockType::RedBlackWoodDoor,
+    BlockType::RedBlackWoodStairs,
 ];
 
 struct Env {
@@ -162,7 +163,7 @@ fn env() -> Env {
 #[test]
 fn the_official_count_is_forty_four() {
     // Gate 17.5 raised the official closure from 39 to 44 (Red-Black timber).
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
     assert_eq!(BlockType::ALL.len(), OFFICIAL_BLOCK_COUNT);
     assert_eq!(official_entries().len(), OFFICIAL_BLOCK_COUNT);
     // Every official block is the one sample of its type; only the two
@@ -200,7 +201,7 @@ fn official_block_types_are_unique_and_grouped_by_family() {
         BlockFamily::StructuralRedBlack,
     ];
     assert_eq!(red_black.iter().map(|f| counts(*f)).sum::<usize>(), 20);
-    assert_eq!(counts(BlockFamily::RedBlackTimber), 5);
+    assert_eq!(counts(BlockFamily::RedBlackTimber), 6);
     for (rank, t) in BlockType::ALL.iter().enumerate() {
         assert_eq!(t.catalog_rank(), rank);
     }

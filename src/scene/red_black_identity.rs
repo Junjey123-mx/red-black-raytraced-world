@@ -30,11 +30,11 @@ use crate::scene::overworld::{
     HOUSE_DOOR_X, HOUSE_FOOTPRINT, HOUSE_LAMPS, HOUSE_PORCH_Z, HOUSE_RIDGE_Z, HOUSE_ROOF_OVERHANG,
     HOUSE_WALL_HEIGHT, HOUSE_WINDOWS,
 };
+use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::{
     crimson_diamond_material_id, crying_obsidian_crimson_material_id,
     crying_obsidian_orange_material_id, orange_spade_material_id,
 };
-use crate::scene::overworld_blocks::{double_wood_slab_material_id, wood_stairs_material_id};
 use crate::scene::overworld_blocks::{
     mycelium_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
 };
@@ -42,7 +42,7 @@ use crate::scene::red_black_maze::Family;
 use crate::scene::red_black_timber::{
     red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
     red_black_wood_door_bottom_material_id, red_black_wood_door_top_material_id,
-    red_black_wood_planks_material_id,
+    red_black_wood_planks_material_id, red_black_wood_stairs_material_id,
 };
 use crate::scene::voxel_world::VoxelWorld;
 
@@ -1213,7 +1213,7 @@ pub fn house_path_columns(
 /// Lays the path from the gate to the house in the Overworld's wood: a
 /// `DoubleWoodSlab` deck that never steps more than one cell between
 /// columns, stone packed under it wherever the terrain sits further back,
-/// and `WoodStairs` on the climb north along the forecourt's west wall
+/// and `RedBlackWoodStairs` on the climb north along the forecourt's west wall
 /// (inverted stairs only rise toward the north). The deck hangs one cell
 /// past the terrain, which stays as it was; only the house's own
 /// flattened ground (`pad`) is re-laid in place. Columns whose ground is
@@ -1273,7 +1273,13 @@ pub fn lay_house_path(
             .any(|j| columns[j] == (x, z - 1) && level[j] == level[i] - 1);
         let step = IVec3::new(x, level[i] - 1, z);
         if north && !world.contains(step) && !protected.contains(&step) {
-            world.insert(step, down(BlockType::WoodStairs, wood_stairs_material_id()));
+            world.insert(
+                step,
+                down(
+                    BlockType::RedBlackWoodStairs,
+                    red_black_wood_stairs_material_id(),
+                ),
+            );
             path.stairs.push(step);
             path.added.push(step);
         }

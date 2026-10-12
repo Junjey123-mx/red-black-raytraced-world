@@ -73,7 +73,7 @@ fn amethyst_cluster() -> BlockGeometry {
 /// The shape of `block_type` in its canonical pose (facing South, upright).
 pub fn canonical_geometry(block_type: BlockType) -> BlockGeometry {
     match block_type {
-        BlockType::WoodStairs => wood_stairs(),
+        BlockType::WoodStairs | BlockType::RedBlackWoodStairs => wood_stairs(),
         // The Red-Black timber twins reuse the certified shapes as they are.
         BlockType::Fence | BlockType::RedBlackFence => fence(),
         BlockType::WoodDoor | BlockType::RedBlackWoodDoor => wood_door(),

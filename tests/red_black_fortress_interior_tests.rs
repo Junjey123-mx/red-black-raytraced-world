@@ -387,7 +387,7 @@ fn the_crest_wall_shows_all_three_families() {
 
 #[test]
 fn no_new_block_type_was_added() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
     let src = std::fs::read_to_string("src/scene/block_type.rs").unwrap();
     for token in ["Throne", "Chair", "Seat", "Table", "Dais"] {
         assert!(!src.contains(token), "{token} in block_type.rs");

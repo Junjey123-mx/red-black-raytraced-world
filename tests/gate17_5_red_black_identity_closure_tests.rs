@@ -475,12 +475,12 @@ fn load() -> (TextureManager, MaterialLibrary) {
 // 1
 #[test]
 fn the_catalog_closes_at_forty_four() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
-    assert_eq!(BlockType::ALL.len(), 44);
-    assert_eq!(official_entries().len(), 44);
-    assert_eq!(CatalogScene::new().entries().len(), 46);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
+    assert_eq!(BlockType::ALL.len(), 45);
+    assert_eq!(official_entries().len(), 45);
+    assert_eq!(CatalogScene::new().entries().len(), 47);
     let unique: HashSet<BlockType> = BlockType::ALL.iter().copied().collect();
-    assert_eq!(unique.len(), 44);
+    assert_eq!(unique.len(), 45);
     for t in RED_BLACK_TIMBER {
         assert!(BlockType::ALL.contains(&t));
         assert_eq!(t.family(), BlockFamily::RedBlackTimber);

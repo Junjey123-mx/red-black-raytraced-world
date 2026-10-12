@@ -317,13 +317,13 @@ fn the_official_seed_rebuilds_the_identical_world() {
 #[test]
 fn the_catalog_still_offers_all_official_blocks() {
     // 28. catalog 44/44 (39/39 before Gate 17.5)
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
-    assert_eq!(official_entries().len(), 44);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
+    assert_eq!(official_entries().len(), 45);
     let catalog = CatalogScene::new();
-    assert_eq!(catalog.len(), 46);
+    assert_eq!(catalog.len(), 47);
     assert_eq!(
         catalog.entries().iter().filter(|e| e.is_official()).count(),
-        44
+        45
     );
 }
 

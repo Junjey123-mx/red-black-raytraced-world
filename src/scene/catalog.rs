@@ -53,7 +53,7 @@ use crate::scene::overworld_blocks::{wood_door_bottom_material_id, wood_door_top
 use crate::scene::red_black_timber::{
     red_black_fence_material_id, red_black_leaves_material_id, red_black_log_material_id,
     red_black_wood_door_bottom_material_id, red_black_wood_door_top_material_id,
-    red_black_wood_planks_material_id,
+    red_black_wood_planks_material_id, red_black_wood_stairs_material_id,
 };
 use crate::scene::scene::{PartialSceneTextures, diagnostic_partial_materials, grass_material_id};
 use crate::scene::texture_manager::{TextureLoadError, TextureManager};
@@ -118,6 +118,7 @@ pub const RED_BLACK_LOG_X: i32 = 4;
 pub const RED_BLACK_WOOD_PLANKS_X: i32 = 6;
 pub const RED_BLACK_FENCE_X: i32 = 8;
 pub const RED_BLACK_WOOD_DOOR_X: i32 = 10;
+pub const RED_BLACK_WOOD_STAIRS_X: i32 = 0;
 /// The farthest catalog row; the checker floor reaches two cells past it.
 pub const CATALOG_BACK_ROW_Z: i32 = RED_BLACK_TIMBER_ROW_Z;
 
@@ -619,6 +620,14 @@ pub fn catalog_entries() -> Vec<CatalogEntry> {
             south,
         ),
         red_black_door,
+        CatalogEntry::new(
+            "Red-Black wood stairs",
+            SampleKind::PartialGeometry,
+            BlockType::RedBlackWoodStairs,
+            red_black_wood_stairs_material_id(),
+            at(RED_BLACK_WOOD_STAIRS_X, RED_BLACK_TIMBER_ROW_Z),
+            south,
+        ),
         CatalogEntry::new(
             "Amethyst cluster",
             SampleKind::PartialGeometry,

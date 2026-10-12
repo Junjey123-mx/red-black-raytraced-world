@@ -59,11 +59,12 @@ pub enum BlockType {
     RedBlackWoodPlanks,
     RedBlackFence,
     RedBlackWoodDoor,
+    RedBlackWoodStairs,
 }
 
 /// Number of official catalog blocks: the single source of truth every
 /// registry and catalog check derives from.
-pub const OFFICIAL_BLOCK_COUNT: usize = 44;
+pub const OFFICIAL_BLOCK_COUNT: usize = 45;
 
 /// Visual family of an official block, in catalog order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -98,7 +99,7 @@ impl BlockFamily {
 
 impl BlockType {
     /// Every official block exactly once, grouped by family in catalog
-    /// order (the five Red-Black timber blocks of Gate 17.5 close the list). The array length ties it to `OFFICIAL_BLOCK_COUNT`, and
+    /// order (the Red-Black timber blocks close the list). The array length ties it to `OFFICIAL_BLOCK_COUNT`, and
     /// `family` is an exhaustive match, so a new variant cannot be added
     /// without classifying it and extending this registry.
     pub const ALL: [BlockType; OFFICIAL_BLOCK_COUNT] = [
@@ -155,6 +156,7 @@ impl BlockType {
         BlockType::RedBlackWoodPlanks,
         BlockType::RedBlackFence,
         BlockType::RedBlackWoodDoor,
+        BlockType::RedBlackWoodStairs,
     ];
 
     /// The visual family this block belongs to.
@@ -204,7 +206,8 @@ impl BlockType {
             | BlockType::RedBlackLog
             | BlockType::RedBlackWoodPlanks
             | BlockType::RedBlackFence
-            | BlockType::RedBlackWoodDoor => BlockFamily::RedBlackTimber,
+            | BlockType::RedBlackWoodDoor
+            | BlockType::RedBlackWoodStairs => BlockFamily::RedBlackTimber,
         }
     }
 

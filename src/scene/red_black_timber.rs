@@ -13,13 +13,14 @@
 use crate::core::material::MaterialId;
 use crate::scene::block_type::BlockType;
 
-/// The five Red-Black timber blocks, in catalog order.
-pub const RED_BLACK_TIMBER: [BlockType; 5] = [
+/// The six Red-Black timber blocks, in catalog order.
+pub const RED_BLACK_TIMBER: [BlockType; 6] = [
     BlockType::RedBlackLeaves,
     BlockType::RedBlackLog,
     BlockType::RedBlackWoodPlanks,
     BlockType::RedBlackFence,
     BlockType::RedBlackWoodDoor,
+    BlockType::RedBlackWoodStairs,
 ];
 
 /// Official blocks before Gate 17.5 (the Gate 17 catalog).
@@ -55,6 +56,10 @@ pub fn red_black_wood_door_top_material_id() -> MaterialId {
     MaterialId::new(69)
 }
 
+pub fn red_black_wood_stairs_material_id() -> MaterialId {
+    MaterialId::new(70)
+}
+
 /// What a timber block reuses and how it must behave.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimberContract {
@@ -84,6 +89,7 @@ pub fn overworld_counterpart(block_type: BlockType) -> Option<BlockType> {
         BlockType::RedBlackWoodPlanks => Some(BlockType::WoodPlanks),
         BlockType::RedBlackFence => Some(BlockType::Fence),
         BlockType::RedBlackWoodDoor => Some(BlockType::WoodDoor),
+        BlockType::RedBlackWoodStairs => Some(BlockType::WoodStairs),
         _ => None,
     }
 }
@@ -140,6 +146,14 @@ pub fn timber_contract(block_type: BlockType) -> Option<TimberContract> {
             ],
             true,
             true,
+            true,
+        ),
+        // Like the Overworld stairs, they wear the planks texture.
+        BlockType::RedBlackWoodStairs => (
+            vec![red_black_wood_stairs_material_id()],
+            vec![path("wood_planks.png")],
+            false,
+            false,
             true,
         ),
         _ => unreachable!("overworld_counterpart covers exactly the timber family"),

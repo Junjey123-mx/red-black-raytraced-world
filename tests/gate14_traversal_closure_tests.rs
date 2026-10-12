@@ -665,9 +665,9 @@ fn the_gate_13_6_renderer_is_unchanged() {
 // 26-28: Catalog, crates, Raylib 3D.
 #[test]
 fn catalog_crates_and_raylib_are_untouched() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
-    assert_eq!(official_entries().len(), 44);
-    assert_eq!(CatalogScene::new().entries().len(), 46);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
+    assert_eq!(official_entries().len(), 45);
+    assert_eq!(CatalogScene::new().entries().len(), 47);
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     let catalog = &app[app.find("impl ViewerMode for CatalogMode").unwrap()
         ..app

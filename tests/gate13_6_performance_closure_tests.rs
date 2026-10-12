@@ -621,10 +621,10 @@ fn the_framebuffer_and_texture_are_reused() {
 // 17: Catalog 44/44 (39/39 before Gate 17.5).
 #[test]
 fn the_catalog_is_still_39_of_39() {
-    assert_eq!(OFFICIAL_BLOCK_COUNT, 44);
-    assert_eq!(official_entries().len(), 44);
+    assert_eq!(OFFICIAL_BLOCK_COUNT, 45);
+    assert_eq!(official_entries().len(), 45);
     let catalog = CatalogScene::new();
-    assert_eq!(catalog.entries().len(), 46);
+    assert_eq!(catalog.entries().len(), 47);
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     assert!(app.contains("view: DiagnosticCameraState"));
     assert!(

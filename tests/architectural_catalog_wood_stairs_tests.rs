@@ -273,7 +273,7 @@ fn stairs_are_one_official_catalog_entry_with_a_finite_focus_point() {
     assert!(
         catalog_entries()
             .iter()
-            .filter(|x| x.display_name.contains("stairs"))
+            .filter(|x| x.display_name.contains("Wood stairs"))
             .count()
             == 1
     );

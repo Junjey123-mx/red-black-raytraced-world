@@ -621,7 +621,7 @@ fn a_wooden_path_joins_the_gate_and_the_house() {
         assert!(!w.contains(IVec3::new(c.x, c.y - 2, c.z)), "{c:?}");
     }
     for c in &p.stairs {
-        assert_eq!(kind(*c), Some(BlockType::WoodStairs));
+        assert_eq!(kind(*c), Some(BlockType::RedBlackWoodStairs));
         assert!(
             p.deck.contains(&IVec3::new(c.x, c.y, c.z - 1)),
             "{c:?} climbs north"

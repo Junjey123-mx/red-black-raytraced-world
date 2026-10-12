@@ -113,6 +113,7 @@ fn catalog_contains_representative_blocks_of_all_three_families() {
         BlockType::RedBlackWoodPlanks,
         BlockType::RedBlackFence,
         BlockType::RedBlackWoodDoor,
+        BlockType::RedBlackWoodStairs,
     ];
 
     // The whole official catalog is pairwise distinct.

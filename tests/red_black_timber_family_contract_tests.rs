@@ -173,6 +173,7 @@ fn the_five_new_block_types_exist() {
             BlockType::RedBlackWoodPlanks,
             BlockType::RedBlackFence,
             BlockType::RedBlackWoodDoor,
+            BlockType::RedBlackWoodStairs,
         ]
     );
     for t in RED_BLACK_TIMBER {
@@ -204,7 +205,7 @@ fn no_discriminant_or_registry_entry_is_duplicated() {
         PRE_TIMBER_OFFICIAL_COUNT + RED_BLACK_TIMBER.len()
     );
     let discriminants: HashSet<usize> = RED_BLACK_TIMBER.iter().map(|t| *t as usize).collect();
-    assert_eq!(discriminants.len(), 5);
+    assert_eq!(discriminants.len(), RED_BLACK_TIMBER.len());
     let older: Vec<BlockType> = BlockType::ALL
         .iter()
         .copied()
@@ -226,7 +227,7 @@ fn no_discriminant_or_registry_entry_is_duplicated() {
                 .unwrap()
         })
         .collect();
-    assert_eq!(ids, vec![64, 65, 66, 67, 68, 69]);
+    assert_eq!(ids, vec![64, 65, 66, 67, 68, 69, 70]);
     let src: String = [
         "src/scene/overworld_blocks.rs",
         "src/scene/material_gallery.rs",
@@ -377,7 +378,7 @@ fn the_log_keeps_end_grain_and_bark_faces() {
 #[test]
 fn the_catalog_closes_at_forty_four_after_the_gate() {
     assert_eq!(PRE_TIMBER_OFFICIAL_COUNT, 39);
-    assert_eq!(TIMBER_OFFICIAL_COUNT, 44);
+    assert_eq!(TIMBER_OFFICIAL_COUNT, 45);
     assert!(
         OFFICIAL_BLOCK_COUNT == PRE_TIMBER_OFFICIAL_COUNT
             || OFFICIAL_BLOCK_COUNT == TIMBER_OFFICIAL_COUNT
