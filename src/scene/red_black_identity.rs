@@ -20,7 +20,7 @@ use crate::scene::expansion::{WorldExpansionLayout, expansion_hash, lower_ground
 use crate::scene::fortress::RedBlackFortressLayout;
 use crate::scene::fortress::{
     TOWER_BAND_COURSE, TOWER_CREST_COURSES, dark_masonry, family_brick, is_dark_structure,
-    is_family_brick,
+    is_family_brick, is_symbol,
 };
 use crate::scene::material_gallery::{glass_material_id, redstone_lamp_material_id};
 use crate::scene::orientation::Orientation;
@@ -34,6 +34,7 @@ use crate::scene::overworld_blocks::{
     crimson_diamond_material_id, crying_obsidian_crimson_material_id,
     crying_obsidian_orange_material_id, orange_spade_material_id,
 };
+use crate::scene::overworld_blocks::{double_wood_slab_material_id, wood_stairs_material_id};
 use crate::scene::overworld_blocks::{
     mycelium_material_id, polished_blackstone_bricks_material_id, smooth_basalt_material_id,
 };
@@ -1155,6 +1156,131 @@ pub fn build_red_black_house(
     house
 }
 
+// ---------------------------------------------------------------------
+// Path from the gate to the house
+// ---------------------------------------------------------------------
+
+/// The wooden path, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HousePath {
+    /// The path's columns, in walking order from the gate.
+    pub columns: Vec<(i32, i32)>,
+    /// The slab under each column (its walking surface).
+    pub deck: Vec<IVec3>,
+    /// Wooden stairs on the climb beside the forecourt's west wall.
+    pub stairs: Vec<IVec3>,
+    /// Stone packed between the terrain and the deck.
+    pub fill: Vec<IVec3>,
+    /// Every cell the path added to the world.
+    pub added: Vec<IVec3>,
+}
+
+/// The columns of the path: along the forecourt's south row to its west
+/// wall, north up that wall onto the diamond's rim, west along the row
+/// of the house's north edge, then down the house's east side to the
+/// porch.
+pub fn house_path_columns(
+    expansion: &WorldExpansionLayout,
+    fortress: &RedBlackFortressLayout,
+) -> Vec<(i32, i32)> {
+    let gate = fortress.gate;
+    let r = HOUSE_FOOTPRINT;
+    let south = gate.base.z + gate.width;
+    let west = expansion.fortress_terrace_min_x - 1;
+    let north = red_black_house_cell(r.min_x, r.min_z - 1, 0).z;
+    let east = red_black_house_cell(r.max_x + 1, r.min_z, 0).x;
+    let porch = red_black_house_cell(HOUSE_DOOR_X + 1, HOUSE_PORCH_Z, 0);
+    let corners = [
+        (gate.base.x - 1, south),
+        (west, south),
+        (west, north),
+        (east, north),
+        (east, porch.z),
+        (porch.x, porch.z),
+    ];
+    let mut columns = vec![corners[0]];
+    for &(tx, tz) in &corners[1..] {
+        let (mut x, mut z) = *columns.last().unwrap();
+        while (x, z) != (tx, tz) {
+            x += (tx - x).signum();
+            z += (tz - z).signum();
+            columns.push((x, z));
+        }
+    }
+    columns
+}
+
+/// Lays the path from the gate to the house in the Overworld's wood: a
+/// `DoubleWoodSlab` deck that never steps more than one cell between
+/// columns, stone packed under it wherever the terrain sits further back,
+/// and `WoodStairs` on the climb north along the forecourt's west wall
+/// (inverted stairs only rise toward the north). The deck hangs one cell
+/// past the terrain, which stays as it was; only the house's own
+/// flattened ground (`pad`) is re-laid in place. Columns whose ground is
+/// a suit symbol are left alone, and no protected cell is filled.
+pub fn lay_house_path(
+    seed: u32,
+    columns: &[(i32, i32)],
+    pad: &[IVec3],
+    protected: &HashSet<IVec3>,
+    world: &mut VoxelWorld,
+) -> HousePath {
+    let mut path = HousePath {
+        columns: columns.to_vec(),
+        ..HousePath::default()
+    };
+    let ground: Vec<Option<IVec3>> = columns
+        .iter()
+        .map(|&(x, z)| lower_ground_cell(world, x, z, RED_BLACK_HOUSE_GROUND_Y, 0))
+        .collect();
+    // Deck levels: at or past the ground, one cell per column at most.
+    let mut level: Vec<i32> = ground
+        .iter()
+        .map(|g| g.map_or(0, |c| if pad.contains(&c) { c.y } else { c.y - 1 }))
+        .collect();
+    for i in 1..level.len() {
+        level[i] = level[i].min(level[i - 1] + 1);
+    }
+    for i in (0..level.len().saturating_sub(1)).rev() {
+        level[i] = level[i].min(level[i + 1] + 1);
+    }
+    let slab = down(BlockType::DoubleWoodSlab, double_wood_slab_material_id());
+    for (i, &(x, z)) in columns.iter().enumerate() {
+        let Some(g) = ground[i] else { continue };
+        if world.get(g).is_some_and(|b| is_symbol(b.block_type())) {
+            continue;
+        }
+        let deck = IVec3::new(x, level[i], z);
+        if protected.contains(&deck) || (world.contains(deck) && !pad.contains(&deck)) {
+            continue;
+        }
+        for y in (level[i] + 1)..g.y {
+            let cell = IVec3::new(x, y, z);
+            if !world.contains(cell) && !protected.contains(&cell) {
+                world.insert(cell, dark_masonry(seed, cell));
+                path.fill.push(cell);
+                path.added.push(cell);
+            }
+        }
+        if world.insert(deck, slab).is_none() {
+            path.added.push(deck);
+        }
+        path.deck.push(deck);
+        // A stair where the next column to the north sits one cell on.
+        let north = [i.wrapping_sub(1), i + 1]
+            .into_iter()
+            .filter(|&j| j < columns.len())
+            .any(|j| columns[j] == (x, z - 1) && level[j] == level[i] - 1);
+        let step = IVec3::new(x, level[i] - 1, z);
+        if north && !world.contains(step) && !protected.contains(&step) {
+            world.insert(step, down(BlockType::WoodStairs, wood_stairs_material_id()));
+            path.stairs.push(step);
+            path.added.push(step);
+        }
+    }
+    path
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -1165,18 +1291,20 @@ pub struct RedBlackIdentity {
     pub fourth_tower: FourthTower,
     pub landscape: LandscapeExpansion,
     pub house: RedBlackHouse,
+    pub house_path: HousePath,
     pub composition: ApproachComposition,
     pub balance: IdentityBalance,
 }
 
 impl RedBlackIdentity {
-    /// The house and the trees: the only cells that hang past the
-    /// diamond's own surface and its lower tip.
+    /// The house, its path and the trees: the only cells that hang past
+    /// the diamond's own surface and its lower tip.
     pub fn hung_cells(&self) -> HashSet<IVec3> {
         self.house
             .added
             .iter()
             .copied()
+            .chain(self.house_path.added.iter().copied())
             .chain(self.grove.cells())
             .collect()
     }
@@ -1193,6 +1321,7 @@ impl RedBlackIdentity {
             .chain(self.fourth_tower.added_cells())
             .chain(self.landscape.cells.iter().copied())
             .chain(self.house.added.iter().copied())
+            .chain(self.house_path.added.iter().copied())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -1225,6 +1354,17 @@ pub fn build_red_black_identity(
     let landscape =
         expand_red_black_landscape(seed, expansion, fortress, protected, floor_y, world);
     let house = build_red_black_house(focal_columns, world);
+    let house_path = lay_house_path(
+        seed,
+        &house_path_columns(expansion, fortress),
+        &house.pad,
+        protected,
+        world,
+    );
+    // No tree grows or hangs over the path.
+    let mut walk_columns = walk_columns.clone();
+    walk_columns.extend(house_path.columns.iter().copied());
+    let walk_columns = &walk_columns;
     // The fourth tower's crests join the protected cells: no leaf may touch
     // a symbol.
     let mut grown_protection = protected.clone();
@@ -1269,6 +1409,7 @@ pub fn build_red_black_identity(
         fourth_tower,
         landscape,
         house,
+        house_path,
         composition,
         balance,
     }

@@ -220,7 +220,7 @@ fn walk_both_ways(scene: &WorldScene, points: &[Vec3]) {
 }
 
 /// Gate 17 final voxel count (HEAD 807e490).
-const GATE_17_VOXELS: usize = 9093;
+const GATE_17_VOXELS: usize = 9102;
 /// Soft ceiling of the Gate 17.5 budget.
 const IDENTITY_BUDGET_MAX: usize = 1400;
 

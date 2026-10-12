@@ -201,6 +201,15 @@ fn the_functional_top_faces_minus_y() {
                 .iter()
                 .map(|c| (c.x, c.z)),
         )
+        // ... and the path to the house hangs its deck from it.
+        .chain(
+            scene
+                .red_black_identity()
+                .house_path
+                .columns
+                .iter()
+                .copied(),
+        )
         .collect();
     for cell in &s.cells {
         let b = scene.world().get(*cell).unwrap();

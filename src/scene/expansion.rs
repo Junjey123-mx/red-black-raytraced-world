@@ -895,6 +895,31 @@ pub fn build_red_black_expansion(
                     lower.walls.push(cell);
                 }
             }
+            // The forecourt also faces the old mass, whose rim hangs past
+            // it: the crevice between the two is filled up to the forecourt.
+            if bottom_y == lower_bottom_y(layout, x) {
+                continue;
+            }
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, nz) = (x + dx, z + dz);
+                if row_of(nz).is_some_and(|(f, l)| (f..=l).contains(&nx)) {
+                    continue;
+                }
+                let Some(rim) = lower_ground_cell(world, nx, nz, bottom_y - 8, bottom_y) else {
+                    continue;
+                };
+                for y in (rim.y + 1)..=bottom_y {
+                    let cell = IVec3::new(nx, y, nz);
+                    if !world.contains(cell) {
+                        let (block_type, material) = lower_mass_block(terrain, rhombus, nx, y, nz);
+                        world.insert(
+                            cell,
+                            BlockInstance::new(block_type, material, Orientation::Down),
+                        );
+                        lower.walls.push(cell);
+                    }
+                }
+            }
         }
     }
     lower

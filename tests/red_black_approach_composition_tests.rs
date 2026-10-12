@@ -582,3 +582,56 @@ fn the_house_mirrors_the_overworld_on_the_diamond() {
     ];
     walk_both_ways(&scene, &points);
 }
+
+// 9
+#[test]
+fn a_wooden_path_joins_the_gate_and_the_house() {
+    let scene = WorldScene::new();
+    let w = scene.world();
+    let p = &scene.red_black_identity().house_path;
+    let kind = |c: IVec3| w.get(c).map(|b| b.block_type());
+    // Contiguous columns from the gate's forecourt to the porch.
+    let gate = scene.fortress_layout().gate;
+    assert_eq!(p.columns[0], (gate.base.x - 1, gate.base.z + gate.width));
+    for pair in p.columns.windows(2) {
+        let d = (pair[0].0 - pair[1].0).abs() + (pair[0].1 - pair[1].1).abs();
+        assert_eq!(d, 1, "{pair:?}");
+    }
+    // Slabs that never step more than a cell, stairs on the climb north,
+    // stone under the deck, and room to walk over it.
+    assert!(
+        p.deck.len() + 2 >= p.columns.len(),
+        "{} decks",
+        p.deck.len()
+    );
+    for pair in p.deck.windows(2) {
+        assert!((pair[0].y - pair[1].y).abs() <= 1, "{pair:?}");
+    }
+    assert!(p.stairs.len() >= 4 && !p.fill.is_empty());
+    for c in &p.deck {
+        assert_eq!(kind(*c), Some(BlockType::DoubleWoodSlab));
+        let stair = IVec3::new(c.x, c.y - 1, c.z);
+        // (The porch keeps its fence on the deck.)
+        assert!(
+            !w.contains(stair)
+                || p.stairs.contains(&stair)
+                || kind(stair) == Some(BlockType::RedBlackFence),
+            "{stair:?}"
+        );
+        assert!(!w.contains(IVec3::new(c.x, c.y - 2, c.z)), "{c:?}");
+    }
+    for c in &p.stairs {
+        assert_eq!(kind(*c), Some(BlockType::WoodStairs));
+        assert!(
+            p.deck.contains(&IVec3::new(c.x, c.y, c.z - 1)),
+            "{c:?} climbs north"
+        );
+    }
+    // The crevice behind the forecourt's west wall is closed.
+    let l = scene.fortress_layout().levels;
+    for z in (gate.base.z - 1)..=(gate.base.z + gate.width) {
+        for y in (l.ground_y - 3)..=l.ground_y {
+            assert!(w.contains(IVec3::new(gate.base.x - 5, y, z)), "({y}, {z})");
+        }
+    }
+}

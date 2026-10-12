@@ -172,7 +172,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::Instant;
 
 /// Voxel count certified at the end of Gate 15 (HEAD `2fa6c03`).
-const GATE_15_VOXELS: usize = 8243;
+const GATE_15_VOXELS: usize = 8252;
 /// Soft architectural budget of the gate.
 const CASTLE_BUDGET_MAX: usize = 1500;
 /// Interactive floor of the gate.

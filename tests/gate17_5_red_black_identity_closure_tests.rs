@@ -174,7 +174,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::time::Instant;
 
 /// Gate 17 final voxel count (HEAD `807e490`).
-const GATE_17_VOXELS: usize = 9093;
+const GATE_17_VOXELS: usize = 9102;
 /// Cells the Gate 16 castle and Gate 17 fortress certified.
 const GATE_16_CASTLE: usize = 440;
 const GATE_17_FORTRESS: usize = 410;

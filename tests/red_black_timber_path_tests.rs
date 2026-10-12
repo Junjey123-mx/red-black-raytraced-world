@@ -305,9 +305,12 @@ fn the_materials_are_corinto_timber_with_dark_borders() {
             scene.world().get(*c).unwrap().block_type(),
             BlockType::PolishedBlackstoneBricks
         );
-        // Ground of its column: nothing stands on it (functionally above).
+        // Ground of its column: nothing stands on it (functionally above),
+        // except where the path to the house runs over it.
+        let house_path = &scene.red_black_identity().house_path.columns;
         assert!(
-            !scene.world().contains(IVec3::new(c.x, c.y - 1, c.z)),
+            !scene.world().contains(IVec3::new(c.x, c.y - 1, c.z))
+                || house_path.contains(&(c.x, c.z)),
             "{c:?}"
         );
     }
