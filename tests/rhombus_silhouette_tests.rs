@@ -143,10 +143,14 @@ use scene::terrain::generator::generate_terrain;
 use scene::voxel_world::VoxelWorld;
 use scene::world::WorldScene;
 
+/// The diamond's own section at `y`: the house's flattened site and the
+/// trees hanging from it are not part of its silhouette.
 fn area(scene: &WorldScene, y: i32) -> usize {
+    let hung = scene.red_black_identity().hung_cells();
     (-6..30)
         .flat_map(|z| (-6..30).map(move |x| (x, z)))
-        .filter(|&(x, z)| scene.world().contains(IVec3::new(x, y, z)))
+        .map(|(x, z)| IVec3::new(x, y, z))
+        .filter(|c| scene.world().contains(*c) && !hung.contains(c))
         .count()
 }
 
@@ -200,11 +204,14 @@ fn the_lower_tip_exists_and_nothing_hangs_below_it() {
         tip_block.block_type(),
         BlockType::Grass | BlockType::Water | BlockType::Leaves
     ));
+    // Only the house and the trees hang past it.
+    let hung = scene.red_black_identity().hung_cells();
     for z in -6..30 {
         for x in -6..30 {
             for y in (r.lower_tip_y - 6)..r.lower_tip_y {
                 assert!(
-                    !scene.world().contains(IVec3::new(x, y, z)),
+                    !scene.world().contains(IVec3::new(x, y, z))
+                        || hung.contains(&IVec3::new(x, y, z)),
                     "({x}, {y}, {z}) below the tip"
                 );
             }
@@ -320,9 +327,11 @@ fn the_silhouette_narrows_at_the_waist_and_at_the_tip() {
     assert!(tip < widest / 10, "tip {tip} vs widest {widest}");
     assert!(area(&scene, r.lower_tip_y + 2) > tip);
     // Width through the center along x: wide, narrow, wide, point.
+    let hung = scene.red_black_identity().hung_cells();
     let width = |y: i32| {
         (-6..30)
-            .filter(|&x| scene.world().contains(IVec3::new(x, y, r.center_z)))
+            .map(|x| IVec3::new(x, y, r.center_z))
+            .filter(|c| scene.world().contains(*c) && !hung.contains(c))
             .count()
     };
     assert!(width(r.waist_y) < width(r.upper_taper_top));

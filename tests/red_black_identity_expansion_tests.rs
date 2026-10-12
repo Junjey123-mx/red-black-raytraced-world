@@ -448,7 +448,7 @@ fn the_voxel_budget_holds() {
     );
     assert!(identity <= IDENTITY_BUDGET_MAX, "{identity}");
     let b = scene.world().bounds().unwrap();
-    assert_eq!(b.min, IVec3::new(0, -22, 0));
+    assert_eq!(b.min, IVec3::new(0, -28, 0));
     assert_eq!(b.max_exclusive, IVec3::new(37, 13, 24));
     println!("GATE17_5 voxels: gate17={GATE_17_VOXELS} now={n} identity={identity}");
 }

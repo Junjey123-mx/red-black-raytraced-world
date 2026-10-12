@@ -154,7 +154,8 @@ use scene::fortress::is_symbol;
 use scene::light::Light;
 use scene::orientation::Orientation;
 use scene::red_black_identity::{
-    RED_BLACK_TREES_MAX, RED_BLACK_TREES_MIN, TREE_FOCAL_CLEARANCE, TREE_SPACING,
+    HOUSE_GARDEN_SITES, RED_BLACK_TREES_MAX, RED_BLACK_TREES_MIN, TREE_FOCAL_CLEARANCE,
+    TREE_SPACING,
 };
 use scene::red_black_timber::{red_black_leaves_material_id, red_black_log_material_id};
 use scene::world::{WorldScene, world_lights};
@@ -350,8 +351,20 @@ fn the_paths_keep_their_head_room() {
     }
     // Clear of the portal route and every family focal cell.
     let route = scene.inverted_route();
+    // (The house's garden stands among the family scenes.)
+    let garden: Vec<IVec3> = scene
+        .red_black_identity()
+        .grove
+        .trees
+        .iter()
+        .filter(|t| HOUSE_GARDEN_SITES.contains(&(t.base.x, t.base.z)))
+        .flat_map(|t| t.trunk.iter().chain(t.leaves.iter()).copied())
+        .collect();
     for c in &cells {
         assert!(!route.treads.iter().any(|(t, _)| t == c) && !route.supports.contains(c));
+        if garden.contains(c) {
+            continue;
+        }
         for f in scene.families() {
             for fc in f.symbols.iter().chain(f.accents.iter()) {
                 let far = (fc.x - c.x).abs() >= TREE_FOCAL_CLEARANCE
@@ -446,9 +459,9 @@ fn no_light_is_added() {
     );
     let src = std::fs::read_to_string("src/scene/red_black_identity.rs").unwrap();
     assert!(!src.contains("PointLight") && !src.contains("Light::"));
-    // Inside the world box: the crowns never reach past the lower tip.
+    // Inside the world box: the crowns never reach past the house's roof.
     let scene = WorldScene::new();
-    let tip = scene.rhombus().lower_tip_y;
-    assert!(tree_cells(&scene).iter().all(|c| c.y >= tip));
-    assert_eq!(scene.world().bounds().unwrap().min.y, tip);
+    let roof = scene.rhombus().lower_tip_y - 6;
+    assert!(tree_cells(&scene).iter().all(|c| c.y >= roof));
+    assert_eq!(scene.world().bounds().unwrap().min.y, roof);
 }

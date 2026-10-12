@@ -64,11 +64,11 @@ fn down(block_type: BlockType, material: crate::core::material::MaterialId) -> B
     BlockInstance::new(block_type, material, Orientation::Down)
 }
 
-/// Trunk sites away from the gate: the lobe's north shoulder and the
-/// garden around the house. Nothing hangs from the diamond's lower
-/// surface, which belongs to the family scenes.
-const SCATTERED_TREE_SITES: [(i32, i32); 6] =
-    [(30, 1), (34, 2), (26, 22), (31, 22), (35, 16), (35, 20)];
+/// Trunk sites away from the gate: the lobe's north shoulder.
+const SCATTERED_TREE_SITES: [(i32, i32); 2] = [(30, 1), (34, 2)];
+/// Trunk sites beside and behind the house, on the diamond's underside;
+/// its front stays open.
+pub const HOUSE_GARDEN_SITES: [(i32, i32); 4] = [(7, 6), (17, 11), (4, 12), (10, 5)];
 
 /// The trunk sites of the grove: the lobe's east edge, beside the
 /// fortress, then the scattered sites. Nothing grows by the path or the
@@ -1014,20 +1014,18 @@ pub fn balance_red_black_identity(
 // Red-Black house
 // ---------------------------------------------------------------------
 
-/// Ground level of the house's pad (the lobe's own level at its south rim).
-pub const RED_BLACK_HOUSE_GROUND_Y: i32 = -13;
-/// The house is the Overworld's, shifted east (clear of the rhombus
-/// cutaway) and mirrored in `z` so its door faces the lobe.
-const HOUSE_SHIFT_X: i32 = 20;
-const HOUSE_MIRROR_Z: i32 = 28;
-/// Rows of garden behind the house and columns of garden east of it.
-const HOUSE_GARDEN_ROWS: i32 = 2;
-const HOUSE_GARDEN_COLUMNS: i32 = 4;
+/// Ground level of the house: the diamond's lower tip, the level its
+/// site is flattened to.
+pub const RED_BLACK_HOUSE_GROUND_Y: i32 = -22;
+/// The house is the Overworld's, moved to the open middle of the
+/// diamond's underside.
+const HOUSE_SHIFT_X: i32 = 4;
+const HOUSE_SHIFT_Z: i32 = -1;
 
 /// The Red-Black house, as built.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackHouse {
-    /// The flat pad the house stands on.
+    /// The cells that flatten the site around the house.
     pub pad: Vec<IVec3>,
     /// Lower and upper door cells.
     pub door: Vec<IVec3>,
@@ -1037,51 +1035,39 @@ pub struct RedBlackHouse {
 }
 
 /// Where an Overworld house cell lands under the Red-Black world: `up`
-/// courses hang toward `-Y` from the pad's ground.
+/// courses hang toward `-Y` from the flattened ground.
 pub fn red_black_house_cell(x: i32, z: i32, up: i32) -> IVec3 {
     IVec3::new(
         x + HOUSE_SHIFT_X,
         RED_BLACK_HOUSE_GROUND_Y - up,
-        HOUSE_MIRROR_Z - z,
+        z + HOUSE_SHIFT_Z,
     )
 }
 
-/// Builds the Overworld's house upside down on a flat pad south of the
-/// lobe: the same plan, wall courses, windows, lamps, porch fence and
+/// Builds the Overworld's house upside down on the diamond's underside:
+/// the same plan, wall courses, windows, lamps, porch fence and
 /// three-layer roof, in the corinto timber family. The glass is the
 /// Overworld's. There is no Red-Black stair block, so the roof steps in
-/// planks.
-pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
+/// planks. The site is flattened, not extended: the terrain under the
+/// house and one column around it is filled down to the tip's level.
+/// Existing cells are never replaced, and focal columns around the house
+/// keep their scenes open.
+pub fn build_red_black_house(
+    focal_columns: &[(i32, i32)],
+    world: &mut VoxelWorld,
+) -> RedBlackHouse {
     let r = HOUSE_FOOTPRINT;
     let at = red_black_house_cell;
     let mut house = RedBlackHouse::default();
-    let mut put = |house: &mut RedBlackHouse, cell: IVec3, block: BlockInstance| {
+    fn put(world: &mut VoxelWorld, house: &mut RedBlackHouse, cell: IVec3, block: BlockInstance) {
         if !world.contains(cell) {
+            world.insert(cell, block);
             house.added.push(cell);
-        }
-        world.insert(cell, block);
-    };
-    // The flat pad: the footprint, one column around it, the porch row
-    // and the garden, two cells thick.
-    for z in (r.min_z - HOUSE_GARDEN_ROWS)..=HOUSE_PORCH_Z {
-        for x in (r.min_x - 1)..=(r.max_x + 1 + HOUSE_GARDEN_COLUMNS) {
-            for up in [-1, 0] {
-                let cell = at(x, z, up);
-                put(
-                    &mut house,
-                    cell,
-                    down(
-                        BlockType::PolishedBlackstoneBricks,
-                        polished_blackstone_bricks_material_id(),
-                    ),
-                );
-                house.pad.push(cell);
-            }
         }
     }
     for z in r.min_z..=r.max_z {
         for x in r.min_x..=r.max_x {
-            put(&mut house, at(x, z, 0), planks());
+            put(world, &mut house, at(x, z, 0), planks());
             let (edge_x, edge_z) = (x == r.min_x || x == r.max_x, z == r.min_z || z == r.max_z);
             if !edge_x && !edge_z {
                 continue;
@@ -1095,7 +1081,7 @@ pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
                     } else {
                         red_black_wood_door_top_material_id()
                     };
-                    BlockInstance::new(BlockType::RedBlackWoodDoor, material, Orientation::North)
+                    BlockInstance::new(BlockType::RedBlackWoodDoor, material, Orientation::South)
                 } else if course == 2 && HOUSE_WINDOWS.contains(&(x, z)) {
                     house.glass.push(cell);
                     down(BlockType::Glass, glass_material_id())
@@ -1106,7 +1092,7 @@ pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
                 } else {
                     planks()
                 };
-                put(&mut house, cell, block);
+                put(world, &mut house, cell, block);
             }
         }
     }
@@ -1116,6 +1102,7 @@ pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
         for z in (HOUSE_RIDGE_Z - half)..=(HOUSE_RIDGE_Z + half) {
             for x in (r.min_x - HOUSE_ROOF_OVERHANG)..=(r.max_x + HOUSE_ROOF_OVERHANG) {
                 put(
+                    world,
                     &mut house,
                     at(x, z, HOUSE_WALL_HEIGHT + 1 + layer),
                     planks(),
@@ -1126,6 +1113,7 @@ pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
     // Awning over the door and the porch fence, open in front of it.
     for x in (HOUSE_DOOR_X - 1)..=(HOUSE_DOOR_X + 1) {
         put(
+            world,
             &mut house,
             at(x, HOUSE_PORCH_Z, HOUSE_WALL_HEIGHT + 1),
             planks(),
@@ -1133,7 +1121,35 @@ pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
     }
     for x in r.min_x..=r.max_x {
         if x != HOUSE_DOOR_X {
-            put(&mut house, at(x, HOUSE_PORCH_Z, 1), fence());
+            put(world, &mut house, at(x, HOUSE_PORCH_Z, 1), fence());
+        }
+    }
+    // Flatten: fill under the house, one column around it and the porch
+    // row from the terrain down to the ground level.
+    for z in (r.min_z - 1)..=HOUSE_PORCH_Z {
+        for x in (r.min_x - 1)..=(r.max_x + 1) {
+            let ground = at(x, z, 0);
+            if !r.contains(x, z) && focal_columns.contains(&(ground.x, ground.z)) {
+                continue;
+            }
+            let Some(top) = lower_ground_cell(world, ground.x, ground.z, ground.y + 1, 0) else {
+                continue;
+            };
+            for y in ground.y..top.y {
+                let cell = IVec3::new(ground.x, y, ground.z);
+                if !world.contains(cell) {
+                    house.pad.push(cell);
+                }
+                put(
+                    world,
+                    &mut house,
+                    cell,
+                    down(
+                        BlockType::PolishedBlackstoneBricks,
+                        polished_blackstone_bricks_material_id(),
+                    ),
+                );
+            }
         }
     }
     house
@@ -1154,6 +1170,17 @@ pub struct RedBlackIdentity {
 }
 
 impl RedBlackIdentity {
+    /// The house and the trees: the only cells that hang past the
+    /// diamond's own surface and its lower tip.
+    pub fn hung_cells(&self) -> HashSet<IVec3> {
+        self.house
+            .added
+            .iter()
+            .copied()
+            .chain(self.grove.cells())
+            .collect()
+    }
+
     /// Cells the identity stages added to the world (replacements of
     /// existing cells are not counted), each once.
     pub fn added_cells(&self) -> Vec<IVec3> {
@@ -1197,7 +1224,7 @@ pub fn build_red_black_identity(
     let fourth_tower = build_fourth_tower(seed, fortress, world);
     let landscape =
         expand_red_black_landscape(seed, expansion, fortress, protected, floor_y, world);
-    let house = build_red_black_house(world);
+    let house = build_red_black_house(focal_columns, world);
     // The fourth tower's crests join the protected cells: no leaf may touch
     // a symbol.
     let mut grown_protection = protected.clone();
@@ -1213,13 +1240,25 @@ pub fn build_red_black_identity(
             grown_protection.insert(IVec3::new(c.x + dx, c.y + dy, c.z + dz));
         }
     }
+    // Trees may hang as deep as the house's roof.
     let clearance = TreeClearance {
         cells: &grown_protection,
         walk_columns,
         focal_columns,
-        floor_y,
+        floor_y: RED_BLACK_HOUSE_GROUND_Y - HOUSE_WALL_HEIGHT - 3,
     };
-    let grove = plant_red_black_grove(seed, fortress, &clearance, world);
+    let mut grove = plant_red_black_grove(seed, fortress, &clearance, world);
+    // The house's garden stands among the family scenes, so its trees
+    // answer only to the protected cells, not to the focal columns.
+    let garden = TreeClearance {
+        focal_columns: &[],
+        ..clearance
+    };
+    for (x, z) in HOUSE_GARDEN_SITES {
+        if let Some(tree) = grow_red_black_tree(seed, x, z, &garden, world) {
+            grove.trees.push(tree);
+        }
+    }
     let composition = compose_fortress_approach(expansion, approach, &landscape, world);
     let balance = balance_red_black_identity(fortress, world);
     RedBlackIdentity {

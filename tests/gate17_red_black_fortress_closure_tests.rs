@@ -430,7 +430,7 @@ fn the_fortress_is_connected_to_the_lower_world() {
         assert!(l.footprint.contains(c.x, c.z), "{c:?} off the pad");
     }
     let bounds = scene.world().bounds().unwrap();
-    assert_eq!(bounds.min, IVec3::new(0, -22, 0));
+    assert_eq!(bounds.min, IVec3::new(0, -28, 0));
     assert_eq!(bounds.max_exclusive, IVec3::new(37, 13, 24));
     let deepest = fortress.iter().map(|c| c.y).min().unwrap();
     assert_eq!(deepest, l.levels.max_y);

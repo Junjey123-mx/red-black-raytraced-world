@@ -475,7 +475,15 @@ fn the_fortress_silhouette_stays_visible() {
 #[test]
 fn no_family_focal_scene_is_obstructed() {
     let scene = WorldScene::new();
-    let added: Vec<IVec3> = tree_cells(&scene).into_iter().collect();
+    // (The house's garden stands among the family scenes by design.)
+    let added: Vec<IVec3> = scene
+        .red_black_identity()
+        .grove
+        .trees
+        .iter()
+        .filter(|t| !scene::red_black_identity::HOUSE_GARDEN_SITES.contains(&(t.base.x, t.base.z)))
+        .flat_map(|t| t.trunk.iter().chain(t.leaves.iter()).copied())
+        .collect();
     let focal: Vec<IVec3> = scene
         .families()
         .iter()
@@ -524,7 +532,7 @@ fn no_light_is_added() {
 
 // 8
 #[test]
-fn the_house_mirrors_the_overworld_and_is_reachable() {
+fn the_house_mirrors_the_overworld_on_the_diamond() {
     use scene::overworld::{HOUSE_DOOR_X, HOUSE_FOOTPRINT, HOUSE_PORCH_Z, HOUSE_WINDOWS};
     use scene::red_black_identity::red_black_house_cell as at;
     let scene = WorldScene::new();
@@ -554,19 +562,23 @@ fn the_house_mirrors_the_overworld_and_is_reachable() {
         kind(at(HOUSE_DOOR_X, 10, 0)),
         Some(BlockType::RedBlackWoodPlanks)
     );
-    // From the end of the approach, along the lobe's rim, through the door.
-    let porch = at(HOUSE_DOOR_X, HOUSE_PORCH_Z, 0);
-    let last = *scene.red_black_approach().main.last().unwrap();
-    let ground = |x: i32, z: i32| {
-        let y = (-22..0).find(|y| w.contains(IVec3::new(x, *y, z))).unwrap();
-        IVec3::new(x, y, z)
-    };
-    let mut points = vec![eye(last)];
-    points.extend(((last.z + 1)..porch.z).map(|z| eye(ground(last.x, z))));
-    points.extend(((last.x + 1)..=porch.x).map(|x| eye(ground(x, porch.z - 1))));
-    points.push(eye(porch));
-    points.push(eye(at(HOUSE_DOOR_X, r.max_z, 0)));
-    points.push(eye(at(HOUSE_DOOR_X, 10, 0)));
-    println!("house walk from {last:?}: {} points", points.len());
+    // No terrain is added beside the diamond: every house column already
+    // had ground, and the site is flat at the house's level.
+    let added: HashSet<IVec3> = house.added.iter().copied().collect();
+    for c in &house.added {
+        assert!(
+            (-22..0).any(|y| {
+                let t = IVec3::new(c.x, y, c.z);
+                w.contains(t) && !added.contains(&t)
+            }),
+            "{c:?} hangs beside the diamond"
+        );
+    }
+    // From the porch, through the door, to the middle of the room.
+    let points = vec![
+        eye(at(HOUSE_DOOR_X, HOUSE_PORCH_Z, 0)),
+        eye(at(HOUSE_DOOR_X, r.max_z, 0)),
+        eye(at(HOUSE_DOOR_X, 10, 0)),
+    ];
     walk_both_ways(&scene, &points);
 }

@@ -347,7 +347,7 @@ fn opaque(reflectivity: f32) -> Material {
 fn world_bounds_clipping_is_active_and_exact() {
     let rig = Rig::new();
     let bounds = rig.scene.world().bounds().expect("the world has a box");
-    assert_eq!(bounds.min, IVec3::new(0, -22, 0));
+    assert_eq!(bounds.min, IVec3::new(0, -28, 0));
     // Gate 15 grew the lobe east: the box ends at the lobe's last column.
     assert_eq!(
         bounds.max_exclusive.x,

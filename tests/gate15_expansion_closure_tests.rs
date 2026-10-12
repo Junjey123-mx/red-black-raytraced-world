@@ -410,7 +410,7 @@ fn the_world_is_one_voxel_world_in_one_box() {
     let scene = WorldScene::new();
     let l = scene.expansion_layout();
     let bounds = scene.world().bounds().unwrap();
-    assert_eq!(bounds.min, IVec3::new(0, -22, 0));
+    assert_eq!(bounds.min, IVec3::new(0, -28, 0));
     assert_eq!(
         bounds.max_exclusive,
         IVec3::new(l.overworld_extension.max_x + 1, 13, scene.config().depth)
@@ -464,8 +464,15 @@ fn the_upper_and_lower_masses_are_one_connected_body() {
     {
         assert!(seen.contains(c), "{c:?} detached");
     }
-    // Nothing floats: the lowest cell is the lower tip, the highest a tree.
-    let min_y = cells.iter().map(|c| c.y).min().unwrap();
+    // Nothing floats: the lowest cell is the lower tip (past which only
+    // the house and the trees hang), the highest a tree.
+    let hung = scene.red_black_identity().hung_cells();
+    let min_y = cells
+        .iter()
+        .filter(|c| !hung.contains(c))
+        .map(|c| c.y)
+        .min()
+        .unwrap();
     assert_eq!(min_y, scene.rhombus().lower_tip_y);
 }
 

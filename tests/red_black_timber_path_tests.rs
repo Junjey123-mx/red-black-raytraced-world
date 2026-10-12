@@ -406,9 +406,16 @@ fn the_path_is_distinct_from_the_terrain_by_block_identity() {
     let pad = scene.fortress_layout().footprint;
     // Around the path: no other ground cell is corinto timber, so the
     // planks alone mark the route.
+    let house: HashSet<(i32, i32)> = scene
+        .red_black_identity()
+        .house
+        .added
+        .iter()
+        .map(|c| (c.x, c.z))
+        .collect();
     for x in 15..pad.min_x {
         for z in 0..16 {
-            if cols.contains(&(x, z)) {
+            if cols.contains(&(x, z)) || house.contains(&(x, z)) {
                 continue;
             }
             if let Some(g) = ground(&scene, x, z) {

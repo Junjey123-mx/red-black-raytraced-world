@@ -300,7 +300,15 @@ fn the_lower_tip_is_preserved() {
     for cell in scene.red_black_expansion().cells() {
         assert!(cell.y >= rim, "{cell:?} below the rim");
     }
-    assert_eq!(scene.world().bounds().unwrap().min.y, r.lower_tip_y);
+    // Only the house and the trees hang past the tip.
+    let hung = scene.red_black_identity().hung_cells();
+    let lowest = scene
+        .world()
+        .iter()
+        .filter(|(c, _)| !hung.contains(c))
+        .map(|(c, _)| c.y)
+        .min();
+    assert_eq!(lowest, Some(r.lower_tip_y));
 }
 
 #[test]

@@ -401,7 +401,7 @@ fn the_castle_is_connected_to_the_terrain() {
         }
     }
     let bounds = scene.world().bounds().unwrap();
-    assert_eq!(bounds.min, IVec3::new(0, -22, 0));
+    assert_eq!(bounds.min, IVec3::new(0, -28, 0));
     assert_eq!(bounds.max_exclusive, IVec3::new(37, 13, 24));
     let top = castle.iter().map(|c| c.y).max().unwrap();
     println!(

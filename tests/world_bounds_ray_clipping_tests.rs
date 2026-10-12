@@ -556,7 +556,7 @@ fn the_world_box_is_exact_and_maintained_through_edits() {
         Some(b.map_or(VoxelBounds::of_cell(*c), |b| b.including(*c)))
     });
     assert_eq!(Some(bounds), brute);
-    assert_eq!(bounds.min, IVec3::new(0, -22, 0));
+    assert_eq!(bounds.min, IVec3::new(0, -28, 0));
     // Gate 15 grew the lobe east: the box ends at the lobe's last column.
     assert_eq!(
         bounds.max_exclusive.x,

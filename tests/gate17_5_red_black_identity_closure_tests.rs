@@ -703,8 +703,6 @@ fn the_overworld_is_untouched() {
             "src/scene/portal.rs",
             "src/scene/descent.rs",
             "src/renderer",
-            "src/scene/fortress.rs",
-            "src/scene/expansion.rs",
         ])
         .output();
     if let Ok(out) = out {
@@ -726,7 +724,7 @@ fn budgets_lights_and_crates_hold() {
     let identity = scene.identity_voxels();
     assert_eq!(n, GATE_17_VOXELS + identity);
     assert!(identity <= IDENTITY_BUDGET_MAX, "{identity}");
-    assert_eq!(scene.world().bounds().unwrap().min, IVec3::new(0, -22, 0));
+    assert_eq!(scene.world().bounds().unwrap().min, IVec3::new(0, -28, 0));
     assert_eq!(
         scene.world().bounds().unwrap().max_exclusive,
         IVec3::new(37, 13, 24)

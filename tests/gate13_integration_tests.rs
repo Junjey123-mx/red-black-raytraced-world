@@ -272,7 +272,8 @@ fn down_face_mapping_lower_mass_inverted_descent_and_surface_hold() {
         assert!(!scene.portal().core.contains(cell));
         assert!(!block_geometry(BlockType::WoodStairs, Orientation::Down).is_full_cube());
     }
-    // 12. lower surface faces -Y.
+    // 12. lower surface faces -Y (the house and the trees hang from it).
+    let hung = scene.red_black_identity().hung_cells();
     for cell in &scene.lower_surface().cells {
         assert_eq!(
             scene.world().get(*cell).unwrap().orientation(),
@@ -290,6 +291,7 @@ fn down_face_mapping_lower_mass_inverted_descent_and_surface_hold() {
                             || f.structures
                                 .contains(&IVec3::new(cell.x, cell.y - 1, cell.z))
                     )
+                || hung.contains(&IVec3::new(cell.x, cell.y - 1, cell.z))
         );
         assert!(cell.y < r.shelf_y);
     }
@@ -348,6 +350,7 @@ fn the_three_families_their_transitions_and_the_tip_are_in_place() {
     assert_eq!(main.len(), scene.world().len());
     // 17. lower tip.
     let r = scene.rhombus();
+    let hung = scene.red_black_identity().hung_cells();
     assert!(
         scene
             .world()
@@ -355,7 +358,8 @@ fn the_three_families_their_transitions_and_the_tip_are_in_place() {
     );
     for z in -6..30 {
         for x in -6..30 {
-            assert!(!scene.world().contains(IVec3::new(x, r.lower_tip_y - 1, z)));
+            let below = IVec3::new(x, r.lower_tip_y - 1, z);
+            assert!(!scene.world().contains(below) || hung.contains(&below));
         }
     }
 }
