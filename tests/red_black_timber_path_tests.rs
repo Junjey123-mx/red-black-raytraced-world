@@ -268,11 +268,10 @@ fn the_route_is_continuous() {
         assert!(partner, "{c:?} is a one-wide neck");
     }
     println!(
-        "GATE17_5 path: planks={} accents={} borders={} fences={} identity_voxels={} voxels={}",
+        "GATE17_5 path: planks={} accents={} borders={} identity_voxels={} voxels={}",
         p.planks.len(),
         p.accents.len(),
         p.borders.len(),
-        p.fences.len(),
         scene.identity_voxels(),
         scene.world().len()
     );
@@ -301,28 +300,15 @@ fn the_materials_are_corinto_timber_with_dark_borders() {
         assert!(is_family_brick(scene.world().get(*c).unwrap().block_type()));
     }
     assert!(!p.borders.is_empty());
-    assert!(!p.fences.is_empty(), "selected edges carry fence posts");
     for c in &p.borders {
         assert_eq!(
             scene.world().get(*c).unwrap().block_type(),
             BlockType::PolishedBlackstoneBricks
         );
-        // Ground of its column (the lobe is a hollow shell, so nothing need
-        // stand above it): nothing below but its own post.
-        let below = IVec3::new(c.x, c.y - 1, c.z);
+        // Ground of its column: nothing stands on it (functionally above).
         assert!(
-            !scene.world().contains(below) || p.fences.contains(&below),
+            !scene.world().contains(IVec3::new(c.x, c.y - 1, c.z)),
             "{c:?}"
-        );
-    }
-    for c in &p.fences {
-        assert_eq!(
-            scene.world().get(*c).unwrap().block_type(),
-            BlockType::RedBlackFence
-        );
-        assert!(
-            p.borders.contains(&IVec3::new(c.x, c.y + 1, c.z)),
-            "{c:?} stands on a border"
         );
     }
 }
@@ -385,14 +371,9 @@ fn the_path_runs_both_ways() {
 
 // 6
 #[test]
-fn fences_do_not_block_the_path() {
+fn nothing_blocks_the_path() {
     let scene = WorldScene::new();
     let p = &scene.red_black_identity().path;
-    let cols: HashSet<(i32, i32)> = p.columns().into_iter().collect();
-    for f in &p.fences {
-        assert!(!cols.contains(&(f.x, f.z)), "{f:?} stands on the path");
-        assert!(is_camera_solid(scene.world().get(*f).unwrap()));
-    }
     for c in p.planks.iter().chain(p.accents.iter()) {
         for dy in 1..=2 {
             assert!(

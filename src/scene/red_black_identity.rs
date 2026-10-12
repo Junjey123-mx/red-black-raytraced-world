@@ -48,7 +48,7 @@ pub const RED_BLACK_TRUNK_MIN: i32 = 5;
 /// Tallest trunk.
 pub const RED_BLACK_TRUNK_MAX: i32 = 6;
 /// Fewest and most trees the realm carries.
-pub const RED_BLACK_TREES_MIN: usize = 4;
+pub const RED_BLACK_TREES_MIN: usize = 1;
 pub const RED_BLACK_TREES_MAX: usize = 7;
 /// Columns kept between any tree cell and a family focal cell.
 pub const TREE_FOCAL_CLEARANCE: i32 = 2;
@@ -59,17 +59,12 @@ fn down(block_type: BlockType, material: crate::core::material::MaterialId) -> B
     BlockInstance::new(block_type, material, Orientation::Down)
 }
 
-/// The trunk sites of the first grove, derived from the fortress pad: one
-/// beside the forecourt (off every sight line from the approach to the
-/// gate) and two on the lobe's east edge, beside the fortress rather than
-/// in front of it, so no view of the four towers is screened by foliage.
+/// The trunk site of the first grove: the lobe's east edge, beside the
+/// fortress. Nothing grows by the path or the gate, so the entrance reads
+/// from the whole approach.
 pub fn tree_sites(fortress: &RedBlackFortressLayout) -> Vec<(i32, i32)> {
     let f = fortress.footprint;
-    vec![
-        (f.min_x - 4, f.min_z + 5),
-        (f.max_x + 1, f.min_z + 2),
-        (f.max_x + 1, f.max_z - 1),
-    ]
+    vec![(f.max_x + 1, f.min_z + 2)]
 }
 
 /// What a tree must never touch: cells and columns other stages own.
@@ -373,9 +368,6 @@ pub fn weave_fortress_timber(
 // Corinto path to the fortress (C215)
 // ---------------------------------------------------------------------
 
-/// Every how many border cells a fence post stands.
-pub const PATH_FENCE_PERIOD: usize = 2;
-
 /// The corinto path, as built.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CorintoPath {
@@ -386,15 +378,9 @@ pub struct CorintoPath {
     pub accents: Vec<IVec3>,
     /// Ground cells beside the path re-laid in polished blackstone.
     pub borders: Vec<IVec3>,
-    /// `RedBlackFence` posts standing on selected border cells.
-    pub fences: Vec<IVec3>,
 }
 
 impl CorintoPath {
-    pub fn added_cells(&self) -> Vec<IVec3> {
-        self.fences.clone()
-    }
-
     pub fn columns(&self) -> Vec<(i32, i32)> {
         self.planks
             .iter()
@@ -407,15 +393,13 @@ impl CorintoPath {
 /// Lays the corinto path: every Gate 15 approach cell (the coloured
 /// accents at the forecourt excepted) becomes `RedBlackWoodPlanks`; each
 /// ground cell beside it that belongs to no path, route, focal scene, tree
-/// or fortress becomes a polished-blackstone border; and every
-/// `PATH_FENCE_PERIOD`-th border cell, within one course of the path, carries a
-/// `RedBlackFence` post on its ground (functionally above it). The path
-/// cells, their head room and every route stay exactly where they were.
+/// or fortress becomes a polished-blackstone border. The path cells, their
+/// head room and every route stay exactly where they were, and nothing
+/// stands beside them.
 pub fn lay_corinto_path(
     approach: &RedBlackApproach,
     fortress: &RedBlackFortressLayout,
     clearance: &TreeClearance,
-    grove: &RedBlackGrove,
     world: &mut VoxelWorld,
 ) -> CorintoPath {
     let mut built = CorintoPath::default();
@@ -431,7 +415,6 @@ pub fn lay_corinto_path(
         }
     }
     let path: HashSet<(i32, i32)> = built.columns().into_iter().collect();
-    let trees: HashSet<(i32, i32)> = grove.cells().iter().map(|c| (c.x, c.z)).collect();
     let pad = fortress.footprint;
     let mut seen = HashSet::new();
     for cell in approach.main.iter() {
@@ -440,7 +423,6 @@ pub fn lay_corinto_path(
             if path.contains(&(x, z))
                 || pad.contains(x, z)
                 || clearance.walk_columns.contains(&(x, z))
-                || trees.contains(&(x, z))
                 || !seen.insert((x, z))
             {
                 continue;
@@ -475,20 +457,6 @@ pub fn lay_corinto_path(
             built.borders.push(ground);
         }
     }
-    for (i, border) in built.borders.iter().enumerate() {
-        if i % PATH_FENCE_PERIOD != 0 {
-            continue;
-        }
-        // Within one course of the path cell it edges.
-        let level = approach.main.iter().any(|p| {
-            (p.x - border.x).abs() + (p.z - border.z).abs() == 1 && (p.y - border.y).abs() <= 1
-        });
-        let post = IVec3::new(border.x, border.y - 1, border.z);
-        if level && !world.contains(post) && !clearance.cells.contains(&post) {
-            world.insert(post, fence());
-            built.fences.push(post);
-        }
-    }
     built
 }
 
@@ -504,20 +472,11 @@ pub struct RedBlackGatehouse {
     pub door: Vec<IVec3>,
     /// The entry corridor's floor, re-laid in corinto planks.
     pub corridor_floor: Vec<IVec3>,
-    /// The timber gallery crowning the gate block above its vault.
-    pub hood: Vec<IVec3>,
-    /// Fence rails on the gallery's outer edge.
-    pub rails: Vec<IVec3>,
 }
 
 impl RedBlackGatehouse {
     pub fn added_cells(&self) -> Vec<IVec3> {
-        self.door
-            .iter()
-            .chain(self.hood.iter())
-            .chain(self.rails.iter())
-            .copied()
-            .collect()
+        self.door.clone()
     }
 }
 
@@ -530,9 +489,7 @@ impl RedBlackGatehouse {
 /// vertical slab, so it keeps the horizontal `West` facing every door in
 /// the world uses; turning it `Down` would lay the panel across the
 /// corridor. The corridor floor becomes corinto planks so the path runs
-/// through the gate; a planks hood projects one column out over the
-/// entrance, one course past the path's head room, with fence finials on
-/// its ends. The arch, its coloured jambs and lintel and its crying
+/// through the gate, and nothing is built over or in front of it. The arch, its coloured jambs and lintel and its crying
 /// obsidian stay as Gate 17 built them; nothing here is a portal.
 pub fn build_red_black_gatehouse(
     fortress: &RedBlackFortressLayout,
@@ -562,28 +519,6 @@ pub fn build_red_black_gatehouse(
         {
             world.insert(cell, planks());
             built.corridor_floor.push(cell);
-        }
-    }
-    // A timber gallery crowns the gate block one course past its vault, so
-    // the gatehouse rises above the curtain as its own corinto story; fence
-    // rails line its outer (west) edge. Nothing projects over the path.
-    let g = fortress.gatehouse;
-    let gallery_y = lv.wall_top_y - 2;
-    for z in g.min_z..=g.max_z {
-        for x in g.min_x..=g.max_x {
-            let cell = IVec3::new(x, gallery_y, z);
-            let under = IVec3::new(x, gallery_y + 1, z);
-            if !world.contains(cell) && world.contains(under) {
-                world.insert(cell, planks());
-                built.hood.push(cell);
-            }
-        }
-    }
-    for z in (g.min_z + 1)..g.max_z {
-        let cell = IVec3::new(g.min_x, gallery_y - 1, z);
-        if built.hood.contains(&IVec3::new(g.min_x, gallery_y, z)) && !world.contains(cell) {
-            world.insert(cell, fence());
-            built.rails.push(cell);
         }
     }
     built
@@ -938,102 +873,40 @@ pub fn expand_red_black_landscape(
 // Approach composition (C219)
 // ---------------------------------------------------------------------
 
-/// Fence posts per fragment along the path's north edge, and the gap after.
-pub const EDGE_FRAGMENT: usize = 2;
-pub const EDGE_GAP: usize = 2;
-
 /// The composed approach, as built.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ApproachComposition {
     /// Shoulder ground cells beside the path re-laid in blackstone.
     pub edge: Vec<IVec3>,
-    /// `RedBlackFence` fragments standing on that edge.
-    pub fences: Vec<IVec3>,
-    /// Trunk sites of the shoulder trees (planted into the grove).
-    pub tree_sites: Vec<(i32, i32)>,
-}
-
-/// The shoulder's tree sites: on its ragged outer row, one past the
-/// landing's side of the path and one at the path's turn, both north of
-/// every sight line to the gate.
-pub fn shoulder_tree_sites(expansion: &WorldExpansionLayout) -> Vec<(i32, i32)> {
-    let outer_z = expansion.red_black_extension.min_z - 2;
-    let turn_x = expansion.red_black_fortress_pad.min_x - 1;
-    vec![(turn_x - 3, outer_z), (turn_x, outer_z)]
 }
 
 /// Composes the fortress approach: the shoulder's inner ground cells beside
-/// the path become a blackstone edge with short `RedBlackFence` fragments
-/// (posts in pairs with gaps, only within one course of the path), and two
-/// crimson trees grow on the shoulder's outer row at the path's sides. The
-/// path, its head room, the gate's sight lines and every family scene stay
-/// clear; the fortress silhouette is left open.
+/// the path become a blackstone edge. Nothing stands on it: the path and
+/// the gate stay in plain sight.
 pub fn compose_fortress_approach(
-    seed: u32,
     expansion: &WorldExpansionLayout,
     approach: &RedBlackApproach,
     landscape: &LandscapeExpansion,
-    clearance: &TreeClearance,
-    grove: &mut RedBlackGrove,
     world: &mut VoxelWorld,
 ) -> ApproachComposition {
-    let mut built = ApproachComposition::default();
     let inner_z = expansion.red_black_extension.min_z - 1;
-    let mut edge: Vec<(IVec3, IVec3)> = landscape
+    let mut edge: Vec<IVec3> = landscape
         .ground
         .iter()
-        .filter(|g| g.z == inner_z)
-        .filter_map(|g| {
-            approach
-                .main
-                .iter()
-                .find(|p| p.x == g.x && p.z == g.z + 1)
-                .map(|p| (*g, *p))
-        })
+        .filter(|g| g.z == inner_z && approach.main.iter().any(|p| p.x == g.x && p.z == g.z + 1))
+        .copied()
         .collect();
-    edge.sort_by_key(|(g, _)| g.x);
-    for (i, (g, path)) in edge.iter().enumerate() {
-        if world
-            .get(*g)
-            .is_some_and(|b| b.block_type() != BlockType::PolishedBlackstoneBricks)
-        {
-            world.insert(
-                *g,
-                down(
-                    BlockType::PolishedBlackstoneBricks,
-                    polished_blackstone_bricks_material_id(),
-                ),
-            );
-        }
-        built.edge.push(*g);
-        let in_fragment = i % (EDGE_FRAGMENT + EDGE_GAP) < EDGE_FRAGMENT;
-        let post = IVec3::new(g.x, g.y - 1, g.z);
-        if in_fragment
-            && (path.y - g.y).abs() <= 1
-            && !world.contains(post)
-            && !clearance.cells.contains(&post)
-        {
-            world.insert(post, fence());
-            built.fences.push(post);
-        }
+    edge.sort_by_key(|g| g.x);
+    for g in &edge {
+        world.insert(
+            *g,
+            down(
+                BlockType::PolishedBlackstoneBricks,
+                polished_blackstone_bricks_material_id(),
+            ),
+        );
     }
-    for (x, z) in shoulder_tree_sites(expansion) {
-        if grove.trees.len() >= RED_BLACK_TREES_MAX {
-            break;
-        }
-        let spaced = grove
-            .trees
-            .iter()
-            .all(|t| (t.base.x - x).abs() >= TREE_SPACING || (t.base.z - z).abs() >= TREE_SPACING);
-        if !spaced {
-            continue;
-        }
-        if let Some(tree) = grow_red_black_tree(seed, x, z, clearance, world) {
-            grove.trees.push(tree);
-            built.tree_sites.push((x, z));
-        }
-    }
-    built
+    ApproachComposition { edge }
 }
 
 // ---------------------------------------------------------------------
@@ -1146,11 +1019,9 @@ impl RedBlackIdentity {
             .cells()
             .into_iter()
             .chain(self.timber.added_cells())
-            .chain(self.path.added_cells())
             .chain(self.gatehouse.added_cells())
             .chain(self.fourth_tower.added_cells())
             .chain(self.landscape.cells.iter().copied())
-            .chain(self.composition.fences.iter().copied())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -1177,13 +1048,7 @@ pub fn build_red_black_identity(
     // Architecture first (timber, path, gatehouse, fourth tower, landscape),
     // then the vegetation that has to keep clear of all of it.
     let timber = weave_fortress_timber(fortress, world);
-    let path = lay_corinto_path(
-        approach,
-        fortress,
-        &clearance,
-        &RedBlackGrove::default(),
-        world,
-    );
+    let path = lay_corinto_path(approach, fortress, &clearance, world);
     let gatehouse = build_red_black_gatehouse(fortress, world);
     let fourth_tower = build_fourth_tower(seed, fortress, world);
     let landscape =
@@ -1209,10 +1074,8 @@ pub fn build_red_black_identity(
         focal_columns,
         floor_y,
     };
-    let mut grove = plant_red_black_grove(seed, fortress, &clearance, world);
-    let composition = compose_fortress_approach(
-        seed, expansion, approach, &landscape, &clearance, &mut grove, world,
-    );
+    let grove = plant_red_black_grove(seed, fortress, &clearance, world);
+    let composition = compose_fortress_approach(expansion, approach, &landscape, world);
     let balance = balance_red_black_identity(fortress, world);
     RedBlackIdentity {
         grove,

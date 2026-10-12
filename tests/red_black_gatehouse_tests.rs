@@ -296,11 +296,9 @@ fn the_door_is_visible_from_the_approach() {
         assert!(sees, "the door is hidden from {c:?}");
     }
     println!(
-        "GATE17_5 gatehouse: door={} corridor={} gallery={} rails={} seen_from={} identity_voxels={} voxels={}",
+        "GATE17_5 gatehouse: door={} corridor={} seen_from={} identity_voxels={} voxels={}",
         g.door.len(),
         g.corridor_floor.len(),
-        g.hood.len(),
-        g.rails.len(),
         stretch.len(),
         scene.identity_voxels(),
         scene.world().len()
@@ -372,10 +370,6 @@ fn the_surrounding_walls_are_solid() {
     );
     let reached = resolve(&scene, from, to - from);
     assert!(reached.x < jamb.x as f32, "{reached:?}");
-    let gh = &scene.red_black_identity().gatehouse;
-    for c in gh.hood.iter().chain(gh.rails.iter()) {
-        assert!(is_camera_solid(scene.world().get(*c).unwrap()));
-    }
 }
 
 // 4
@@ -400,29 +394,6 @@ fn the_path_aligns_with_the_door() {
         );
     }
     assert_eq!(g.corridor_floor.len(), l.gate_corridor().len());
-    assert!(!g.hood.is_empty() && !g.rails.is_empty());
-    for c in &g.hood {
-        assert!(l.gatehouse.contains(c.x, c.z));
-        assert_eq!(
-            c.y,
-            l.levels.wall_top_y - 2,
-            "the gallery sits above the vault"
-        );
-        assert_eq!(
-            scene.world().get(*c).unwrap().block_type(),
-            BlockType::RedBlackWoodPlanks
-        );
-        assert!(
-            scene.world().contains(IVec3::new(c.x, c.y + 1, c.z)),
-            "{c:?} rests on the vault"
-        );
-    }
-    for c in &g.rails {
-        assert_eq!(
-            scene.world().get(*c).unwrap().block_type(),
-            BlockType::RedBlackFence
-        );
-    }
 }
 
 // 5
@@ -438,17 +409,6 @@ fn the_corridor_is_clear() {
             assert!(open, "{cell:?} blocks the corridor");
         }
         assert!(clear(&scene, eye(IVec3::new(x, g, z))), "({x},{z})");
-    }
-    // The hood keeps the forecourt's head room.
-    for c in &scene.red_black_identity().gatehouse.hood {
-        let ground = scene
-            .red_black_approach()
-            .main
-            .iter()
-            .find(|p| p.x == c.x && p.z == c.z);
-        if let Some(gc) = ground {
-            assert!(c.y < gc.y - 2, "{c:?} sits in the head room of {gc:?}");
-        }
     }
 }
 

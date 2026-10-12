@@ -269,13 +269,6 @@ fn the_gate_sightline_is_open() {
     let scene = WorldScene::new();
     let l = scene.fortress_layout();
     let trees = tree_cells(&scene);
-    let fences: HashSet<IVec3> = scene
-        .red_black_identity()
-        .composition
-        .fences
-        .iter()
-        .copied()
-        .collect();
     for g in &scene.red_black_approach().main {
         let from = eye(*g);
         for target in l.gate.cells() {
@@ -287,10 +280,7 @@ fn the_gate_sightline_is_open() {
             for i in 0..=40 {
                 let p = from + (to - from) * (i as f32 / 40.0);
                 let cell = IVec3::new(p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32);
-                assert!(
-                    !trees.contains(&cell) && !fences.contains(&cell),
-                    "{cell:?} hides the gate from {g:?}"
-                );
+                assert!(!trees.contains(&cell), "{cell:?} hides the gate from {g:?}");
             }
         }
     }
@@ -329,10 +319,8 @@ fn the_gate_sightline_is_open() {
     }
     let cp = &scene.red_black_identity().composition;
     println!(
-        "GATE17_5 composition: edge={} fences={} shoulder_trees={:?} trees={} identity_voxels={} voxels={}",
+        "GATE17_5 composition: edge={} trees={} identity_voxels={} voxels={}",
         cp.edge.len(),
-        cp.fences.len(),
-        cp.tree_sites,
         scene.red_black_identity().grove.trees.len(),
         scene.identity_voxels(),
         scene.world().len()
@@ -362,47 +350,22 @@ fn the_path_remains_clear() {
 
 // 3
 #[test]
-fn fences_do_not_trap_the_camera() {
+fn the_path_edge_is_bare() {
     let scene = WorldScene::new();
     let cp = &scene.red_black_identity().composition;
-    assert!(
-        !cp.fences.is_empty() && cp.fences.len() < cp.edge.len(),
-        "fragments, not a wall"
-    );
-    let path: HashSet<(i32, i32)> = scene
-        .red_black_approach()
-        .main
-        .iter()
-        .map(|c| (c.x, c.z))
-        .collect();
-    for f in &cp.fences {
+    assert!(!cp.edge.is_empty());
+    for g in &cp.edge {
         assert_eq!(
-            scene.world().get(*f).unwrap().block_type(),
-            BlockType::RedBlackFence
+            scene.world().get(*g).unwrap().block_type(),
+            BlockType::PolishedBlackstoneBricks
         );
-        assert!(!path.contains(&(f.x, f.z)), "{f:?} on the path");
         assert!(
-            cp.edge.contains(&IVec3::new(f.x, f.y + 1, f.z)),
-            "{f:?} stands on the edge"
+            !scene.world().contains(IVec3::new(g.x, g.y - 1, g.z)),
+            "{g:?}"
         );
     }
-    // Every path eye is free, and a gap in the fragments opens the shoulder.
     for c in &scene.red_black_approach().main {
         assert!(clear(&scene, eye(*c)), "{c:?}");
-    }
-    let gap = cp
-        .edge
-        .iter()
-        .find(|g| !cp.fences.contains(&IVec3::new(g.x, g.y - 1, g.z)))
-        .expect("a gap");
-    let path_cell = scene
-        .red_black_approach()
-        .main
-        .iter()
-        .find(|p| p.x == gap.x && p.z == gap.z + 1)
-        .unwrap();
-    if (path_cell.y - gap.y).abs() <= 1 {
-        walk_both_ways(&scene, &[eye(*path_cell), eye(*gap)]);
     }
 }
 
@@ -424,7 +387,7 @@ fn trees_do_not_block_the_entrance() {
         );
     }
     let n = scene.red_black_identity().grove.trees.len();
-    assert!((4..=7).contains(&n), "{n} trees");
+    assert!(n >= 1, "{n} trees");
 }
 
 // 5
@@ -512,17 +475,7 @@ fn the_fortress_silhouette_stays_visible() {
 #[test]
 fn no_family_focal_scene_is_obstructed() {
     let scene = WorldScene::new();
-    let added: Vec<IVec3> = tree_cells(&scene)
-        .into_iter()
-        .chain(
-            scene
-                .red_black_identity()
-                .composition
-                .fences
-                .iter()
-                .copied(),
-        )
-        .collect();
+    let added: Vec<IVec3> = tree_cells(&scene).into_iter().collect();
     let focal: Vec<IVec3> = scene
         .families()
         .iter()
