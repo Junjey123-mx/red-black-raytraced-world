@@ -120,7 +120,7 @@ La mitad invertida. Aquí el mundo cuelga hacia abajo y su luz sale de los propi
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/readme/08-red-black-approach.png" alt="El camino corinto que lleva a la puerta de la fortaleza, con un cúmulo de amatista al lado"></td>
+<td width="50%"><img src="docs/screenshots/readme/08-red-black-approach.png" alt="La puerta de la fortaleza Red-Black con su camino corinto y los símbolos luminosos de la baraja en el muro"></td>
 <td width="50%"><img src="docs/screenshots/readme/20-red-black-house.png" alt="La casa Red-Black con sus lámparas encendidas, en la cara inferior de la isla"></td>
 </tr>
 <tr>
@@ -129,7 +129,7 @@ La mitad invertida. Aquí el mundo cuelga hacia abajo y su luz sale de los propi
 </tr>
 </table>
 
-![La silueta de la fortaleza contra la luna eclipsada del cielo Red-Black](docs/screenshots/readme/17-skybox-night.png)
+![La luna eclipsada del cielo Red-Black sobre los árboles carmesí y la fortaleza](docs/screenshots/readme/17-skybox-night.png)
 
 ---
 
