@@ -22,9 +22,14 @@ use crate::scene::fortress::{
     TOWER_BAND_COURSE, TOWER_CREST_COURSES, dark_masonry, family_brick, is_dark_structure,
     is_family_brick,
 };
+use crate::scene::material_gallery::{glass_material_id, redstone_lamp_material_id};
 use crate::scene::orientation::Orientation;
 use crate::scene::overworld::ColumnRect;
 use crate::scene::overworld::Tree;
+use crate::scene::overworld::{
+    HOUSE_DOOR_X, HOUSE_FOOTPRINT, HOUSE_LAMPS, HOUSE_PORCH_Z, HOUSE_RIDGE_Z, HOUSE_ROOF_OVERHANG,
+    HOUSE_WALL_HEIGHT, HOUSE_WINDOWS,
+};
 use crate::scene::overworld_blocks::{
     crimson_diamond_material_id, crying_obsidian_crimson_material_id,
     crying_obsidian_orange_material_id, orange_spade_material_id,
@@ -48,8 +53,8 @@ pub const RED_BLACK_TRUNK_MIN: i32 = 5;
 /// Tallest trunk.
 pub const RED_BLACK_TRUNK_MAX: i32 = 6;
 /// Fewest and most trees the realm carries.
-pub const RED_BLACK_TREES_MIN: usize = 1;
-pub const RED_BLACK_TREES_MAX: usize = 7;
+pub const RED_BLACK_TREES_MIN: usize = 6;
+pub const RED_BLACK_TREES_MAX: usize = 16;
 /// Columns kept between any tree cell and a family focal cell.
 pub const TREE_FOCAL_CLEARANCE: i32 = 2;
 /// Columns between two trunks (Chebyshev distance).
@@ -59,12 +64,20 @@ fn down(block_type: BlockType, material: crate::core::material::MaterialId) -> B
     BlockInstance::new(block_type, material, Orientation::Down)
 }
 
-/// The trunk site of the first grove: the lobe's east edge, beside the
-/// fortress. Nothing grows by the path or the gate, so the entrance reads
-/// from the whole approach.
+/// Trunk sites away from the gate: the lobe's north shoulder and the
+/// garden around the house. Nothing hangs from the diamond's lower
+/// surface, which belongs to the family scenes.
+const SCATTERED_TREE_SITES: [(i32, i32); 6] =
+    [(30, 1), (34, 2), (26, 22), (31, 22), (35, 16), (35, 20)];
+
+/// The trunk sites of the grove: the lobe's east edge, beside the
+/// fortress, then the scattered sites. Nothing grows by the path or the
+/// gate, so the entrance reads from the whole approach.
 pub fn tree_sites(fortress: &RedBlackFortressLayout) -> Vec<(i32, i32)> {
     let f = fortress.footprint;
-    vec![(f.max_x + 1, f.min_z + 2)]
+    let mut sites = vec![(f.max_x + 1, f.min_z + 2)];
+    sites.extend(SCATTERED_TREE_SITES);
+    sites
 }
 
 /// What a tree must never touch: cells and columns other stages own.
@@ -997,6 +1010,135 @@ pub fn balance_red_black_identity(
     built
 }
 
+// ---------------------------------------------------------------------
+// Red-Black house
+// ---------------------------------------------------------------------
+
+/// Ground level of the house's pad (the lobe's own level at its south rim).
+pub const RED_BLACK_HOUSE_GROUND_Y: i32 = -13;
+/// The house is the Overworld's, shifted east (clear of the rhombus
+/// cutaway) and mirrored in `z` so its door faces the lobe.
+const HOUSE_SHIFT_X: i32 = 20;
+const HOUSE_MIRROR_Z: i32 = 28;
+/// Rows of garden behind the house and columns of garden east of it.
+const HOUSE_GARDEN_ROWS: i32 = 2;
+const HOUSE_GARDEN_COLUMNS: i32 = 4;
+
+/// The Red-Black house, as built.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RedBlackHouse {
+    /// The flat pad the house stands on.
+    pub pad: Vec<IVec3>,
+    /// Lower and upper door cells.
+    pub door: Vec<IVec3>,
+    pub glass: Vec<IVec3>,
+    /// Every cell the house added to the world (pad included).
+    pub added: Vec<IVec3>,
+}
+
+/// Where an Overworld house cell lands under the Red-Black world: `up`
+/// courses hang toward `-Y` from the pad's ground.
+pub fn red_black_house_cell(x: i32, z: i32, up: i32) -> IVec3 {
+    IVec3::new(
+        x + HOUSE_SHIFT_X,
+        RED_BLACK_HOUSE_GROUND_Y - up,
+        HOUSE_MIRROR_Z - z,
+    )
+}
+
+/// Builds the Overworld's house upside down on a flat pad south of the
+/// lobe: the same plan, wall courses, windows, lamps, porch fence and
+/// three-layer roof, in the corinto timber family. The glass is the
+/// Overworld's. There is no Red-Black stair block, so the roof steps in
+/// planks.
+pub fn build_red_black_house(world: &mut VoxelWorld) -> RedBlackHouse {
+    let r = HOUSE_FOOTPRINT;
+    let at = red_black_house_cell;
+    let mut house = RedBlackHouse::default();
+    let mut put = |house: &mut RedBlackHouse, cell: IVec3, block: BlockInstance| {
+        if !world.contains(cell) {
+            house.added.push(cell);
+        }
+        world.insert(cell, block);
+    };
+    // The flat pad: the footprint, one column around it, the porch row
+    // and the garden, two cells thick.
+    for z in (r.min_z - HOUSE_GARDEN_ROWS)..=HOUSE_PORCH_Z {
+        for x in (r.min_x - 1)..=(r.max_x + 1 + HOUSE_GARDEN_COLUMNS) {
+            for up in [-1, 0] {
+                let cell = at(x, z, up);
+                put(
+                    &mut house,
+                    cell,
+                    down(
+                        BlockType::PolishedBlackstoneBricks,
+                        polished_blackstone_bricks_material_id(),
+                    ),
+                );
+                house.pad.push(cell);
+            }
+        }
+    }
+    for z in r.min_z..=r.max_z {
+        for x in r.min_x..=r.max_x {
+            put(&mut house, at(x, z, 0), planks());
+            let (edge_x, edge_z) = (x == r.min_x || x == r.max_x, z == r.min_z || z == r.max_z);
+            if !edge_x && !edge_z {
+                continue;
+            }
+            for course in 1..=HOUSE_WALL_HEIGHT {
+                let cell = at(x, z, course);
+                let block = if z == r.max_z && x == HOUSE_DOOR_X && course <= 2 {
+                    house.door.push(cell);
+                    let material = if course == 1 {
+                        red_black_wood_door_bottom_material_id()
+                    } else {
+                        red_black_wood_door_top_material_id()
+                    };
+                    BlockInstance::new(BlockType::RedBlackWoodDoor, material, Orientation::North)
+                } else if course == 2 && HOUSE_WINDOWS.contains(&(x, z)) {
+                    house.glass.push(cell);
+                    down(BlockType::Glass, glass_material_id())
+                } else if course == 2 && HOUSE_LAMPS.contains(&(x, z)) {
+                    down(BlockType::RedstoneLampLit, redstone_lamp_material_id())
+                } else if edge_x && edge_z {
+                    down(BlockType::RedBlackLog, red_black_log_material_id())
+                } else {
+                    planks()
+                };
+                put(&mut house, cell, block);
+            }
+        }
+    }
+    // Roof: layer k covers the rows within 2 - k of the ridge.
+    for layer in 0..=2 {
+        let half = 2 - layer;
+        for z in (HOUSE_RIDGE_Z - half)..=(HOUSE_RIDGE_Z + half) {
+            for x in (r.min_x - HOUSE_ROOF_OVERHANG)..=(r.max_x + HOUSE_ROOF_OVERHANG) {
+                put(
+                    &mut house,
+                    at(x, z, HOUSE_WALL_HEIGHT + 1 + layer),
+                    planks(),
+                );
+            }
+        }
+    }
+    // Awning over the door and the porch fence, open in front of it.
+    for x in (HOUSE_DOOR_X - 1)..=(HOUSE_DOOR_X + 1) {
+        put(
+            &mut house,
+            at(x, HOUSE_PORCH_Z, HOUSE_WALL_HEIGHT + 1),
+            planks(),
+        );
+    }
+    for x in r.min_x..=r.max_x {
+        if x != HOUSE_DOOR_X {
+            put(&mut house, at(x, HOUSE_PORCH_Z, 1), fence());
+        }
+    }
+    house
+}
+
 /// Everything the Gate 17.5 stages built, in pipeline order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedBlackIdentity {
@@ -1006,6 +1148,7 @@ pub struct RedBlackIdentity {
     pub gatehouse: RedBlackGatehouse,
     pub fourth_tower: FourthTower,
     pub landscape: LandscapeExpansion,
+    pub house: RedBlackHouse,
     pub composition: ApproachComposition,
     pub balance: IdentityBalance,
 }
@@ -1022,6 +1165,7 @@ impl RedBlackIdentity {
             .chain(self.gatehouse.added_cells())
             .chain(self.fourth_tower.added_cells())
             .chain(self.landscape.cells.iter().copied())
+            .chain(self.house.added.iter().copied())
             .filter(|c| seen.insert(*c))
             .collect()
     }
@@ -1053,6 +1197,7 @@ pub fn build_red_black_identity(
     let fourth_tower = build_fourth_tower(seed, fortress, world);
     let landscape =
         expand_red_black_landscape(seed, expansion, fortress, protected, floor_y, world);
+    let house = build_red_black_house(world);
     // The fourth tower's crests join the protected cells: no leaf may touch
     // a symbol.
     let mut grown_protection = protected.clone();
@@ -1084,6 +1229,7 @@ pub fn build_red_black_identity(
         gatehouse,
         fourth_tower,
         landscape,
+        house,
         composition,
         balance,
     }

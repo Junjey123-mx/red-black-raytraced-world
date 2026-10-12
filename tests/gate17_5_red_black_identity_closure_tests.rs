@@ -511,7 +511,7 @@ fn the_five_new_blocks_are_in_the_world() {
         if is_red_black_timber(b.block_type()) {
             assert!(c.y < 0, "{c:?} is in the Overworld");
             assert_eq!(
-                b.orientation() == Orientation::West,
+                b.orientation() != Orientation::Down,
                 b.block_type() == BlockType::RedBlackWoodDoor,
                 "{c:?}: only the door keeps a horizontal facing"
             );

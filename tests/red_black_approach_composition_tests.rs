@@ -521,3 +521,52 @@ fn no_light_is_added() {
         4
     );
 }
+
+// 8
+#[test]
+fn the_house_mirrors_the_overworld_and_is_reachable() {
+    use scene::overworld::{HOUSE_DOOR_X, HOUSE_FOOTPRINT, HOUSE_PORCH_Z, HOUSE_WINDOWS};
+    use scene::red_black_identity::red_black_house_cell as at;
+    let scene = WorldScene::new();
+    let w = scene.world();
+    let house = &scene.red_black_identity().house;
+    let kind = |c: IVec3| w.get(c).map(|b| b.block_type());
+    // A flat pad, the Overworld's glass, the realm's own timber.
+    assert!(house.pad.iter().all(|c| c.y >= at(0, 0, 0).y));
+    assert_eq!(house.glass.len(), HOUSE_WINDOWS.len());
+    for c in &house.glass {
+        assert_eq!(kind(*c), Some(BlockType::Glass));
+    }
+    for c in &house.door {
+        assert_eq!(kind(*c), Some(BlockType::RedBlackWoodDoor));
+    }
+    let r = HOUSE_FOOTPRINT;
+    assert_eq!(kind(at(r.min_x, r.min_z, 1)), Some(BlockType::RedBlackLog));
+    assert_eq!(
+        kind(at(r.min_x + 1, r.min_z, 1)),
+        Some(BlockType::RedBlackWoodPlanks)
+    );
+    assert_eq!(
+        kind(at(HOUSE_DOOR_X, 10, 4)),
+        Some(BlockType::RedBlackWoodPlanks)
+    );
+    assert_eq!(
+        kind(at(HOUSE_DOOR_X, 10, 0)),
+        Some(BlockType::RedBlackWoodPlanks)
+    );
+    // From the end of the approach, along the lobe's rim, through the door.
+    let porch = at(HOUSE_DOOR_X, HOUSE_PORCH_Z, 0);
+    let last = *scene.red_black_approach().main.last().unwrap();
+    let ground = |x: i32, z: i32| {
+        let y = (-22..0).find(|y| w.contains(IVec3::new(x, *y, z))).unwrap();
+        IVec3::new(x, y, z)
+    };
+    let mut points = vec![eye(last)];
+    points.extend(((last.z + 1)..porch.z).map(|z| eye(ground(last.x, z))));
+    points.extend(((last.x + 1)..=porch.x).map(|x| eye(ground(x, porch.z - 1))));
+    points.push(eye(porch));
+    points.push(eye(at(HOUSE_DOOR_X, r.max_z, 0)));
+    points.push(eye(at(HOUSE_DOOR_X, 10, 0)));
+    println!("house walk from {last:?}: {} points", points.len());
+    walk_both_ways(&scene, &points);
+}
