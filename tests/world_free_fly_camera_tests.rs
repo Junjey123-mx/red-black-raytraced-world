@@ -535,7 +535,9 @@ fn the_catalog_controls_are_unchanged_and_the_world_hud_is_free_fly() {
     let world =
         &app[app.find("struct WorldMode").unwrap()..app.find("/// Casts one primary ray").unwrap()];
     assert!(world.contains("poll_free_fly_input") && world.contains("apply_free_fly_input"));
-    assert!(world.contains("WASD move | Mouse look | Space/Shift up/down | N noclip | R reset"));
+    assert!(world.contains(
+        "WASD move | Mouse look | Q/E orbit | Wheel zoom | Space/Shift up/down | N noclip | R reset"
+    ));
     assert!(!world.contains("apply_orbit_input"));
     for key in [
         "KEY_W",
@@ -550,4 +552,50 @@ fn the_catalog_controls_are_unchanged_and_the_world_hud_is_free_fly() {
     ] {
         assert!(app.contains(key), "{key}");
     }
+}
+
+#[test]
+fn orbit_turns_the_camera_around_the_diorama_and_dolly_zooms() {
+    use scene::world::{world_focus, world_free_fly_camera};
+    let pivot = world_focus();
+    let home = world_free_fly_camera();
+    let mut state = home;
+    let radius = |s: &WorldFreeFlyCameraState| {
+        let d = s.position - pivot;
+        (d.x * d.x + d.z * d.z).sqrt()
+    };
+    // A quarter turn keeps the distance and the height, and the diorama
+    // stays in the middle of the view.
+    state.orbit(pivot, std::f32::consts::FRAC_PI_2);
+    assert!((radius(&state) - radius(&home)).abs() < 1e-3);
+    assert!((state.position.y - home.position.y).abs() < 1e-4);
+    assert!((state.position - home.position).length() > 10.0);
+    let to_pivot = (pivot - state.position).normalize();
+    assert!(state.forward().dot(to_pivot) > 0.999, "still framed");
+    // Four quarter turns come back home.
+    for _ in 0..3 {
+        state.orbit(pivot, std::f32::consts::FRAC_PI_2);
+    }
+    assert!((state.position - home.position).length() < 1e-2);
+    assert!(state.forward().dot(home.forward()) > 0.9999);
+    // The wheel moves along the view: in, then back out.
+    let before = (pivot - state.position).length();
+    state.dolly(4.0);
+    assert!(((pivot - state.position).length() - (before - 4.0)).abs() < 1e-3);
+    state.dolly(-4.0);
+    assert!(((pivot - state.position).length() - before).abs() < 1e-3);
+    // Non-finite input is ignored, and the inverted realm orbits its own up.
+    state.dolly(f32::NAN);
+    state.orbit(pivot, f32::INFINITY * 0.0);
+    assert!(state.position.x.is_finite());
+    let mut lower = home;
+    lower.realm = WorldRealm::RedBlack;
+    lower.local_up = WorldRealm::RedBlack.up();
+    let y = lower.position.y;
+    lower.orbit(pivot, 1.0);
+    assert!((lower.position.y - y).abs() < 1e-4);
+    // The viewer wires both to keys and the wheel.
+    let app = std::fs::read_to_string("src/app.rs").unwrap();
+    assert!(app.contains("self.free_fly.orbit(world_focus(), orbit)"));
+    assert!(app.contains("get_mouse_wheel_move()"));
 }

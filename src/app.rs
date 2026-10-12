@@ -9,7 +9,10 @@ use crate::camera::portal_crossing::{PortalCrossingDetector, PortalVolume};
 use crate::camera::world_collision::{
     CameraCollisionConfig, CollisionState, is_camera_solid, resolve_camera_motion,
 };
-use crate::camera::world_free_fly::{FreeFlyInput, WorldFreeFlyCameraState, apply_free_fly_input};
+use crate::camera::world_free_fly::{
+    FREE_FLY_ORBIT_SPEED, FREE_FLY_ZOOM_STEP, FreeFlyInput, WorldFreeFlyCameraState,
+    apply_free_fly_input,
+};
 use crate::config;
 use crate::renderer::framebuffer::Framebuffer;
 use crate::renderer::parallel::{ParallelRenderConfig, render_parallel};
@@ -29,8 +32,8 @@ use crate::scene::material_library::MaterialLibrary;
 use crate::scene::texture_manager::TextureManager;
 use crate::scene::voxel_world::VoxelWorld;
 use crate::scene::world::{
-    WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_free_fly_camera,
-    world_lights, world_materials,
+    WORLD_AMBIENT_FACTOR, WORLD_MAX_DISTANCE, WorldScene, WorldTextures, world_focus,
+    world_free_fly_camera, world_lights, world_materials,
 };
 
 /// While the camera is being moved the scene is traced at a reduced scale
@@ -271,9 +274,20 @@ impl ViewerMode for WorldMode {
         }
         // An active roll keeps changing the view even without input.
         let rolling = self.free_fly.advance_transition(rl.get_frame_time());
-        if input.is_active() {
+        // `Q` / `E` orbit the camera around the diorama; the wheel zooms.
+        let key = |k: KeyboardKey| rl.is_key_down(k) as i32 as f32;
+        let orbit = (key(KeyboardKey::KEY_E) - key(KeyboardKey::KEY_Q))
+            * FREE_FLY_ORBIT_SPEED
+            * rl.get_frame_time();
+        let zoom = rl.get_mouse_wheel_move() * FREE_FLY_ZOOM_STEP;
+        let steering = orbit != 0.0 || zoom != 0.0;
+        if input.is_active() || steering {
             let previous = self.free_fly.position;
             apply_free_fly_input(&mut self.free_fly, &input);
+            if steering && !input.reset && self.free_fly.transition().is_none() {
+                self.free_fly.orbit(world_focus(), orbit);
+                self.free_fly.dolly(zoom);
+            }
             if input.reset {
                 self.collision_state.reset();
             } else if self.collision_state.collision_enabled() {
@@ -299,7 +313,7 @@ impl ViewerMode for WorldMode {
                 }
             }
         }
-        input.is_active() || rolling
+        input.is_active() || rolling || steering
     }
 
     fn camera(&self, aspect_ratio: f32) -> Camera {
@@ -316,7 +330,7 @@ impl ViewerMode for WorldMode {
     }
 
     fn help(&self) -> &'static str {
-        "WASD move | Mouse look | Space/Shift up/down | N noclip | R reset"
+        "WASD move | Mouse look | Q/E orbit | Wheel zoom | Space/Shift up/down | N noclip | R reset"
     }
 
     /// The World prefers the sharper 400x300 preview whenever it fits the

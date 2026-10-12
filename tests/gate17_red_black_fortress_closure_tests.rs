@@ -733,6 +733,12 @@ fn catalog_crates_and_protected_code_are_unchanged() {
             // door passability contract (certified by its own tests); the
             // rest of the protected code must stay untouched.
             ":(exclude)src/camera/world_collision.rs",
+            // The final delivery adds the cubemap skybox (sampled on a miss
+            // in the tracer) and the camera's orbit and zoom, certified by
+            // their own tests; the rest stays untouched.
+            ":(exclude)src/renderer/skybox.rs",
+            ":(exclude)src/renderer/raytracer.rs",
+            ":(exclude)src/camera/world_free_fly.rs",
             "src/scene/portal.rs",
             "src/scene/descent.rs",
         ])

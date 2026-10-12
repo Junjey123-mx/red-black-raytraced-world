@@ -284,7 +284,34 @@ impl WorldFreeFlyCameraState {
             + self.up() * sane(up, 1.0);
         self.position = self.position + velocity * (self.movement_speed * dt);
     }
+
+    /// Rotates the camera around the diorama: the position turns by
+    /// `angle` radians about the realm's vertical through `pivot`, and the
+    /// view turns with it, so whatever was framed stays framed.
+    pub fn orbit(&mut self, pivot: Vec3, angle: f32) {
+        let angle = sane(angle, std::f32::consts::PI);
+        let up = self.local_up;
+        let forward = rotate_general(self.forward(), up, angle);
+        self.position = pivot + rotate_general(self.position - pivot, up, angle);
+        let (yaw, pitch) = angles_for(forward, up);
+        self.yaw = yaw;
+        self.pitch = pitch.clamp(-FREE_FLY_MAX_PITCH, FREE_FLY_MAX_PITCH);
+    }
+
+    /// Zooms: moves the camera `distance` blocks along its view (negative
+    /// pulls it back).
+    pub fn dolly(&mut self, distance: f32) {
+        self.position = self.position + self.forward() * sane(distance, FREE_FLY_MAX_DOLLY);
+    }
 }
+
+/// Radians per second the `Q` / `E` orbit turns the camera around the
+/// diorama.
+pub const FREE_FLY_ORBIT_SPEED: f32 = 1.0;
+/// Blocks one mouse-wheel notch moves the camera along its view.
+pub const FREE_FLY_ZOOM_STEP: f32 = 2.0;
+/// Largest single zoom step, whatever the wheel reports.
+pub const FREE_FLY_MAX_DOLLY: f32 = 16.0;
 
 /// Applies one frame of input: `reset` restores everything and ignores the
 /// rest of the frame; otherwise the look comes first (so the movement uses

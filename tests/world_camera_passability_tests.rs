@@ -372,7 +372,7 @@ fn n_enables_noclip() {
     let app = std::fs::read_to_string("src/app.rs").unwrap();
     assert!(app.contains("rl.is_key_pressed(KeyboardKey::KEY_N)"));
     assert!(app.contains("self.collision_state.hud_suffix()"));
-    assert!(app.contains("\"WASD move | Mouse look | Space/Shift up/down | N noclip | R reset\""));
+    assert!(app.contains("\"WASD move | Mouse look | Q/E orbit | Wheel zoom | Space/Shift up/down | N noclip | R reset\""));
 }
 
 #[test]

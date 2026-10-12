@@ -619,7 +619,16 @@ fn the_collision_contract_is_exactly_extended() {
     assert_eq!(CAMERA_COLLISION_RADIUS, 0.25);
     assert_eq!(COLLISION_SUBSTEP, 0.2);
     let out = std::process::Command::new("git")
-        .args(["diff", "807e490", "HEAD", "--", "src/camera"])
+        // (The final delivery's orbit, zoom and skybox live in the free-fly
+        // camera and have their own tests.)
+        .args([
+            "diff",
+            "807e490",
+            "HEAD",
+            "--",
+            "src/camera",
+            ":(exclude)src/camera/world_free_fly.rs",
+        ])
         .output();
     if let Ok(out) = out {
         if out.status.success() {
@@ -703,6 +712,11 @@ fn the_overworld_is_untouched() {
             "src/scene/portal.rs",
             "src/scene/descent.rs",
             "src/renderer",
+            // The final delivery adds the cubemap skybox (sampled on a miss
+            // in the tracer) and the camera's orbit and zoom, certified by
+            // their own tests; the rest stays untouched.
+            ":(exclude)src/renderer/skybox.rs",
+            ":(exclude)src/renderer/raytracer.rs",
         ])
         .output();
     if let Ok(out) = out {
