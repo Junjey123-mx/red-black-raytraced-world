@@ -609,7 +609,7 @@ fn a_wooden_path_joins_the_gate_and_the_house() {
     }
     assert!(p.stairs.len() >= 4 && !p.fill.is_empty());
     for c in &p.deck {
-        assert_eq!(kind(*c), Some(BlockType::DoubleWoodSlab));
+        assert_eq!(kind(*c), Some(BlockType::RedBlackWoodPlanks));
         let stair = IVec3::new(c.x, c.y - 1, c.z);
         // (The porch keeps its fence on the deck.)
         assert!(

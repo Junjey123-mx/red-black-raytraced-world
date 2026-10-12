@@ -236,8 +236,11 @@ fn every_tread_is_a_down_wooden_stair() {
     for (cell, orientation) in &scene.inverted_route().treads {
         assert_eq!(*orientation, Orientation::Down);
         let block = scene.world().get(*cell).unwrap();
-        assert_eq!(block.block_type(), BlockType::WoodStairs);
-        assert_eq!(block.material_id(), wood_stairs_material_id());
+        assert_eq!(block.block_type(), BlockType::RedBlackWoodStairs);
+        assert_eq!(
+            block.material_id(),
+            scene::red_black_timber::red_black_wood_stairs_material_id()
+        );
         assert_eq!(block.orientation(), Orientation::Down);
         // Hanging from rock: the cell above (world +Y) is solid.
         assert!(

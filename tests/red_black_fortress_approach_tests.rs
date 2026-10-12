@@ -307,7 +307,7 @@ fn the_canonical_portal_path_is_unchanged() {
     for (cell, o) in &route.treads {
         assert_eq!(
             scene.world().get(*cell).map(|b| b.block_type()),
-            Some(BlockType::WoodStairs)
+            Some(BlockType::RedBlackWoodStairs)
         );
         assert_eq!(*o, Orientation::Down);
     }

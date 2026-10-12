@@ -30,7 +30,6 @@ use crate::scene::overworld::{
     HOUSE_DOOR_X, HOUSE_FOOTPRINT, HOUSE_LAMPS, HOUSE_PORCH_Z, HOUSE_RIDGE_Z, HOUSE_ROOF_OVERHANG,
     HOUSE_WALL_HEIGHT, HOUSE_WINDOWS,
 };
-use crate::scene::overworld_blocks::double_wood_slab_material_id;
 use crate::scene::overworld_blocks::{
     crimson_diamond_material_id, crying_obsidian_crimson_material_id,
     crying_obsidian_orange_material_id, orange_spade_material_id,
@@ -1244,7 +1243,10 @@ pub fn lay_house_path(
     for i in (0..level.len().saturating_sub(1)).rev() {
         level[i] = level[i].min(level[i + 1] + 1);
     }
-    let slab = down(BlockType::DoubleWoodSlab, double_wood_slab_material_id());
+    let slab = down(
+        BlockType::RedBlackWoodPlanks,
+        red_black_wood_planks_material_id(),
+    );
     for (i, &(x, z)) in columns.iter().enumerate() {
         let Some(g) = ground[i] else { continue };
         if world.get(g).is_some_and(|b| is_symbol(b.block_type())) {
@@ -1333,6 +1335,29 @@ impl RedBlackIdentity {
     }
 }
 
+/// Every Overworld wooden stair hung in the Red-Black realm (the inverted
+/// route out of the portal, the fortress stair) becomes its corinto twin,
+/// keeping its orientation and shape.
+pub fn retimber_inverted_stairs(world: &mut VoxelWorld) {
+    let stairs: Vec<(IVec3, Orientation)> = world
+        .iter()
+        .filter(|(_, b)| {
+            b.block_type() == BlockType::WoodStairs && b.orientation() == Orientation::Down
+        })
+        .map(|(c, b)| (*c, b.orientation()))
+        .collect();
+    for (cell, orientation) in stairs {
+        world.insert(
+            cell,
+            BlockInstance::new(
+                BlockType::RedBlackWoodStairs,
+                red_black_wood_stairs_material_id(),
+                orientation,
+            ),
+        );
+    }
+}
+
 /// Builds the Gate 17.5 identity stages on the finished Gate 17 world.
 pub fn build_red_black_identity(
     seed: u32,
@@ -1407,6 +1432,7 @@ pub fn build_red_black_identity(
     }
     let composition = compose_fortress_approach(expansion, approach, &landscape, world);
     let balance = balance_red_black_identity(fortress, world);
+    retimber_inverted_stairs(world);
     RedBlackIdentity {
         grove,
         timber,

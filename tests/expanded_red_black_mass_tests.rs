@@ -231,7 +231,7 @@ fn the_portal_route_is_untouched() {
     for (cell, o) in &route.treads {
         assert_eq!(
             scene.world().get(*cell).map(|b| b.block_type()),
-            Some(BlockType::WoodStairs)
+            Some(BlockType::RedBlackWoodStairs)
         );
         assert_eq!(*o, Orientation::Down);
     }

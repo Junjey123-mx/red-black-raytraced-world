@@ -467,7 +467,7 @@ fn every_fortress_block_faces_the_inverted_up() {
         assert_eq!(*o, Orientation::Down);
         assert_eq!(
             scene.world().get(*tread).unwrap().block_type(),
-            BlockType::WoodStairs
+            BlockType::RedBlackWoodStairs
         );
     }
     let t = &scene.fortress_hall().treads;

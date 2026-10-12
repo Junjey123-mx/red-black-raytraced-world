@@ -477,7 +477,7 @@ fn no_portal_geometry_is_changed() {
     for (c, _) in &route.treads {
         assert_eq!(
             scene.world().get(*c).unwrap().block_type(),
-            BlockType::WoodStairs
+            BlockType::RedBlackWoodStairs
         );
         assert!(!timber.contains(c));
     }
@@ -489,4 +489,26 @@ fn no_portal_geometry_is_changed() {
     }
     let src = std::fs::read_to_string("src/scene/red_black_identity.rs").unwrap();
     assert!(!src.contains("PortalCore") && !src.contains("portal_crossing"));
+}
+
+#[test]
+fn no_overworld_wood_or_stair_hangs_in_the_red_black_realm() {
+    let scene = WorldScene::new();
+    let mut corinto_stairs = 0;
+    for (_, b) in scene.world().iter() {
+        if b.orientation() != Orientation::Down {
+            continue;
+        }
+        assert!(
+            !matches!(
+                b.block_type(),
+                BlockType::WoodPlanks | BlockType::DoubleWoodSlab | BlockType::WoodStairs
+            ),
+            "{:?}",
+            b.block_type()
+        );
+        corinto_stairs += (b.block_type() == BlockType::RedBlackWoodStairs) as usize;
+    }
+    // The portal route, the fortress stair and seats, and the house path.
+    assert!(corinto_stairs >= 16, "{corinto_stairs}");
 }

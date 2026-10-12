@@ -327,7 +327,10 @@ fn the_inverted_route_lands_on_the_surface() {
     });
     assert!(near, "no surface cell near the landing {landing:?}");
     for (tread, _) in &scene.inverted_route().treads {
-        assert_eq!(block_type(&scene, *tread), Some(BlockType::WoodStairs));
+        assert_eq!(
+            block_type(&scene, *tread),
+            Some(BlockType::RedBlackWoodStairs)
+        );
     }
 }
 

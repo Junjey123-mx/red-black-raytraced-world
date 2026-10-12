@@ -803,7 +803,7 @@ fn landmarks_are_preserved() {
         route
             .treads
             .iter()
-            .all(|(c, o)| has(c, BlockType::WoodStairs) && *o == Orientation::Down)
+            .all(|(c, o)| has(c, BlockType::RedBlackWoodStairs) && *o == Orientation::Down)
     );
     assert!(
         route

@@ -415,6 +415,14 @@ fn the_path_is_distinct_from_the_terrain_by_block_identity() {
         .added
         .iter()
         .map(|c| (c.x, c.z))
+        .chain(
+            scene
+                .red_black_identity()
+                .house_path
+                .columns
+                .iter()
+                .copied(),
+        )
         .collect();
     for x in 15..pad.min_x {
         for z in 0..16 {

@@ -539,7 +539,7 @@ fn the_route_geometry_is_as_specified() {
         assert_eq!(*o, Orientation::Down);
         assert_eq!(
             scene.world().get(*cell).unwrap().block_type(),
-            BlockType::WoodStairs
+            BlockType::RedBlackWoodStairs
         );
     }
     for cell in route.layout.exit_clearance() {

@@ -651,7 +651,7 @@ fn house_pond_trees_and_portal_are_preserved() {
         route
             .treads
             .iter()
-            .all(|(c, o)| has(c, BlockType::WoodStairs) && *o == Orientation::Down)
+            .all(|(c, o)| has(c, BlockType::RedBlackWoodStairs) && *o == Orientation::Down)
     );
     // Red-Black untouched by the castle: no castle cell below the ground.
     let g = scene.castle_layout().levels.ground_y;

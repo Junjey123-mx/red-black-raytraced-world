@@ -299,13 +299,13 @@ fn seating_and_platform_reuse_existing_geometry() {
     );
     for cell in h.seats.iter().chain(std::iter::once(&h.throne)) {
         let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.block_type(), BlockType::WoodStairs);
+        assert_eq!(b.block_type(), BlockType::RedBlackWoodStairs);
         assert_eq!(b.orientation(), Orientation::Down, "{cell:?}");
         assert!(l.hall.contains(cell.x, cell.z));
     }
     for (cell, o) in &h.treads {
         let b = scene.world().get(*cell).unwrap();
-        assert_eq!(b.block_type(), BlockType::WoodStairs);
+        assert_eq!(b.block_type(), BlockType::RedBlackWoodStairs);
         assert_eq!(b.orientation(), *o);
         assert_eq!(*o, Orientation::Down);
     }
@@ -398,7 +398,7 @@ fn no_new_block_type_was_added() {
         assert!(
             matches!(
                 t,
-                BlockType::WoodStairs
+                BlockType::RedBlackWoodStairs
                     | BlockType::PolishedBlackstoneBricks
                     | BlockType::SmoothBasalt
             ) || is_symbol(t),
